@@ -37,6 +37,7 @@ Sample Plugin: https://github.com/GreySole/Spooder-Sample-Plugin
 These tunnels simply listen for OSC from overlays or software and repeat them to another address. So that software like TouchOSC can control other devices or overlays.
 
 # EventSubs
+EventSubs require an https url to send events through. Enter it in the callback_url field and save before adding subscriptions. As Spooder is a LAN based application, you'll need a secure tunneling service like ngrok for a proper callback_url.
 With the broadcaster username set in config and broadcaster oauth saved, you can subscribe to events with that broadcaster. 
 Each subscription can be handled in any combination of ways like events. The only difference is being able to send event data straight to an overlay like an alertbox. Send to plugin doesn't have a field for event name as it is already named as the event subscribed (e.g. channel.follow)
 
