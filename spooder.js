@@ -19,21 +19,6 @@ if(!fs.existsSync(settingsDir)){
 }
 
 global.oauth = {};
-
-try{
-	var oauthFile = fs.readFileSync(backendDir+"/settings/oauth.json",{encoding:'utf8'});
-	oauth = JSON.parse(oauthFile);
-	console.log("Got OAuth Settings");
-	if(oauth['client-id'] == "editme" || oauth['client-secret'] == "editme" ||
-	oauth['client-id'] == "" || oauth['client-secret'] == ""){
-		console.error("No Twitch authentication credentials found. \n\
-		Create an app on dev.twitch.tv and run 'npm run init' to fill in your client id and secret.");
-	}
-}catch(e){
-	console.error(e);
-	console.error("There's a problem with the oauth file. We'll keep running, but you won't be able to connect to chat.");
-}
-
 global.config = {};
 global.osctunnels = {};
 global.eventsubs = {};
@@ -41,6 +26,20 @@ global.events = {};
 global.eventGroups = ["Default"];
 
 global.refreshFiles = () => {
+
+	try{
+		var oauthFile = fs.readFileSync(backendDir+"/settings/oauth.json",{encoding:'utf8'});
+		oauth = JSON.parse(oauthFile);
+		console.log("Got OAuth Settings");
+		if(oauth['client-id'] == "editme" || oauth['client-secret'] == "editme" ||
+		oauth['client-id'] == "" || oauth['client-secret'] == ""){
+			console.error("No Twitch authentication credentials found. \n\
+			Create an app on dev.twitch.tv and run 'npm run init' to fill in your client id and secret.");
+		}
+	}catch(e){
+		console.error(e);
+		console.error("There's a problem with the oauth file. We'll keep running, but you won't be able to connect to chat.");
+	}
 	try{
 		var configFile = fs.readFileSync(backendDir+"/settings/config.json",{encoding:'utf8'});
 		config = JSON.parse(configFile);
@@ -104,7 +103,9 @@ global.refreshFiles = () => {
 	}
 }
 
-refreshFiles();
+if(!initMode){
+	refreshFiles();
+}
 
 if(initMode){
 	new Initializer();
