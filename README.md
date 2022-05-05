@@ -31,6 +31,7 @@ Software - Make sure you set up your udp machines in the Config tab. This comman
 
 # Creating/Managing Plugins
 Plugins take in the same data Spooder's events do and how they work is entirely up to you. Check out the sample plugin repository to get started with making plugins. The Plugins tab in Spooder's Web UI can install plugins by uploading the plugin as a zip file. Once installed, you can configure the plugin's settings, upload assets to the plugin, and export the plugin. Note: Exported plugins will not include its assets folder.
+Sample Plugin: https://github.com/GreySole/Spooder-Sample-Plugin
 
 # OSC Tunnels
 These tunnels simply listen for OSC from overlays or software and repeat them to another address. So that software like TouchOSC can control other devices or overlays.
