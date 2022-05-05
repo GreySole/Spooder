@@ -39,6 +39,9 @@ These tunnels simply listen for OSC from overlays or software and repeat them to
 With the broadcaster username set in config and broadcaster oauth saved, you can subscribe to events with that broadcaster. 
 Each subscription can be handled in any combination of ways like events. The only difference is being able to send event data straight to an overlay like an alertbox. Send to plugin doesn't have a field for event name as it is already named as the event subscribed (e.g. channel.follow)
 
+# Developing Web UI
+Use `npm run dev` to run Spooder in development mode. This sets the web UI's hosting port to 3001. In another shell, use `npm run start-front` to run the web UI's development server which will run on port 3000 like usual. Use `npm run build-front` to create an optimized build for the web UI. When built, Spooder can be started up normally with your changes to the web UI.
+
 # Support The Project
 If you find this tool useful, please consider supporting me and the project on KoFi. You'll get access to the latest dev updates and my personal plugins like the animal launcher :3
 https://ko-fi.com/greyfursole
