@@ -39,6 +39,6 @@ These tunnels simply listen for OSC from overlays or software and repeat them to
 With the broadcaster username set in config and broadcaster oauth saved, you can subscribe to events with that broadcaster. 
 Each subscription can be handled in any combination of ways like events. The only difference is being able to send event data straight to an overlay like an alertbox. Send to plugin doesn't have a field for event name as it is already named as the event subscribed (e.g. channel.follow)
 
-#Support The Project
+# Support The Project
 If you find this tool useful, please consider supporting me and the project on KoFi. You'll get access to the latest dev updates and my personal plugins like the animal launcher :3
 https://ko-fi.com/greyfursole
