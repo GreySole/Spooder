@@ -1,0 +1,249 @@
+::-webkit-scrollbar {
+    display: block;
+    width: 15px;
+}
+*:hover::-webkit-scrollbar {
+    display: block;
+}
+::-webkit-scrollbar-track {
+    background-color: var(--btn-color);
+    border: 5px solid transparent;
+    background-clip: padding-box;
+    border-radius: 20px;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.25);
+    border: 5px solid transparent;
+    background-clip: padding-box;
+    border-radius: 20px;
+}
+::-webkit-scrollbar-thumb:vertical:hover { background-color: var(--text-color) }
+::-webkit-scrollbar-thumb:vertical:active { background-color: var(--text-color) }
+
+:root{
+    font-family:Arial, Helvetica, sans-serif;
+
+    --button-color: #008080;
+    --button-delete-color: #CD5C5C;
+    --button-add-color: #5C5CCD;
+    --button-save-color:#268626;
+    --button-plugin-color:#0099CC;
+
+    --button-obs-color:#555555;
+    --button-obs-streaming:#0099CC;
+    --button-obs-recording:#CD5C5C;
+    --button-obs-scene-active:#30307C;
+
+    --text-color:white;
+    --text-link-color:#99CCCC;
+    --text-placeholder-color:#AAAAAA;
+
+    --bg-color:#111111;
+    --tab-inactive-color: #222222;
+    --tab-active-color:#333333;
+
+    --asset-entry-color:#002733;
+    --asset-entry-hover-color:#00526b;
+    --asset-entry-selected-color:#006685;
+
+    --border-color:grey;
+    --border-settings-color:#009900;
+    --border-assets-color:#008080;
+
+    --command-hover-color:#222222;
+    --command-expanded-color:#222222;
+
+    --input-field-color:#111111;
+}
+
+*{
+    border: 0;
+    box-shadow: 0;
+}
+
+body {
+    overflow:overlay;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.App-title {
+    font-size: 36px;
+}
+
+.App-header {
+    margin: 10px;
+  }
+
+#tabContent {
+    background-color: var(--tab-active-color);
+    display: flex;
+    flex-flow: column;
+}
+
+a:not(.link-override) {
+    color: var(--text-link-color);
+}
+
+input,
+select {
+    border: 0;
+    border-radius: 5px;
+    box-shadow: 0 0 0 1px;
+}
+
+input::placeholder {
+    color: var(--text-placeholder-color);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.App-header {
+    display: flex;
+    flex-flow: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.login {
+    font-size: 24px;
+}
+
+.login-buttons a {
+    padding: 5px;
+}
+
+.navigation-tabs button {
+    color: var(--text-color);
+    background-color: var(--tab-inactive-color);
+    font-size: 24px;
+    padding: 5px 20px 10px 20px;
+    border-radius: 10px 10px 0px 0px;
+}
+
+.tab-button.selected {
+    background-color: var(--tab-active-color);
+}
+
+.add-button,
+.save-button,
+.command-button {
+    width: 75px;
+    margin: 10px;
+    padding: 10px;
+    font-size:18px;
+    background-color: var(--button-color);
+    color: var(--text-color);
+    border-radius: 5px;
+}
+
+.add-button:hover,
+.save-button:hover,
+.tab-button:hover,
+.command-button:hover {
+    filter: brightness(1.3);
+}
+
+.add-button:hover {
+    background-color: var(--button-add-color);
+}
+
+.save-button:hover {
+    background-color: var(--button-save-color);
+}
+
+.tooltip {
+    position: relative;
+  }
+  
+  .tooltip .tooltiptext {
+    visibility: hidden;
+    width: 120px;
+    background-color: #555;
+    color: var(--text-color);
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -60px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  
+  .tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #555 transparent transparent transparent;
+  }
+  
+  .tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+  }
+
+
+/** Switch
+ -------------------------------------*/
+
+.boolswitch input {
+    position: absolute;
+    opacity: 0;
+}
+
+
+/**
+   * 1. Adjust this to size
+   */
+
+.boolswitch-div {
+    display: flex;
+    flex-flow: row;
+    align-items: center;
+}
+
+.boolswitch {
+    display: flex;
+    font-size: 20px;
+    /* 1 */
+    height: 1em;
+    width: 2em;
+    background: #BDB9A6;
+    border-radius: 1em;
+}
+
+.boolswitch.checked {
+    background: #00CC00;
+}
+
+.boolswitch div {
+    height: 1em;
+    width: 1em;
+    border-radius: 1em;
+    background: #FFF;
+    box-shadow: 0 0.1em 0.3em rgba(0, 0, 0, 0.3);
+    -webkit-transition: all 300ms;
+    -moz-transition: all 300ms;
+    transition: all 300ms;
+}
+
+.boolswitch input:checked+div {
+    -webkit-transform: translate3d(100%, 0, 0);
+    -moz-transform: translate3d(100%, 0, 0);
+    transform: translate3d(100%, 0, 0);
+}
+
+@media screen and (max-width: 600px) {
+    .App-title{
+      font-size:24px;
+    }
+  }

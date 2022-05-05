@@ -1,0 +1,107 @@
+.obs-remote-title,.osc-monitor-title{
+	font-size:24px;
+	margin-bottom:10px;
+	display:flex;
+	flex-flow:column;
+}
+
+.obs-remote-settings{
+	display:flex;
+	flex-flow:column;
+}
+
+.obs-remote-settings label{
+	font-size:16px;
+	margin:10px;
+}
+
+.obs-remote-settings input{
+	margin-left:10px;
+}
+
+.obs-remote-settings button{
+	margin-top:10px;
+	width:100px;
+}
+
+.obs-remote{
+	display:inline-grid;
+	grid-template-columns: 1fr 1fr;
+}
+
+.obs-scenes{
+	display:inline-grid;
+	grid-template-columns: 1fr 1fr;
+}
+
+.obs-remember-div{
+	font-size:18px;
+}
+
+.obs-button{
+	display:flex;
+	flex-flow:column;
+	align-items:center;
+	padding:30px;
+	margin:15px;
+	background-color:var(--button-obs-color);
+	border-radius:10px;
+}
+
+.obs-connect-button, .obs-disconnect-button{
+	max-width:100px;
+	margin:10px;
+	padding:10px;
+	background-color:var(--button-obs-color);
+	color:var(--text-color);
+	border-radius:5px;
+}
+
+.obs-connect-button:hover, .obs-disconnect-button:hover{
+	filter:brightness(1.3);
+}
+
+.obs-stream.streaming{
+	background-color:var(--button-obs-streaming);
+}
+
+.obs-record.recording{
+	background-color:var(--button-obs-recording);
+}
+
+.obs-transition-mode.active{
+	background-color:var(--button-obs-scene-active);
+}
+
+.obs-button label{
+	margin-bottom:5px;
+}
+
+.obs-button:hover{
+	filter:brightness(1.2);
+}
+
+.scene-button.selected{
+	background-color:var(--button-obs-scene-active);
+}
+
+.monitor-container{
+	background-color:var(--tab-active-color);
+	min-height:100px;
+	padding:10px;
+}
+
+.monitor-logger{
+	max-height: 500px;
+	overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.monitor-log-div{
+	display:flex;
+	flex-flow:row;
+}
+
+.monitor-log-div div{
+	margin-left:50px;
+}
