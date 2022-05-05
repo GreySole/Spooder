@@ -21,10 +21,15 @@ class WebUI {
         const clientSecret = oauth['client-secret'];
 
         let pluginsDir = path.join(backendDir, "plugins");
+        let webDir = path.join(backendDir, "web");
         let overlayDir = path.join(backendDir, "web", "overlay");
         
         if(!fs.existsSync(pluginsDir)){
             fs.mkdirSync(pluginsDir);
+        }
+
+        if(!fs.existsSync(webDir)){
+            fs.mkdirSync(webDir);
         }
 
         if(!fs.existsSync(overlayDir)){

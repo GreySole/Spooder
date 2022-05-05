@@ -10,6 +10,13 @@ global.backendDir = __dirname+"/backend";
 global.frontendDir = __dirname+"/build";
 
 const fs = require('fs-extra');
+const path = require('path');
+
+let settingsDir = path.join(backendDir, "settings");
+
+if(!fs.existsSync(settingsDir)){
+	fs.mkdirSync(settingsDir);
+}
 
 global.oauth = {};
 
