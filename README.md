@@ -12,7 +12,7 @@ Finally use `npm run start` to start Spooder's web and OSC services.
 # User Authentication
 Open Spooder's Web UI in your browser either by localhost:3000 or your local network address at port 3000.
 
-Log into Twitch.tv as the broadcaster and click Authorize at the top right. Once done, Spooder will store your user credentials and log you in to chat automatically unless you start Spooder with `npm run start-noautologin`.
+Log into Twitch.tv as the broadcaster and click Authorize at the top right. Once done, Spooder will store your user access token and log you in to chat automatically unless you start Spooder with `npm run start-noautologin`.
 
 Go to the EventSub tab and click "Save Current Oauth as Broadcaster." The broadcaster Oauth is used for pulling channel point custom rewards. Once done, you may log out of Twitch.tv and back in as a bot account. Then click authorize to store and use your bot's Oauth for chat if you wish.
 
