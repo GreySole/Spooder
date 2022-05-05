@@ -45,5 +45,5 @@ Each subscription can be handled in any combination of ways like events. The onl
 Use `npm run dev` to run Spooder in development mode. This sets the web UI's hosting port to 3001. In another shell, use `npm run start-front` to run the web UI's development server which will run on port 3000 like usual. Use `npm run build-front` to create an optimized build for the web UI. When built, Spooder can be started up normally with your changes to the web UI.
 
 # Support The Project
-If you find this tool useful, please consider supporting me and the project on KoFi. You'll get access to the latest dev updates and my personal plugins like the animal launcher :3
+If you find this tool useful, please consider supporting me and the project on KoFi. You'll get access to the latest dev updates and my personal plugins like the fox launcher :3
 https://ko-fi.com/greyfursole
