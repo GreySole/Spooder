@@ -116,7 +116,7 @@ if(initMode){
 	activeEvents = {};
 	chatEvents = [];
 
-	global.udpClients = {};
+	global.udpClients = config.network["udp_clients"];
 	global.activePlugins = {};
 
 
@@ -194,7 +194,7 @@ if(initMode){
 						let done = false;
 
 						if(command[1] == "help"){
-							sayInChat("Pass a command type like '!"+config.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+config.bot.help_command+" event command' to get a description of what that command does. Events are: ["+stringifyArray(Object.keys(events))+"] Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]")
+							sayInChat("Pass a command type like '!"+config.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+config.bot.help_command+" event command' to get a description of what that command does. Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]");
 							return;
 						}
 

@@ -154,7 +154,7 @@ class WebUI {
             var oscReturn = {
                 host:config.network.host,
                 port:config.network.osc_tcp_port,
-                udp_clients:udpClients,
+                udp_clients:config.network["udp_clients"],
                 plugins:Object.keys(activePlugins)
             }
 

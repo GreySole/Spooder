@@ -27,7 +27,7 @@ class SOSC {
         var udpClients = this.udpClients;
         console.log("SENDING TO UDP", dest, address, oscValue);
         let valueType = "int";
-        if(!isNaN(oscValue)){valueType = "i"}
+        if(!isNaN(oscValue)){valueType = "i"; oscValue = parseInt(oscValue);}
         else if(!isNaN(oscValue.split(",")[0])){valueType = "ii"}
         else{valueType = "s"}
         
@@ -43,6 +43,7 @@ class SOSC {
             }
         }else{
             let message = new OSC.Message(address, oscValue);
+            //console.log("UDP MESSAGE", message);
             if(valueType == "ii"){
                 oscValue = oscValue.split(",");
                 message = new OSC.Message(address, parseInt(oscValue[0]), parseFloat(oscValue[1]));
