@@ -27,7 +27,17 @@ class SOSC {
         var udpClients = this.udpClients;
         console.log("SENDING TO UDP", dest, address, oscValue);
         let valueType = "int";
-        if(!isNaN(oscValue)){valueType = "i"; oscValue = parseInt(oscValue);}
+        if(!isNaN(oscValue)){
+            if(typeof oscValue == "string"){
+                if(oscValue.includes(".")){
+                    valueType = "f";
+                    oscValue = parseFloat(oscValue);
+                }else{
+                    valueType = "i";
+                    oscValue = parseInt(oscValue);
+                }
+            }
+        }
         else if(!isNaN(oscValue.split(",")[0])){valueType = "ii"}
         else{valueType = "s"}
         
