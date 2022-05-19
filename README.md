@@ -1,6 +1,3 @@
-# Spooder
- Make your stream an open cavas with OSC driven events and browser plugins
-
 # Getting Started
 Use `npm install` to install Spooder's dependencies.
 
