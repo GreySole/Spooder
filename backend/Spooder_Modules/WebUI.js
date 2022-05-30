@@ -644,6 +644,9 @@ class WebUI {
                     broadcasterUserID = response.data.data[0].id;
                 }).catch(error=>{
                     console.error(error);
+                    if(error.response.status == 401){
+                        this.onAuthenticationFailure();
+                    }
                     return;
                 });
             }
@@ -831,7 +834,7 @@ class WebUI {
 						
 						console.log("TOKEN REFRESHED");
 						fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-							console.log("oauth saved!");
+							console.log("broadcaster oauth saved!");
 						});
 						this.validateBroadcaster();
 					}

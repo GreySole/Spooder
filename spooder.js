@@ -153,28 +153,34 @@ if(initMode){
 	const run = async() => {
 
 		chat = new Chat({
-			username,
-			token,
-			onAuthenticationFailure
+			"username":username,
+			"token":token,
+			"onAuthenticationFailure":onAuthenticationFailure,
+			"connectionTimeout":60000,
+			"joinTimeout":60000
 		});
 		
 		await chat.connect().catch(error=>{console.error(error)});
 		await chat.join(channel).catch(error=>{console.error(error)});
 		
 		chat.on("*", (message) =>{
-			
+
 			if(typeof message.message == "undefined"){return;}
 			
 			if(message.message.startsWith("!")){
 
 				let command = message.message.substr(1).split(" ");
 
-				if(command[0] == "stop" && (message.tags.mod == 1 || message.tags.broadcaster == true)){
+				if(command[0] == "stop" && (message.tags.mod == 1 || message.tags.badges.broadcaster == true)){
 					let cEvent = command[1];
 					if(typeof activeEvents[cEvent] != "undefined"){
-						activeEvents[cEvent]["function"]();
+						for(e in activeEvents[cEvent]){
+							if(activeEvents[cEvent][e] != "event"){
+								activeEvents[cEvent][e]["function"]();
+							}
+						}
 						delete activeEvents[cEvent];
-						sayInChat(cEvent+" has been stopped!");
+						sayInChat(events[cEvent].name+" has been stopped!");
 					}else{
 						sayInChat("I can't stop "+cEvent+"!");
 					}
@@ -254,10 +260,12 @@ if(initMode){
 	}
 
 	function sayAlreadyOn(name){
-		if(activeEvents[name]["etype"] == "timed"){
-			sayInChat(name+" is already on. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name]["timeout"]))+"s");
-		}else if(activeEvents[name]["etype"] == "oneshot"){
-			sayInChat(name+" is cooling down. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name]["timeout"]))+"s");
+		for(let c in activeEvents[name]){
+			console.log(activeEvents[name][c].etype);
+			if(activeEvents[name][c].etype == "event"){
+				sayInChat(events[name].name+" is cooling down. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name][c]["timeout"]))+"s");
+				break;
+			}
 		}
 	}
 
@@ -266,6 +274,9 @@ if(initMode){
 	}
 
 	global.sayInChat = (message) =>{
+		chat.once("USERSTATE", (uState)=>{
+			uState.message = message;
+		})
 		chat.say(channel,message);
 	}
 
@@ -284,7 +295,7 @@ if(initMode){
 	}
 
 	global.runCommands = (eventData, eventName) => {
-		console.log("RUNNING EVENT", eventName);
+		
 		if(eventData.username){
 			eventData.username = eventData.tags.displayName;
 		}else{
@@ -293,12 +304,30 @@ if(initMode){
 
 		let event = events[eventName];
 
+		if(activeEvents[eventName] != null){
+			if(event.chatnotification == true){
+				sayAlreadyOn(eventName);
+			}
+			return;
+		}
+
+		
+
+		if(event.chatnotification == true){
+			sayInChat(eventData.username+" has activated "+event.name+"!");
+			sendToTCP("/events/start/"+eventName, eventData.username+" has activated "+event.name+"!");
+			createTimeout(eventName, "event", function(){
+				sayInChat(event.name+" has been deactivated!");
+				sendToTCP("/events/end/"+eventName, event.name+" has been deactivated!");
+			}, event.cooldown);
+		}
+
 		for(let c in event.commands){
 			let eCommand = event.commands[c];
-			console.log("SWITCHING TYPE", eCommand.type);
+			
 			switch(eCommand.type){
 				case 'response':
-					console.log(eventData);
+					
 					setTimeout(() =>{
 						try{
 							let responseFunct = eval("() => { let event = "+JSON.stringify(eventData)+"; "+eCommand.message.replace(/\n/g, "")+"}");
@@ -323,37 +352,22 @@ if(initMode){
 					
 				break;
 				case 'software':
-					console.log("RUNNING SOFTWARE COMMAND", eCommand);
+					
 					setTimeout(() => {
 						if(eCommand.etype == "timed"){
 							let eventDuration = parseInt(eCommand.duration);
-							
-							if(typeof activeEvents[eventName] == "undefined"){
-								sayInChat(eventData.username+" has activated "+eventName+" for "+convertDuration(eventDuration)+"!");
-								sendToTCP("/events/start/"+eventName, eventData.username+" has activated "+eventName+" for "+convertDuration(eventDuration)+"!");
+
+							sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
+
+							createTimeout(eventName, eCommand.etype, function(){
+								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOff);
+							}, eventDuration);
 								
-								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
-								createTimeout(eventName, eCommand.etype, function(){
-									sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOff);
-									sayInChat(eventName+" is now deactivated!");
-								}, eventDuration);
-							}else{
-								sayAlreadyOn(eventName);
-							}
 						}else if(eCommand.etype == "oneshot"){
-							let eventCooldown = parseInt(eCommand.duration);
-							if(typeof activeEvents[eventName] == "undefined"){
-								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
-								setTimeout(function(){
-									sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOff);
-								}, 500);
-								createTimeout(eventName, eCommand.etype, function(){
-									console.log(eventName+" is ready!");
-								}, eventCooldown);
-								sayInChat(eventName+" triggered!");
-							}else{
-								sayAlreadyOn(eventName);
-							}
+							sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
+							setTimeout(function(){
+								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOff);
+							}, 500);
 						}
 					}, eCommand.delay);
 				break;
@@ -364,23 +378,39 @@ if(initMode){
 	runInterval = () => {
 		uptime = Math.floor(Date.now()/1000);
 		for(let e in activeEvents){
-			console.log(e, uptime-activeEvents[e]["timeout"], uptime, activeEvents[e]["timeout"]);
-			sosc.sendToTCP("/events/time/"+e, uptime-activeEvents[e]["timeout"]);
-			if(uptime >= activeEvents[e]["timeout"]){
-				console.log("CALLING THIS EVENT AND DELETING");
-				activeEvents[e]["function"]();
-				sosc.sendToTCP("/events/end/"+e, e+" is now deactivated!");
+			
+			//Loop 1 for action
+			for(let command in activeEvents[e]){
+				sosc.sendToTCP("/events/time/"+e+"/"+activeEvents[e][command]["etype"], uptime-activeEvents[e][command]["timeout"]);
+				if(uptime >= activeEvents[e][command]["timeout"]){
+					
+					activeEvents[e][command]["function"]();
+					activeEvents[e][command].finished = true;
+					sosc.sendToTCP("/events/end/"+e+"/"+command, e+"-"+command+" is now deactivated!");
+				}
+			}
+
+			//Loop 2 for cleanup
+			for(command in activeEvents[e]){
+				if(activeEvents[e][command].finished == true){
+					activeEvents[e].splice(command,1);
+				}
+			}
+
+			if(activeEvents[e].length == 0){
 				delete activeEvents[e];
 			}
 		}
 	};
 
 	function createTimeout(name, etype, funct, seconds){
-		console.log("New Timeout", seconds);
-		activeEvents[name] = {
+		if(activeEvents[name] == null){
+			activeEvents[name] = [];
+		}
+		activeEvents[name].push({
 			"function": funct,
 			"timeout": uptime+seconds,
 			"etype": etype
-		};
+		});
 	}
 }

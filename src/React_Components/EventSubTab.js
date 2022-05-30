@@ -344,7 +344,7 @@ class EventSubTab extends React.Component{
 														<input type="text" eventname={event} name="udp-value" defaultValue={events[event].udp.value} onChange={this.handleChange}/>
 													</label>
 													<label className={events[event].udp.enabled?"":"hidden"}>Value Off:
-														<input type="text" eventname={event} name="udp-valueoff" defaultValue={events[event].udp.valueOff} onChange={this.handleChange}/>
+														<input type="text" eventname={event} name="udp-valueoff" defaultValue={events[event].udp.valueoff} onChange={this.handleChange}/>
 													</label>
 													<label className={events[event].udp.enabled?"":"hidden"}>Duration (Milliseconds):
 														<input type="number" eventname={event} name="udp-duration" defaultValue={events[event].udp.duration} onChange={this.handleChange}/>

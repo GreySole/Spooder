@@ -160,6 +160,9 @@ class PluginTab extends React.Component {
 		for(let i=0; i<inputs.length; i++){
 			let varname = inputs[i].getAttribute("name");
 			newSettings[varname] = inputs[i].value;
+			if(inputs[i].type == "checkbox"){
+				newSettings[varname] = inputs[i].checked;
+			}
 		}
 		for(let s in subforms){
 			if(typeof subforms[s] != "object"){continue;}

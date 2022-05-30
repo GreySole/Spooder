@@ -1,6 +1,6 @@
 {
   "name": "Spooder",
-  "version": "0.2",
+  "version": "0.2.1",
   "description": "A LAN based Twitch bot that emits OSC from chat commands.",
   "main": "spooder.js",
   "scripts": {

@@ -90,6 +90,10 @@ option{
 	padding:10px;
 }
 
+.command-key svg{
+	margin-left: 15px;
+}
+
 .command-key.expanded{
 	border-bottom: var(--border-color) 1px solid;
 }
@@ -176,10 +180,31 @@ option{
 	margin-bottom:10px;
 }
 
+.label-switch{
+	display:flex;
+	flex-flow:row;
+	align-items:center;
+}
+
 .verified{
 	border: green 5px solid;
 }
 
 .failed{
 	border: red 5px solid;
+}
+
+@media screen and (max-width: 600px) {
+	.command-props{
+		flex-flow:column;
+		align-items:flex-start;
+	}
+	.command-props label[triggertype]{
+		flex-flow:column;
+		align-items:flex-start;
+	}
+	.command-fields{
+		flex-flow:column;
+		align-items:flex-start;
+	}
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome';
-import {faTrash} from '@fortawesome/free-solid-svg-icons';
+import {faTrash, faAward, faCommentDots} from '@fortawesome/free-solid-svg-icons';
 import BoolSwitch from './BoolSwitch.js';
 
 class EventTable extends React.Component{
@@ -22,6 +22,7 @@ class EventTable extends React.Component{
 		this.deleteCommand = this.deleteCommand.bind(this);
 		this.deleteEvent = this.deleteEvent.bind(this);
 		this.getCustomRewards = this.getCustomRewards.bind(this);
+		this.checkEventTaken = this.checkEventTaken.bind(this);
 		
 		this.getCustomRewards();
 	}
@@ -49,17 +50,22 @@ class EventTable extends React.Component{
 			
 		}else{
 			let varname = e.target.name;
-			console.log(eventName, varname)
-			newState[eventName][varname] = e.target.value;
+			console.log(eventName, varname, e.target.type);
+			if(e.target.type == "checkbox"){
+				newState[eventName][varname] = e.target.checked;
+			}else{
+				newState[eventName][varname] = e.target.value;
+			}
+			
 		}
 		
 		this.setState(Object.assign(this.state,{events:newState}));
-		console.log(this.state);
+		//console.log(this.state);
 	}
 
 	addGroup(e){
 		let newGroup = e.target.closest(".add-command-actions").querySelector("[name='groupname']").value;
-		console.log("NEW GROUP", newGroup);
+		//console.log("NEW GROUP", newGroup);
 
 		let newGroups = Object.assign(this.state.groups);
 		newGroups.push(newGroup);
@@ -68,14 +74,17 @@ class EventTable extends React.Component{
 
 	addEvent(e){
 		let newKey = document.querySelector(".event-add #eventkey").value;
+		let eventGroup = document.querySelector(".event-add #eventgroup").value;
 
 		let newEvent = {
 			"name":newKey,
 			"description":"",
-			"group":"Default",
+			"group":eventGroup,
+			"cooldown":0,
+			"chatnotification":false,
 			"triggers":{
 				"chat":{"enabled":true, "command":"!"},
-				"redemption":{"enabled":true, "id":""}
+				"redemption":{"enabled":false, "id":""}
 			},
 			"commands":[]
 		};
@@ -87,7 +96,6 @@ class EventTable extends React.Component{
 	
 	addCommand(e){
 		let eventName = e.target.getAttribute("eventname");
-		console.log(eventName);
 		let commandType = document.querySelector("#"+eventName+" .add-command [name='type']").value;
 		let newCommand = {};
 		switch(commandType){
@@ -121,7 +129,6 @@ class EventTable extends React.Component{
 		}
 		
 		
-		console.log("NEW COMMAND", newCommand);
 		let newState = Object.assign(this.state.events);
 		newState[eventName].commands.push(newCommand)
 		this.setState(Object.assign(this.state,{events:newState}));
@@ -131,7 +138,7 @@ class EventTable extends React.Component{
 		let newEvents = Object.assign(this.state.events);
 		for(let c in newEvents){
 			for(let n in newEvents[c]){
-				if(!isNaN(newEvents[c][n])){
+				if(!isNaN(newEvents[c][n]) && typeof newEvents[c][n] != 'boolean'){
 					newEvents[c][n] = parseFloat(newEvents[c][n]);
 				}
 			}
@@ -145,15 +152,12 @@ class EventTable extends React.Component{
 			"events":newEvents,
 			"groups":this.state.groups
 		};
-		console.log(newList);
-		//return;
 		
 		const requestOptions = {
 			method: 'POST',
 			headers: {'Content-Type': 'application/json', 'Accept':'application/json'},
 			body: JSON.stringify(newList)
 		};
-		console.log(requestOptions);
 		fetch('/saveCommandList', requestOptions)
 		.then(response => response.json())
 		.then(data => {
@@ -172,7 +176,6 @@ class EventTable extends React.Component{
 		
 		let eventName = e.target.closest(".command-element").id;
 		let cIndex = e.target.closest(".command-fields").getAttribute("commandindex");
-		console.log(eventName, cIndex);
 		let newState = Object.assign(this.state.events);
 		newState.events[eventName].commands.splice(cIndex,1);
 
@@ -181,12 +184,10 @@ class EventTable extends React.Component{
 
 	deleteEvent(e){
 		let eventName = e.target.closest(".command-element").id;
-		console.log(eventName);
 		window.setClass(e.target.closest(".command-element"), "expanded", false);
 		window.setClass(e.target.closest(".command-section"), "hidden", true);
 		
 		let newState = Object.assign(this.state.events);
-		console.log(newState);
 		delete newState[eventName];
 
 		this.setState(Object.assign(this.state, {events:newState}));
@@ -196,24 +197,10 @@ class EventTable extends React.Component{
 		let topElement = e.currentTarget.closest(".command-element");
 		let middleElement = topElement.querySelector(".command-key");
 		let element = topElement.querySelector(".command-section");
-		
-		console.log(element, topElement, e.target);
 
 		window.toggleClass(topElement, "expanded");
 		window.toggleClass(middleElement, "expanded");
 		window.toggleClass(element, "hidden");
-		
-		/*if(topElement.classList.contains("expanded")){
-			topElement.classList.remove("expanded");
-		}else{
-			topElement.classList.add("expanded");
-		}
-		
-		if(element.classList.contains("hidden")){
-			element.classList.remove("hidden");
-		}else{
-			element.classList.add("hidden");
-		}*/
 	}
 	
 	sortList() {
@@ -301,7 +288,14 @@ class EventTable extends React.Component{
 		}
 		
 		
-		console.log(responseScript);
+	}
+
+	checkEventTaken(e){
+		if(Object.keys(this.state.events).includes(e.target.value)){
+			window.setClass(e.target, "error", true);
+		}else{
+			window.setClass(e.target, "error", false);
+		}
 	}
 
 	async getCustomRewards(){
@@ -320,13 +314,12 @@ class EventTable extends React.Component{
 		let newState = Object.assign(this.state);
 		newState._rewards = rewards;
 		this.setState(newState);
-		console.log("GOT REWARDS", rewards);
 	}
 	
 	render(){
 		
 		let udpHostOptions = [];
-		console.log(this.state._udpClients);
+		//console.log(this.state._udpClients);
 		if(Object.keys(this.state._udpClients).length > 0){
 			for(let u in this.state._udpClients){
 				udpHostOptions.push(
@@ -373,8 +366,6 @@ class EventTable extends React.Component{
 			return this.state.events[a].name.toUpperCase() > this.state.events[b].name.toUpperCase() ? 1:-1;
 		});
 
-		console.log("SORTING PROPS", propKeys);
-
 		for(let p in propKeys){
 
 			let s = propKeys[p];
@@ -388,6 +379,12 @@ class EventTable extends React.Component{
 
 			let groupName = thisEvent[s].group;
 			if(groupName==null){groupName = ""}
+
+			let eventCooldown = thisEvent[s].cooldown;
+			if(eventCooldown == null){eventCooldown = 0}
+
+			let chatNotification = thisEvent[s].chatnotification;
+			if(chatNotification == null){chatNotification = false}
 
 			let eventTriggers = thisEvent[s].triggers;
 			let redemptionTrigger = null;
@@ -438,7 +435,7 @@ class EventTable extends React.Component{
 							</label>
 							
 							<label>
-								Delay:
+								Delay (Milliseconds):
 								<input name="delay" key={s} defaultValue={eventCommands[c].delay} type="number" break="anywhere" onChange={this.handleChange} />
 							</label>
 						</div>;
@@ -454,12 +451,16 @@ class EventTable extends React.Component{
 								<input type="text" key={s} name="eventname" defaultValue={eventCommands[c].eventname} onChange={this.handleChange} />
 							</label>
 							<label>
-								Delay:
+								Delay (Milliseconds):
 								<input name="delay" key={s} defaultValue={eventCommands[c].delay} type="number" break="anywhere" onChange={this.handleChange} />
 							</label>
 						</div>;
 					break;
 					case 'software':
+						let duration = eventCommands[c].etype=="timed" ? <label>
+																		Duration (Seconds):
+																		<input type="number" name="duration" key={s} defaultValue={eventCommands[c].duration} onChange={this.handleChange} />
+																	</label>:null;
 						element = <div className="command-props software">
 							
 							<label>
@@ -486,15 +487,13 @@ class EventTable extends React.Component{
 								Event Type:
 								<select name="etype" key={s} defaultValue={eventCommands[c].etype} onChange={this.handleChange}><option value="timed">Timed</option><option value="oneshot">One Shot</option></select>
 							</label>
+							{duration}
 							<label>
-								Duration/Cooldown (Seconds):
-								<input type="number" name="duration" key={s} defaultValue={eventCommands[c].duration} onChange={this.handleChange} />
-							</label>
-							<label>
-								Delay:
+								Delay (Milliseconds):
 								<input name="delay" key={s} defaultValue={eventCommands[c].delay} type="number" break="anywhere" onChange={this.handleChange} />
 							</label>
 						</div>;
+					
 					break;
 				}
 				
@@ -511,10 +510,7 @@ class EventTable extends React.Component{
 					</div>
 				);
 			}
-
-			let addButton = <button type="button" id="toggleAddCommandButton" className="command-button" onClick={this.toggleAddMenu}>+</button>;
-
-				
+	
 			let addElement = <div className="add-command">
 					<div className="add-command-fields">
 						<label>
@@ -531,10 +527,23 @@ class EventTable extends React.Component{
 					</div>
 				</div>;
 
+			let triggerIcons = [];
+			if(eventTriggers.chat.enabled){
+				triggerIcons.push(
+					<FontAwesomeIcon icon={faCommentDots} />
+				);
+			}
+
+			if(eventTriggers.redemption.enabled){
+				triggerIcons.push(
+					<FontAwesomeIcon icon={faAward} />
+				)
+			}
+
 			let eventElement = <div className="command-element" key={s} id={s}>
 									<div className="command-key" onClick={this.toggleProps}>
 										<label>
-											<h1>{eventName}</h1>
+											<h1>{eventName}{triggerIcons}</h1>
 										</label>
 									</div>
 									<div className="command-section hidden">
@@ -552,6 +561,14 @@ class EventTable extends React.Component{
 											{groupOptions}
 										</select>
 									</label>
+									<label>
+										Cooldown (In Seconds):
+										<input type="number" name="cooldown" defaultValue={eventCooldown} onChange={this.handleChange}/>
+									</label>
+									<label class="label-switch">
+										Notify Activation in Chat:
+										<BoolSwitch name="chatnotification" checked={chatNotification} onChange={this.handleChange}/>
+									</label>
 									<label className="field-section">
 										Trigger:
 										{triggerElement}
@@ -560,32 +577,34 @@ class EventTable extends React.Component{
 										Commands:
 										{commandElements}
 										{addElement}
-										<div className="delete-event-div">
-											<button type="button" className="delete-button" onClick={this.deleteEvent}>DELETE EVENT</button>
-										</div>
 									</label>
+									
+									<div className="delete-event-div">
+										<button type="button" className="delete-button" onClick={this.deleteEvent}>DELETE EVENT</button>
+									</div>
 									</div>
 								</div>;
 
 			if(groupObjects[groupName] == null){
 				groupObjects[groupName] = [];
 			}
-			console.log(groupName);
+
 			groupObjects[groupName].push(eventElement);
 		}
-		console.log(groupObjects);
-		let groupElements = [];
 
-		for(let go in groupObjects){
+		let groupElements = [];
+		console.log(groupObjects);
+
+		let groupKeys = Object.keys(groupObjects).sort();
+
+		for(let go in groupKeys){
 			groupElements.push(
 				<div className="command-group">
-					<div className="command-group-label">{go}</div>
-					<div className="command-group-content">{groupObjects[go]}</div>
+					<div className="command-group-label">{groupKeys[go]}</div>
+					<div className="command-group-content">{groupObjects[groupKeys[go]]}</div>
 				</div>
 			);
 		}
-
-		console.log(groupElements)
 		
 		return (
 			<form className="event-table">
@@ -594,7 +613,10 @@ class EventTable extends React.Component{
 				</div>
 				<div className="event-add">Add Event
 					<div>
-						<input type="text" id="eventkey" placeholder="Event name" />
+						<input type="text" id="eventkey" placeholder="Event name" onInput={this.checkEventTaken} />
+						<select name="group" id="eventgroup" defaultValue="Default">
+							{groupOptions}
+						</select>
 						<button type="button" id="addEventButton" className="add-button" onClick={this.addEvent}>Add</button>
 					</div>
 				</div>

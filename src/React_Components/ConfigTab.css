@@ -112,6 +112,7 @@
 
 .config-variable-ui label:not(.toggle-label){
     margin-left: 25px;
+    margin-top: 10px;
 }
 
 .config-variable-ui .response{
