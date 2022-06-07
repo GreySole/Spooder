@@ -30,7 +30,7 @@ global.radioClass = (classname, selector, selected) => {
 }
 
 global.mediaExtensions = {
-	image:[".jpg",".jpeg",".png", ".tif", ".webp", ".svg"],
+	image:[".jpg",".jpeg",".png", ".tif", ".webp", ".svg", ".gif"],
 	sound:[".wav",".mp3",".aiff", ".ogg"],
 	video:[".mp4", ".webm"]
 }

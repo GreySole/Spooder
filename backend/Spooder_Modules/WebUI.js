@@ -6,6 +6,7 @@ class WebUI {
     constructor(devMode){
 
         var expressPort = null;
+        var webUI = this;
 
         const Axios = require("axios");
         const chmodr = require('chmodr');
@@ -39,8 +40,8 @@ class WebUI {
         var app = new express();
         var router = express.Router();
 
-        channel = "#"+config.broadcaster.username;
-        expressPort = devMode===false?config.network.host_port:3001;
+        channel = "#"+sconfig.broadcaster.username;
+        expressPort = devMode===false?sconfig.network.host_port:3001;
         app.use("/",router);
         router.use("/overlay", express.static(backendDir+'/web/overlay'));
         router.get("/overlay/get", async(req, res) => {
@@ -55,8 +56,8 @@ class WebUI {
             }
             
             let oscInfo = {
-                host: config.network.host,
-                port: config.network.osc_tcp_port,
+                host: sconfig.network.host,
+                port: sconfig.network.osc_tcp_port,
                 settings: pluginSettings
             };
 
@@ -119,7 +120,64 @@ class WebUI {
                 return;
             });
             this.onLogin();
-            res.redirect("http://localhost:"+(devMode==true?3000:expressPort)+"/?user="+username);
+            res.redirect("http://localhost:"+(devMode==true?3000:expressPort));
+        });
+
+        router.get("/revoke", async(req, res) => {
+            let cid = clientId;
+            let revokeBroadcaster = req.query.broadcaster == true;
+            let revokeToken = token;
+            if(revokeBroadcaster){
+                revokeToken = oauth.broadcaster_token;
+            }else{
+                revokeToken = token;
+            }
+            console.log("Revoking: "+cid);
+            await Axios({
+                url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+revokeToken,
+                method: 'POST',
+                headers:{
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+            })
+            .then((response)=>{
+                
+                console.log(response);
+
+                if(oauth.broadcaster_token == token){
+                    oauth.broadcaster_token = "";
+                    oauth.broadcaster_refreshToken = "";
+                    token = "";
+                    refreshToken = "";
+                    oauth.token = token;
+                    oauth.refreshToken = refreshToken;
+                    console.log("Main token matches broadcaster, both oauth revoked");
+                    res.send({status:"Main token matches broadcaster, both oauth revoked"});
+                }else{
+                    if(revokeBroadcaster){
+                        oauth.broadcaster_token = "";
+                        oauth.broadcaster_refreshToken = "";
+                        console.log("Broadcaster oauth revoked, main token preserved");
+                        res.send({status:"Broadcaster oauth revoked, main token preserved"});
+                    }else{
+                        token = "";
+                        refreshToken = "";
+                        oauth.token = token;
+                        oauth.refreshToken = refreshToken;
+                        console.log("Broadcaster oauth preserved");
+                        res.send({status:"Main token revoked, broadcaster oauth preserved"});
+                    }
+                    
+                }
+                
+                fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
+                    console.log("oauth saved!");
+                });
+
+            }).catch(error=>{
+                console.error(error);
+                return;
+            });
         });
 
         router.get("/save_auth_to_broadcaster", async(req, res) => {
@@ -142,7 +200,7 @@ class WebUI {
         });
 
         router.get('/server_config', (req, res) => {
-            res.send({express: JSON.stringify(config)});
+            res.send({express: JSON.stringify(sconfig)});
         });
 
         router.get('/udp_hosts', (req, res) => {
@@ -152,9 +210,9 @@ class WebUI {
         router.get('/server_state', async (req, res) => {
 
             var oscReturn = {
-                host:config.network.host,
-                port:config.network.osc_tcp_port,
-                udp_clients:config.network["udp_clients"],
+                host:sconfig.network.host,
+                port:sconfig.network.osc_tcp_port,
+                udp_clients:sconfig.network["udp_clients"],
                 plugins:Object.keys(activePlugins)
             }
 
@@ -163,16 +221,15 @@ class WebUI {
             }
             
             if(username == "" || username == null){
-                res.send({user:"", osc:oscReturn, host:hostReturn});
+                res.send({user:"","clientID": oauth["client-id"], osc:oscReturn, host:hostReturn});
             }else{
                 res.send({
                     "user":username,
+                    "clientID": oauth["client-id"],
                     "osc":oscReturn,
                     "host":hostReturn
                 });
             }
-            
-            
         });
 
         router.post("/saveCommandList", async (req, res) => {
@@ -189,7 +246,7 @@ class WebUI {
             console.log("SAVING CONFIG",req.body);
             
             fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
-                config = req.body;
+                sconfig = req.body;
                 res.send({status:"SAVE SUCCESS"});
                 console.log("SAVED THE CONFIG");
             });
@@ -231,7 +288,6 @@ class WebUI {
                     if(!fs.existsSync(backendDir+"/tmp")){
                         fs.mkdirSync(backendDir+"/tmp");
                     }
-
 
                     let tempFile = path.join(backendDir,"tmp", pluginZip.name);
                     let tempDir = path.join(backendDir, "tmp", pluginDirName);
@@ -420,7 +476,7 @@ class WebUI {
             let pluginPacks = {};
             for(let a in activePlugins){
                 console.log(a);
-                let thisPluginPath = "http://"+config.network.host+":"+expressPort+"/overlay/"+a;
+                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
@@ -542,6 +598,11 @@ class WebUI {
             res.send(JSON.stringify({status:subStatus}));
         });
 
+        router.get("/chat_channel", async(req,res) => {
+            let channel = req.query.channel;
+            chatSwitchChannels(channel);
+        })
+
         //HTTPS ROUTER
         router.post("/webhooks/callback", async (req, res) => {
             const messageType = req.header("Twitch-Eventsub-Message-Type");
@@ -557,6 +618,15 @@ class WebUI {
                 `Receiving ${type} request for ${event.broadcaster_user_name}: `,
                 event
             );
+
+            if(type == "channel.raid"){
+                await getBroadcasterID();
+                if(event.to_broadcaster_user_id == broadcasterUserID){
+                    event.raidType = "receive";
+                }else if(event.from_broadcaster_user_id == broadcasterUserID){
+                    event.raidType = "send";
+                }
+            }
             
             if(eventsubs){
                 if(eventsubs.events[type].chat != null){
@@ -575,7 +645,19 @@ class WebUI {
 
                 if(eventsubs.events[type].tcp != null){
                     if(eventsubs.events[type].tcp.enabled){
-                        sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
+                        
+                        if(type == "channel.raid"){
+                            await getBroadcasterID();
+                            let raidType = "channel.raid";
+                            if(event.to_broadcaster_user_id == broadcasterUserID){
+                                event.raidType = "receive";
+                            }else if(event.from_broadcaster_user_id == broadcasterUserID){
+                                event.raidType = "send";
+                            }
+                            sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
+                        }else{
+                            sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
+                        }
                     }
                 }
 
@@ -628,12 +710,12 @@ class WebUI {
 
         app.listen(expressPort);
 
-        console.log("Spooder Web UI is running at", "http://"+config.network.host+":"+expressPort);
+        console.log("Spooder Web UI is running at", "http://"+sconfig.network.host+":"+expressPort);
 
         async function getBroadcasterID(){
             if(broadcasterUserID==0){
                 await Axios({
-                    url: 'https://api.twitch.tv/helix/users?login='+config.broadcaster.username,
+                    url: 'https://api.twitch.tv/helix/users?login='+sconfig.broadcaster.username,
                     method: 'get',
                     headers:{
                         "Authorization": "Bearer "+token,
@@ -645,7 +727,7 @@ class WebUI {
                 }).catch(error=>{
                     console.error(error);
                     if(error.response.status == 401){
-                        this.onAuthenticationFailure();
+                        webUI.onAuthenticationFailure();
                     }
                     return;
                 });
@@ -749,7 +831,6 @@ class WebUI {
         }
         getPlugins();
     }
-    
 
     onLogin = null;
 
@@ -790,6 +871,7 @@ class WebUI {
     };
 
     onAuthenticationFailure = async() =>{
+        if(refreshToken == "" || refreshToken == null){return;}
         let clientId = oauth["client-id"]
         let clientSecret = oauth["client-secret"];
 		var refreshParams = "?client_id="+clientId+
@@ -811,13 +893,14 @@ class WebUI {
 						this.autoLogin();
 					}
 				}).catch(error=>{
-					console.error(error);
+					console.error(error.response.data.message);
 					return;
 				});
 		
 	};
 
 	onBroadcasterAuthFailure = async() =>{
+        if(oauth.broadcaster_refreshToken == "" || oauth.broadcaster_refreshToken == null){return;}
         let clientId = oauth["client-id"]
         let clientSecret = oauth["client-secret"];
 		var refreshParams = "?client_id="+clientId+

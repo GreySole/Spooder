@@ -1,25 +1,32 @@
-.obs-remote-title,.osc-monitor-title{
+.obs-remote-title,.osc-monitor-title,.chat-channel-title{
 	font-size:24px;
 	margin-bottom:10px;
 	display:flex;
 	flex-flow:column;
 }
 
-.obs-remote-settings{
+.obs-remote-settings, .chat-channel-remote{
 	display:flex;
 	flex-flow:column;
 }
 
-.obs-remote-settings label{
+.obs-remote-settings label,
+.chat-channel-remote label{
 	font-size:16px;
 	margin:10px;
 }
 
-.obs-remote-settings input{
+.obs-remote-settings input,
+.chat-channel-remote input{
 	margin-left:10px;
 }
 
-.obs-remote-settings button{
+.chat-channel.remote input{
+	width:150px;
+}
+
+.obs-remote-settings button,
+.chat-channel-remote button{
 	margin-top:10px;
 	width:100px;
 }

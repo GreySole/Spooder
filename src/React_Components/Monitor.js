@@ -167,6 +167,13 @@ class Monitor extends React.Component{
 		obs.send(command, data[command]);
 		
 	}
+
+	async connectChatChannel(e){
+		let channel = document.querySelector(".chat-channel-remote input[name=channel]").value;
+
+		const response = await fetch("/chat_channel?channel="+channel);
+		console.log(response);
+	}
 	
 	render(){
 
@@ -228,6 +235,15 @@ class Monitor extends React.Component{
 		
 		return(
 			<div className="monitor-container">
+				<div className="chat-channel-title">
+					Chat
+					<div className="chat-channel-remote">
+						<label>Switch chat channel
+							<input type="text" name="channel" placeholder="Twitch username" />
+							<button className="obs-connect-button" onClick={this.connectChatChannel}>Connect</button>
+						</label>
+					</div>
+				</div>
 				<div className="obs-remote-title">OBS Remote 
 					{obsSettings}
 				</div>

@@ -64,7 +64,7 @@ class PluginTab extends React.Component {
 					options.push(assets[a]);
 				}
 			}
-			let optionHTML = "";
+			let optionHTML = "<option value=''>None</option>";
 			for(let o in options){
 				optionHTML += "<option>"+options[o]+"</option>";
 			}

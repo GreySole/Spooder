@@ -13,6 +13,12 @@ class EventSubTab extends React.Component{
 		super(props);
 		console.log(props.udpClients);
 		this.state = Object.assign(props.data);
+		if(this.state.callback_url == null){
+			this.state.callback_url = "";
+		}
+		if(this.state.events == null){
+			this.state.events = {};
+		}
 		_udpClients = Object.assign(props._udpClients);
 		_plugins = Object.assign(props._plugins);
 		authMessageHidden = localStorage.getItem("authMessageHidden")!=null?localStorage.getItem("authMessageHidden"):false;
@@ -161,6 +167,16 @@ class EventSubTab extends React.Component{
 		
 		console.log("DONE", saveStatus);
 	}
+
+	async revokeBroadcasterAuth(){
+		let confirmation = window.confirm("This will revoke your broadcaster oauth. Your chat oauth will be preserved. Ok?");
+		if (confirmation == false) { return; }
+
+		let saveStatus = await fetch('/revoke?broadcaster=true')
+		.then(response => response.json());
+		
+		console.log("DONE", saveStatus);
+	}
 	
 	hideAuthMessage(e){
 		let isHidden = window.toggleClass(document.querySelector("#authMessage"), "hidden");
@@ -211,6 +227,7 @@ class EventSubTab extends React.Component{
 						<div>
 							<button type="button" className="oauth-broadcaster-button command-button" onClick={this.hideAuthMessage}>Hide</button>
 							<button type="button" className="oauth-broadcaster-button save-button" onClick={this.saveAuthToBroadcaster}>Save Current Oauth as Broadcaster</button>
+							<button type="button" className="oauth-broadcaster-button delete-button" onClick={this.revokeBroadcasterAuth}>Revoke Broadcaster Oauth</button>
 						</div>
 							
 						</div>);

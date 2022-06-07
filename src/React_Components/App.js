@@ -13,15 +13,13 @@ import OSC from 'osc-js';
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-var oscConnected = false;
-
-var username = urlParams.get("user");
+var username = "NOT LOGGED IN";
 
 var hostIP = window.location.hostname;
 var udpClients = {};
 var plugins = [];
-var clientIP = null;
 var hostPort = 3001;
+var clientID = null;
 var osc = null;
 
 if(urlParams.get("host") != null){
@@ -44,6 +42,7 @@ class App extends React.Component {
 			console.log(data);
 			let serverData = data;
 			hostPort = serverData.host.port;
+			clientID = serverData.clientID;
 			udpClients = serverData.osc["udp_clients"];
 			plugins = serverData.osc["plugins"];
 			console.log(serverData, udpClients);
@@ -93,9 +92,13 @@ class App extends React.Component {
 	getServerState = async () => {
 		const response = await fetch("/server_state");
 		const serverStateRaw = await response.json();
-		username = serverStateRaw.user;
+		if(serverStateRaw.user != null &&
+			serverStateRaw.user != ""){
+				username = serverStateRaw.user;
+			}
+		
 		hostPort = serverStateRaw.host.port;
-		document.querySelector(".login .account-info").textContent = username;
+		clientID = serverStateRaw.clientID;
 		return serverStateRaw;
 	}
 	
@@ -202,15 +205,16 @@ class App extends React.Component {
 	}
 	
 	render(){
+		
 		return(
 			<div className="App">
 				<div className="App-header">
 					<h1 className="App-title">/╲/\( ºo ω oº )/\╱\</h1>
 					<div className="login">
-						<div className="account-info">{username=="" ? "NOT LOGGED IN":username}</div>
+						<div className="account-info">{username}</div>
 						<div className="login-buttons">
-							<a href={"https://id.twitch.tv/oauth2/authorize?client_id=rxaykc294ltsig47tqzegubqrwmhgc&redirect_uri=http://localhost:"+hostPort+"/handle&response_type=code&scope=chat:read chat:edit channel:read:goals bits:read channel:read:subscriptions moderation:read channel:read:redemptions channel:read:polls channel:read:predictions channel:read:hype_train"}>Authorize</a>
-							<a href="https://id.twitch.tv/oauth2/revoke?client_id=rxaykc294ltsig47tqzegubqrwmhgc">Revoke</a>
+							<a href={"https://id.twitch.tv/oauth2/authorize?client_id="+clientID+"&redirect_uri=http://localhost:"+hostPort+"/handle&response_type=code&scope=chat:read chat:edit channel:read:goals bits:read channel:read:subscriptions moderation:read channel:read:redemptions channel:read:polls channel:read:predictions channel:read:hype_train"}>Authorize</a>
+							<a href={"/revoke"}>Revoke</a>
 						</div>
 					</div>
 				</div>

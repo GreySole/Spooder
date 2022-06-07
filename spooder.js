@@ -19,7 +19,7 @@ if(!fs.existsSync(settingsDir)){
 }
 
 global.oauth = {};
-global.config = {};
+global.sconfig = {};
 global.osctunnels = {};
 global.eventsubs = {};
 global.events = {};
@@ -42,7 +42,7 @@ global.refreshFiles = () => {
 	}
 	try{
 		var configFile = fs.readFileSync(backendDir+"/settings/config.json",{encoding:'utf8'});
-		config = JSON.parse(configFile);
+		sconfig = JSON.parse(configFile);
 		console.log("Got Config");
 	}catch(e){
 		console.error(e);
@@ -92,7 +92,7 @@ global.refreshFiles = () => {
 	}catch(e){
 		//console.error(e);
 		if(e.code == "ENOENT"){
-			fs.writeFile(backendDir+"/settings/eventsub.json", JSON.stringify(events), "utf-8", (err, data)=>{
+			fs.writeFile(backendDir+"/settings/commands.json", JSON.stringify(events), "utf-8", (err, data)=>{
                 //console.log("commands.json not found. New file created.");
             });
 		}else{
@@ -116,7 +116,7 @@ if(initMode){
 	activeEvents = {};
 	chatEvents = [];
 
-	global.udpClients = config.network["udp_clients"];
+	global.udpClients = sconfig.network["udp_clients"];
 	global.activePlugins = {};
 
 
@@ -189,18 +189,18 @@ if(initMode){
 
 				for(let e in events){
 					if(events[e].triggers.chat.enabled
-						&& events[e].triggers.chat.command == message.message){
+						&& message.message.startsWith(events[e].triggers.chat.command)){
 							runCommands(message, e);
 					}
 				}
 				
-				if(command[0] == config.bot.help_command){
+				if(command[0] == sconfig.bot.help_command){
 					if(command.length>1){
 						let commands = [];
 						let done = false;
 
 						if(command[1] == "help"){
-							sayInChat("Pass a command type like '!"+config.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+config.bot.help_command+" event command' to get a description of what that command does. Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]");
+							sayInChat("Pass a command type like '!"+sconfig.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+sconfig.bot.help_command+" event command' to get a description of what that command does. Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]");
 							return;
 						}
 
@@ -233,7 +233,7 @@ if(initMode){
 						
 					}else{
 						
-						sayInChat("Hi, I'm "+config.bot.bot_name+". "+config.bot.introduction);
+						sayInChat("Hi, I'm "+sconfig.bot.bot_name+". "+sconfig.bot.introduction);
 					}
 				}
 			}
@@ -278,6 +278,16 @@ if(initMode){
 			uState.message = message;
 		})
 		chat.say(channel,message);
+	}
+
+	global.chatSwitchChannels = async (newChannel) =>{
+		await chat.disconnect();
+		channel = newChannel;
+		run();
+	}
+
+	global.disconnectChat = () => {
+		chat.disconnect();
 	}
 
 	function convertDuration(numSeconds){

@@ -6,7 +6,7 @@ class SOSC {
 
     osc = null;
     oscTCP = null;
-    udpClients = config.network.udp_clients
+    udpClients = sconfig.network.udp_clients
 
     sendToTCP = (address, oscValue) => {
         var OSC = this.OSC;
@@ -114,12 +114,12 @@ class SOSC {
         var udpConfig = {
             type:'udp4',
             open: {
-                host: config.network.host,
-                port: config.network.osc_udp_port,
+                host: sconfig.network.host,
+                port: sconfig.network.osc_udp_port,
                 exclusive: false
             },
             send:{
-                port: config.network.osc_udp_port
+                port: sconfig.network.osc_udp_port
             }
         };
 
@@ -138,7 +138,7 @@ class SOSC {
         });
         osc.open();
 
-        this.oscTCP = new OSC({plugin: new OSC.WebsocketServerPlugin({host:"0.0.0.0",port:config.network.osc_tcp_port})});
+        this.oscTCP = new OSC({plugin: new OSC.WebsocketServerPlugin({host:"0.0.0.0",port:sconfig.network.osc_tcp_port})});
         var oscTCP = this.oscTCP;
 
         oscTCP.on("open", () =>{

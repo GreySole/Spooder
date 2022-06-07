@@ -593,7 +593,7 @@ class EventTable extends React.Component{
 		}
 
 		let groupElements = [];
-		console.log(groupObjects);
+		
 
 		let groupKeys = Object.keys(groupObjects).sort();
 
