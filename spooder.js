@@ -145,12 +145,15 @@ if(initMode){
 	global.webUI = new WebUI(devMode);
 
 	const {Chat} = require("twitch-js");
+	global.chat = null;
 
 	function onAuthenticationFailure(){
 		webUI.onAuthenticationFailure();
 	}
 
 	const run = async() => {
+		
+		if(chat != null){chat.removeAllListeners();}
 
 		chat = new Chat({
 			"username":username,
