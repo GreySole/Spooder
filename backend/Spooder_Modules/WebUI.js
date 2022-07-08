@@ -24,6 +24,7 @@ class WebUI {
         let pluginsDir = path.join(backendDir, "plugins");
         let webDir = path.join(backendDir, "web");
         let overlayDir = path.join(backendDir, "web", "overlay");
+        let utilityDir = path.join(backendDir, "web", "utility");
         
         if(!fs.existsSync(pluginsDir)){
             fs.mkdirSync(pluginsDir);
@@ -37,6 +38,10 @@ class WebUI {
             fs.mkdirSync(overlayDir);
         }
 
+        if(!fs.existsSync(utilityDir)){
+            fs.mkdirSync(utilityDir);
+        }
+
         var app = new express();
         var router = express.Router();
 
@@ -44,7 +49,10 @@ class WebUI {
         expressPort = devMode===false?sconfig.network.host_port:3001;
         app.use("/",router);
         router.use("/overlay", express.static(backendDir+'/web/overlay'));
+        router.use("/mod", express.static(backendDir+'/web/mod/build'));
+        router.use("/utility", express.static(backendDir+'/web/utility'));
         router.get("/overlay/get", async(req, res) => {
+            let isExternal = req.query.external;
             var pluginName = req.query.plugin;
             var pluginSettings = null;
 
@@ -55,11 +63,21 @@ class WebUI {
                 console.log("Plugin has no settings");
             }
             
-            let oscInfo = {
-                host: sconfig.network.host,
-                port: sconfig.network.osc_tcp_port,
-                settings: pluginSettings
-            };
+            let oscInfo = null;
+
+            if(isExternal){
+                oscInfo = {
+                    host: sconfig.network.external_tcp_url,
+                    port: null,
+                    settings: pluginSettings
+                };
+            }else{
+                oscInfo = {
+                    host: sconfig.network.host,
+                    port: sconfig.network.osc_tcp_port,
+                    settings: pluginSettings
+                };
+            }
 
             res.send({express: JSON.stringify(oscInfo)});
         });
@@ -208,7 +226,7 @@ class WebUI {
         });
 
         router.get('/server_state', async (req, res) => {
-
+            //var themeFile = fs.readFileSync(backendDir+"/settings/themes.json", {encoding:'utf8'});
             var oscReturn = {
                 host:sconfig.network.host,
                 port:sconfig.network.osc_tcp_port,
@@ -264,6 +282,7 @@ class WebUI {
         });
 
         router.post("/saveEventSubs", async(req, res) => {
+            delete req.body.callback_url;
             fs.writeFile(backendDir+"/settings/eventsub.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 eventsubs = req.body;
                 res.send({status:"SAVE SUCCESS"});
@@ -324,6 +343,15 @@ class WebUI {
                             
                         });
                     }
+
+                    if(fs.existsSync(tempDir+"/utility")){
+                        await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
+
+                        chmodr(overlayDir,0o777, (err) => {
+                            if(err) throw err;
+                            
+                        });
+                    }
                     
                     console.log("COMPLETE!");
                     fs.rm(tempFile);
@@ -347,6 +375,7 @@ class WebUI {
             let tempDir = path.join(backendDir, "tmp", pluginName);
             let pluginDir = path.join(backendDir,"plugins", pluginName);
             let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
+            let utilityDir = path.join(backendDir, "web", "utility", pluginName);
 
             if(fs.existsSync(pluginDir)){
                 fs.copySync(pluginDir, tempDir+"/command");
@@ -359,6 +388,10 @@ class WebUI {
                 }
             }
 
+            if(fs.existsSync(utilityDir)){
+                fs.copySync(utilityDir, tempDir+"/utility");
+            }
+
             let zip = new AdmZip();
 
             if(fs.existsSync(tempDir+"/command")){
@@ -367,6 +400,10 @@ class WebUI {
 
             if(fs.existsSync(tempDir+"/overlay")){
                 zip.addLocalFolder(tempDir+"/overlay", "/overlay");
+            }
+
+            if(fs.existsSync(tempDir+"/utility")){
+                zip.addLocalFolder(tempDir+"/utility", "/utility");
             }
             
             zip.writeZip(tempDir+"/"+pluginName+".zip");
@@ -476,7 +513,7 @@ class WebUI {
             let pluginPacks = {};
             for(let a in activePlugins){
                 console.log(a);
-                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
+                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
@@ -486,14 +523,19 @@ class WebUI {
                                 fs.readFileSync(settingsForm, {encoding:'utf8'}):null;
 
                 let assetDir = path.join(backendDir, "web", "overlay", a, "assets");
-                console.log("HAS ASSETS?", fs.existsSync(assetDir));
+                
                 let thisPluginAssets = fs.existsSync(assetDir)==true ?
                                     fs.readdirSync(assetDir):null;
+
+                let overlayDir = path.join(backendDir, "web", "overlay", a);
+                let utilityDir = path.join(backendDir, "web", "utility", a);
                 pluginPacks[a] = {
                     "settings":thisPlugin,
                     "settings-form":thisPluginForm,
                     "assets":thisPluginAssets,
-                    "path":thisPluginPath
+                    "path":thisPluginPath,
+                    "hasOverlay": fs.existsSync(overlayDir),
+                    "hasUtility": fs.existsSync(utilityDir)
                 };
             }
             
@@ -505,7 +547,9 @@ class WebUI {
         });
 
         router.get("/eventsubs", async(req, res) => {
-            res.send(JSON.stringify(eventsubs));
+            let sendSubs = Object.assign(eventsubs);
+            sendSubs.callback_url = sconfig.network.external_http_url;
+            res.send(JSON.stringify(sendSubs));
         });
 
         router.get("/get_plugin/*", async(req,res) => {
@@ -601,7 +645,126 @@ class WebUI {
         router.get("/chat_channel", async(req,res) => {
             let channel = req.query.channel;
             chatSwitchChannels(channel);
+        });
+
+        router.get("/chat_restart", async(req, res) => {
+            restartChat();
+            res.send(JSON.stringify({status:"SUCCESS"}));
         })
+
+        router.get("/mod/authentication_info", async(req, res) => {
+            res.send(JSON.stringify({
+                devMode:devMode,
+                clientid: clientId,
+                redirectURI: sconfig.network.external_http_url+"/mod/authentication",
+                oscURL:sconfig.network.external_tcp_url
+            }));
+        });
+
+        router.get("/mod/authentication", async(req, res) => {
+            console.log(req);
+            let modlist = await chat.mods(channel);
+            console.log("LIST OF MODS", modlist.mods);
+            if(devMode){
+                activeMods[username] = "devtoken";
+                res.redirect("http://192.168.1.141:3000?moduser=lontheweaver&modtoken='devtoken");
+                return;
+            }
+
+            var twitchParams = "?client_id="+clientId+
+                "&client_secret="+clientSecret+
+                "&grant_type=authorization_code"+
+                "&code="+req.query.code+
+                "&redirect_uri="+sconfig.network.external_http_url+"/mod/authentication"+
+                "&response_type=code";
+                
+            let modToken = null;
+            await Axios.post('https://id.twitch.tv/oauth2/token'+twitchParams)
+                    .then((response)=>{
+                        
+                        if(typeof response.data.access_token != "undefined"){
+                            modToken = response.data.access_token;
+                            
+
+                        }
+                    }).catch(error=>{
+                        console.error(error);
+                        return;
+                    });
+            console.log("Got token");
+            
+            await Axios({
+                url: 'https://id.twitch.tv/oauth2/validate',
+                method: 'get',
+                headers:{
+                    "Authorization": "Bearer "+modToken
+                }
+            })
+            .then((response)=>{
+                
+                let modUsername = response.data.login;
+                console.log(modlist.mods, modUsername);
+                if(modlist.mods.includes(modUsername) || modUsername==sconfig.broadcaster.username){
+                    console.log("Welcome "+modUsername+"!");
+                    activeMods[modUsername] = modToken;
+                    res.redirect(sconfig.network.external_http_url+"/mod?moduser="+modUsername);
+                }
+                
+            }).catch(error=>{
+                console.error("ERROR",error);
+            });
+        });
+
+        router.get("/mod/currentviewers", async(req,res) => {
+            
+            await Axios({
+                url: "https://tmi.twitch.tv/group/user/"+channel.substr(1)+"/chatters",
+                method: 'get',
+            })
+            .then((response)=>{
+                
+                res.send(JSON.stringify(response.data));
+                
+            }).catch(error=>{
+                console.error("ERROR",error);
+            });
+            
+        });
+
+        router.get("/mod/utilities", async(req, res) => {
+            if(Object.keys(activeMods).includes(req.query.moduser)){
+                let modevents = {};
+                for(let e in events){
+                    if(events[e].triggers.chat.enabled){
+                        modevents[e] = {
+                            name:events[e].name,
+                            group:events[e].group,
+                            description:events[e].description
+                        }
+                    }
+                }
+                let modplugins = {};
+                for(let p in activePlugins){
+                    let hasUtility = fs.existsSync(path.join(backendDir, "web", "utility", p));
+                    modplugins[p] = {
+                        name:p,
+                        modmap:activePlugins[p].modmap,
+                        utility:hasUtility
+                    }
+                }
+                
+                res.send(JSON.stringify({
+                    status:"ok",
+                    events:modevents,
+                    plugins:modplugins,
+                    modlocks:modlocks
+                }));
+            }else{
+                res.send(JSON.stringify({
+                    status:"notmod",
+                }));
+            }
+        });
 
         //HTTPS ROUTER
         router.post("/webhooks/callback", async (req, res) => {
@@ -726,7 +889,7 @@ class WebUI {
                     broadcasterUserID = response.data.data[0].id;
                 }).catch(error=>{
                     console.error(error);
-                    if(error.response.status == 401){
+                    if(error.response?.status == 401){
                         webUI.onAuthenticationFailure();
                     }
                     return;
@@ -800,7 +963,7 @@ class WebUI {
                         "condition":condition,
                         "transport":{
                             "method": "webhook",
-                            "callback":eventsubs.callback_url+"/webhooks/callback",
+                            "callback":sconfig.network.external_http_url+"/webhooks/callback",
                             "secret":"imasecretboi"
                         }
                     }
@@ -870,36 +1033,40 @@ class WebUI {
         }
     };
 
-    onAuthenticationFailure = async() =>{
+    onAuthenticationFailure = () =>{
+        console.log("Authentication failed, refreshing...");
         if(refreshToken == "" || refreshToken == null){return;}
-        let clientId = oauth["client-id"]
-        let clientSecret = oauth["client-secret"];
-		var refreshParams = "?client_id="+clientId+
-			"&client_secret="+clientSecret+
-			"&grant_type=refresh_token"+
-			"&refresh_token="+refreshToken;
-			
-			console.log("Refreshing Token...");
-		await Axios.post('https://id.twitch.tv/oauth2/token'+refreshParams)
-				.then((response)=>{
-					
-					if(typeof response.data.access_token != "undefined"){
-						token = response.data.access_token;
-						oauth.token = token;
-						console.log("TOKEN REFRESHED");
-						fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-							console.log("oauth saved!");
-						});
-						this.autoLogin();
-					}
-				}).catch(error=>{
-					console.error(error.response.data.message);
-					return;
-				});
-		
+        
+        return new Promise((res, rej) => {
+            let clientId = oauth["client-id"];
+            let clientSecret = oauth["client-secret"];
+            var refreshParams = "?client_id="+clientId+
+                "&client_secret="+clientSecret+
+                "&grant_type=refresh_token"+
+                "&refresh_token="+refreshToken;
+                
+            Axios.post('https://id.twitch.tv/oauth2/token'+refreshParams)
+                    .then((response)=>{
+                        
+                        if(typeof response.data.access_token != "undefined"){
+                            
+                            token = response.data.access_token;
+                            oauth.token = token;
+                            console.log("TOKEN REFRESHED");
+                            fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
+                                console.log("oauth saved!");
+                            });
+                            res(token);
+                        }
+                    }).catch(error=>{
+                        rej(error);
+                        return;
+                    });
+        });
 	};
 
 	onBroadcasterAuthFailure = async() =>{
+        console.log("Broadcaster auth failed, refreshing...");
         if(oauth.broadcaster_refreshToken == "" || oauth.broadcaster_refreshToken == null){return;}
         let clientId = oauth["client-id"]
         let clientSecret = oauth["client-secret"];
@@ -913,9 +1080,10 @@ class WebUI {
 				.then((response)=>{
 					
 					if(typeof response.data.access_token != "undefined"){
+                        
 						oauth.broadcaster_token = response.data.access_token;
 						
-						console.log("TOKEN REFRESHED");
+						console.log("BROADCASTER TOKEN REFRESHED");
 						fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
 							console.log("broadcaster oauth saved!");
 						});
@@ -943,10 +1111,13 @@ class WebUI {
             username = response.data.login;
             console.log("Welcome "+username+"! Connecting to chat...");
             this.onLogin();
-        }).catch(error=>{
+        }).catch(async error=>{
             console.error("ERROR",error);
-            if(error.response.status == 401){
-                this.onAuthenticationFailure();
+            if(error.response?.status == 401){
+                let newToken = await this.onAuthenticationFailure();
+                if(newToken != "" && newToken != null){
+                    this.onLogin();
+                }
             }
         });
 	}
@@ -965,7 +1136,7 @@ class WebUI {
 			console.log("Validated broadcaster: "+response.data.login+"!");
 		}).catch(error=>{
 			console.error("ERROR",error);
-			if(error.response.status == 401){
+			if(error.response?.status == 401){
 				this.onBroadcasterAuthFailure();
 			}
 			

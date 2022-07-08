@@ -1,8 +1,0 @@
-If the web UI won't compile, it's because webpack can't find an alias for the 'dgram' module.
-In Webpack.config.js add this under resolve to get React to compile with osc-js
-fallback:{
-	fs: false,
-	tls: false,
-	dgram: false,
-	bufferutil: false
-} 

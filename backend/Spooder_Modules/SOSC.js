@@ -148,6 +148,8 @@ class SOSC {
 
         oscTCP.on("*", message => {
 
+            let address = message.address.split("/");
+
             for(let p in activePlugins){
 
                 //Alert box plugins need to listen for any connect messages from other plugins
@@ -158,11 +160,57 @@ class SOSC {
 
                 //Only the plugin with its name in the beginning of the address
                 //will call its onOSC
-                if(message.address.split("/")[1] == p){
+                if(address[1] == p){
                     if(activePlugins[p].onOSC != null){
                         activePlugins[p].onOSC(message);
                     }
                 }
+
+                if(address[1] == "mod" && address[1] == p){
+                    if(activePlugins[p].onMod != null){
+                        activePlugins[p].onMod(message);
+                    }
+                }
+            }
+
+            if(address[1] == "mod"){
+                if(address[3] == "lock"){
+                    if(address[4] == "event"){
+                        modlocks.events[address[5]] = message.args[0];
+                        sayInChat(address[2]+(message.args[0]==1?" locked ":" unlocked ")+address[5]);
+                        
+                    }else if(address[4] == "plugin"){
+                        if(modlocks.plugins[address[5]] == null){modlocks.plugins[address[5]] = {}}
+                        if(address[6] == null){
+                            modlocks.plugins[address[5]] = message.args[0];
+                            sayInChat(address[2]+(message.args[0]==1?" locked ":" unlocked ")+address[5]+" chat commands");
+                        }else{
+                            activePlugins[address[5]].modmap.locks[address[6]] = message.args[0];
+                            sayInChat(address[2]+(message.args[0]==1?" locked ":" unlocked ")+address[6]+" in "+address[5]);
+                        }
+                        
+                    }
+                }else if(address[3] == "blacklist"){
+                    modlocks.blacklist[address[4]] = message.args[0];
+                    fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
+                        console.log("Blacklist saved!");
+                    });
+                    sayInChat(address[2]+(message.args[0]==1?" blacklisted ":" unblacklisted ")+address[4]);
+                }else if(address[3] == "get"){
+                    if(address[4] == "all"){
+                        sendToTCP("/mod/"+address[2]+"/get", 
+                        JSON.stringify({
+                            _events:Object.keys(events),
+                            _plugins:Object.keys(activePlugins),
+                            _modlocks:modlocks
+                        }));
+                    }
+                }else if(address[3] == "sync"){
+                    if(address[4] == "theme"){
+                        sendToTCP("/mod/"+address[2]+"/sync/theme", message.args[0]);
+                    }
+                }
+                sendToTCP(message.address, message.args[0]);
             }
 
             //Tell the overlay it's connected

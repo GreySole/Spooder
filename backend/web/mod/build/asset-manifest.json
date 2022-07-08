@@ -1,0 +1,21 @@
+{
+  "files": {
+    "main.css": "/mod/static/css/main.7aa535af.css",
+    "main.js": "/mod/static/js/main.87a2c8b7.js",
+    "static/js/787.77c398aa.chunk.js": "/mod/static/js/787.77c398aa.chunk.js",
+    "static/media/spider-solid.svg": "/mod/static/media/spider-solid.1480f760d4054e34df06711d0717b743.svg",
+    "static/media/arrow-up-right-from-square-solid.svg": "/mod/static/media/arrow-up-right-from-square-solid.593fc4e665a2b5339acb9500ad5c7dea.svg",
+    "static/media/x-solid.svg": "/mod/static/media/x-solid.31c815a00a12259495b28c6073fef815.svg",
+    "index.html": "/mod/index.html",
+    "static/media/bars-solid.svg": "/mod/static/media/bars-solid.4de0b64b468d9cdbdd41f4d490765099.svg",
+    "static/media/lock-open-solid.svg": "/mod/static/media/lock-open-solid.91c5bf9833d726521a2aee45b6854b76.svg",
+    "static/media/lock-solid.svg": "/mod/static/media/lock-solid.e9ad01aacc089ecbf9fd284aca9feb5e.svg",
+    "main.7aa535af.css.map": "/mod/static/css/main.7aa535af.css.map",
+    "main.87a2c8b7.js.map": "/mod/static/js/main.87a2c8b7.js.map",
+    "787.77c398aa.chunk.js.map": "/mod/static/js/787.77c398aa.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.7aa535af.css",
+    "static/js/main.87a2c8b7.js"
+  ]
+}

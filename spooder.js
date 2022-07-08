@@ -32,7 +32,8 @@ global.refreshFiles = () => {
 		oauth = JSON.parse(oauthFile);
 		console.log("Got OAuth Settings");
 		if(oauth['client-id'] == "editme" || oauth['client-secret'] == "editme" ||
-		oauth['client-id'] == "" || oauth['client-secret'] == ""){
+		oauth['client-id'] == "" || oauth['client-secret'] == "" ||
+		oauth['client-id'] == null || oauth['client-secret'] == null){
 			console.error("No Twitch authentication credentials found. \n\
 			Create an app on dev.twitch.tv and run 'npm run init' to fill in your client id and secret.");
 		}
@@ -40,6 +41,7 @@ global.refreshFiles = () => {
 		console.error(e);
 		console.error("There's a problem with the oauth file. We'll keep running, but you won't be able to connect to chat.");
 	}
+	
 	try{
 		var configFile = fs.readFileSync(backendDir+"/settings/config.json",{encoding:'utf8'});
 		sconfig = JSON.parse(configFile);
@@ -116,6 +118,32 @@ if(initMode){
 	activeEvents = {};
 	chatEvents = [];
 
+	global.activeMods = {};
+
+	global.modlocks = {
+		lockdown:0,
+		events:{},
+		plugins:{},
+		blacklist:{}
+	};
+
+	try{
+		var blacklistFile = fs.readFileSync(backendDir+"/settings/mod-blacklist.json", {encoding:'utf8'});
+		let blacklistObj = JSON.parse(blacklistFile);
+		modlocks.blacklist = blacklistObj;
+	}catch(e){
+		//console.error(e);
+		if(e.code == "ENOENT"){
+			fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(events), "utf-8", (err, data)=>{
+                //console.log("commands.json not found. New file created.");
+            });
+		}else{
+			console.error(e);
+			
+		}
+		
+	}
+
 	global.udpClients = sconfig.network["udp_clients"];
 	global.activePlugins = {};
 
@@ -152,15 +180,15 @@ if(initMode){
 	}
 
 	const run = async() => {
-		
+		console.log("Running chat...");
 		if(chat != null){chat.removeAllListeners();}
 
 		chat = new Chat({
 			"username":username,
 			"token":token,
-			"onAuthenticationFailure":onAuthenticationFailure,
-			"connectionTimeout":60000,
-			"joinTimeout":60000
+			"onAuthenticationFailure":webUI.onAuthenticationFailure,
+			"connectionTimeout":10000,
+			"joinTimeout":10000
 		});
 		
 		await chat.connect().catch(error=>{console.error(error)});
@@ -172,11 +200,28 @@ if(initMode){
 			
 			if(message.message.startsWith("!")){
 
+				if(modlocks.blacklist[message.username] == 1){
+					return;
+				}
+
 				let command = message.message.substr(1).split(" ");
 
 				if(command[0] == "stop" && (message.tags.mod == 1 || message.tags.badges.broadcaster == true)){
 					let cEvent = command[1];
-					if(typeof activeEvents[cEvent] != "undefined"){
+					if(cEvent == "all"){
+						let eventCount = 0;
+						for(let a in activeEvents){
+							for(let e in activeEvents[a]){
+								if(activeEvents[a][e] != "event"){
+									activeEvents[a][e]["function"]();
+								}
+							}
+							delete activeEvents[a];
+							eventCount++;
+						}
+
+						sayInChat(eventCount+" events have been stopped!");
+					}else if(typeof activeEvents[cEvent] != "undefined"){
 						for(e in activeEvents[cEvent]){
 							if(activeEvents[cEvent][e] != "event"){
 								activeEvents[cEvent][e]["function"]();
@@ -190,7 +235,68 @@ if(initMode){
 					
 				}
 
+				if(command[0] == "mod" && (message.tags.mod == 1 || message.tags.badges.broadcaster == true)){
+					let modCommand = command[1];
+					if(modCommand = "lock" || modCommand == "unlock"){
+						let target = command[2];
+						for(let e in events){
+							if(target == "all"){
+								modlocks.events[e] = modCommand=="lock"?1:0;
+								sendToTCP("/mod/"+message.username+"/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
+								sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all event chat commands");
+							}else if(e==target){
+								modlocks.events[e] = modCommand=="lock"?1:0;
+								sendToTCP("/mod/"+message.username+"/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
+								sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" "+target);
+								return;
+							}
+							
+						}
+
+						for(let p in activePlugins){
+							if(target == "all"){
+								modlocks.plugins[p] = modCommand=="lock"?1:0;
+								sendToTCP("/mod/"+message.username+"/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
+								sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all plugin chat commands");
+								return;
+							}else if(p == target){
+								if(command[3] == null){
+									modlocks.plugins[p] = modCommand=="lock"?1:0;
+									sendToTCP("/mod/"+message.username+"/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
+									sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" "+target);
+									return;
+								}else{
+									if(activePlugins[p].modmap){
+										if(activePlugins[p].modmap.locks){
+											activePlugins[p].modmap.locks[command[3]] = modCommand=="lock"?1:0;
+											sendToTCP("/mod/"+message.username+"/"+modCommand+"/plugin/"+p+"/"+command[3], modCommand=="lock"?1:0);
+											sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" "+command[3]+" in "+target);
+											return;
+										}
+									}
+								}
+							}
+						}
+					}else if(modCommand == "blacklist"){
+						let modAction = command[2];
+						let viewer = command[3];
+						if(modAction == "add"){
+							modlocks.blacklist[viewer] == 1;
+							sayInChat(message.username+" blacklisted "+viewer);
+							sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 1);
+						}else if(modAction == "remove"){
+							modlocks.blacklist[viewer] == 0;
+							sayInChat(message.username+" unblacklisted "+viewer);
+							sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 0);
+						}
+						fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
+							console.log("Blacklist saved!");
+						});
+					}
+				}
+
 				for(let e in events){
+					if(modlocks.events[e] == 1){continue;}
 					if(events[e].triggers.chat.enabled
 						&& message.message.startsWith(events[e].triggers.chat.command)){
 							runCommands(message, e);
@@ -242,7 +348,9 @@ if(initMode){
 			}
 			
 			for(p in activePlugins){
-				activePlugins[p].onChat(message);
+				if(modlocks.plugins[p] != 1){
+					activePlugins[p].onChat(message);
+				}
 			}
 
 		});
@@ -291,6 +399,13 @@ if(initMode){
 
 	global.disconnectChat = () => {
 		chat.disconnect();
+	}
+
+	global.restartChat = async () => {
+		console.log("Restarting Chat");
+		await chat.disconnect();
+		chat.removeAllListeners();
+		run();
 	}
 
 	function convertDuration(numSeconds){
