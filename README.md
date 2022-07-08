@@ -52,3 +52,6 @@ If you've set up both external tunnels in the Config, you can share the web tunn
 
 # Developing Web UI and Mod UI
 Use `npm run dev` to run Spooder in development mode. This sets the web UI's hosting port to 3001. In another shell, use `npm run start-front` to run the web UI's development server which will run on port 3000 like usual. Use `npm run build-front` to create an optimized build for the web UI. When built, Spooder can be started up normally with your changes to the web UI.
+
+# Have Questions?
+Join my Discord at https://discord.gg/neCcHvBp and I'll help you with your setup :)
