@@ -6,8 +6,10 @@ Note: You will need app access credentials from dev.twitch.tv. Fill in the clien
 
 Finally use `npm run start` to start Spooder's web and OSC services.
 
-# User Authentication
 Open Spooder's Web UI in your browser either by localhost:3000 or your local network address at port 3000.
+
+# User Authentication
+Authentication will only work on localhost, the machine Spooder is running.
 
 Log into Twitch.tv as the broadcaster and click Authorize at the top right. Once done, Spooder will store your user access token and log you in to chat automatically unless you start Spooder with `npm run start-noautologin`.
 
@@ -26,6 +28,9 @@ Response - Write a script to build your bot's response to the trigger and return
 Plugin - Choose a plugin and event name to send the event data to. This will go through the plugin's onEvent function.
 
 Software - Make sure you set up your udp machines in the Config tab. This command will send an OSC command to the specified address to the specified machine. "Timed" events send the OSC at valueOn until the set duration, then send the OSC at valueOff. "One Shot" events send valueOn and then valueOff immediately with the duration used as a cooldown instead.
+
+# The Help Command
+The help command is set in the config. It's prefixed with ! in the backend so no need to prefix it on Config. It works like '!help <type> <command>'. The types are event and plugin. To see a full list of events, call `!help event`. Then with the listed commands, call `!help event command` to see the command's description. This also works with plugins if they're set in the commandList object. By itself, the help command introduces your Spooder to new viewers. The introduction is also set on Config.
 
 # Moderating Spooder
 Spooder comes with two big chat commands for moderation. !stop will stop any event currently running. You can use it like '!stop eventname' to stop a certain event (The event name is the initial name set when the event was created). You can also use '!stop all' to stop all running events. !mod is the base command for you and your mods to lock/unlock events and plugins or adding and removing names from the user blacklist. The 'all' argument works for lock and unlock as well. So you can use '!mod lock all' to lockdown Spooder entirely and use '!mod unlock all' to lift all Spooder's locks. Knowing all the event names and the consistant changes to the events and plugins that may be. I recommend using the new Mod UI. More information about Accessing Externally below.
@@ -46,6 +51,9 @@ With the broadcaster username set in config and broadcaster oauth saved, you can
 Each subscription can be handled in any combination of ways like events. The only difference is being able to send event data straight to an overlay like an alertbox. Send to plugin doesn't have a field for event name as it is already named as the event subscribed (e.g. channel.follow).
 
 channel.channel_points_custom_reward_redemption.add and update are needed to link custom rewards to Spooder events. That won't need any handler enabled on the EventSub tab.
+
+# Connecting to OBS
+Check out Deck Mode in the Web UI and you'll find the OBS Remote. Enter your OBS machine's info to connect. Spooder connects to OBS on the backend with a custom OSC front to control it. The controls are pretty basic now, but there's more to come.
 
 # The Mod UI
 If you've set up both external tunnels in the Config, you can share the web tunnel link to your mods as it is with '/mod' at the end of it. The Mod UI will ask your mods for authorization and will check to see if they are a mod on your channel. Once authorized, your mods have access to Spooder's locks, blacklist, and plugin utilities in a simple GUI. This interface is also themable and mods can synchronize their themes across all their devices connected. So a mod can login on desktop to edit their theme and then login on mobile. Click sync on desktop to synchronize the desktop's settings with the mobile's settings.
