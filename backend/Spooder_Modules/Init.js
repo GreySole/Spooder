@@ -66,15 +66,25 @@ class Initializer{
                                             "sectionname":"Network",
                                             "host":initData.hostIP,
                                             "host_port":3000,
+                                            "external_http_url":"",
+                                            "external_tcp_url":"",
                                             "udp_clients":{},
                                             "osc_udp_port":9000,
                                             "osc_tcp_port":3333
                                         }
                                     };
-    
+                                    
                                     fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(newAuth), "utf-8", (err, data)=>{
                                         fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(newConfig), "utf-8", (err, data)=>{
-                                            readline.close();
+                                            fs.writeFile(backendDir+"/settings/osc-tunnels.json", "{}", "utf-8", (err, data)=>{
+                                                fs.writeFile(backendDir+"/settings/mod-blacklist.json", "{}", "utf-8", (err, data)=>{
+                                                    fs.writeFile(backendDir+"/settings/eventsub.json", "{}", "utf-8", (err, data)=>{
+                                                        fs.writeFile(backendDir+"/settings/commands.json", "{}", "utf-8", (err, data)=>{
+                                                            readline.close();
+                                                        });
+                                                    });
+                                                });
+                                            });
                                         });
                                     });
                                 });

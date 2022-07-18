@@ -53,6 +53,7 @@ class WebUI {
         router.use("/utility", express.static(backendDir+'/web/utility'));
         router.get("/overlay/get", async(req, res) => {
             let isExternal = req.query.external;
+            
             var pluginName = req.query.plugin;
             var pluginSettings = null;
 
@@ -65,7 +66,7 @@ class WebUI {
             
             let oscInfo = null;
 
-            if(isExternal){
+            if(isExternal == true){
                 oscInfo = {
                     host: sconfig.network.external_tcp_url,
                     port: null,
@@ -261,7 +262,6 @@ class WebUI {
         });
 
         router.post("/saveConfig", async (req, res) => {
-            console.log("SAVING CONFIG",req.body);
             
             fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 sconfig = req.body;
@@ -441,7 +441,6 @@ class WebUI {
         });
 
         router.post('/upload_plugin_asset/*', async(req, res) => {
-            console.log(req);
             try{
                 if(!req.files){
                     console.log("NO FILES FOUND");
@@ -502,7 +501,7 @@ class WebUI {
             console.log("SAVING", settingsFile ,newSettings);
             fs.writeFile(settingsFile, JSON.stringify(newSettings.settings), "utf-8", (err, data)=>{
                 res.send({saveStatus:"SAVE SUCCESS"});
-                console.log("I SAVED THE "+newSettings.pluginName+" SETTINGS!");
+                console.log(""+newSettings.pluginName+" Settings Saved!");
             });
 
             getPlugins();
@@ -512,8 +511,7 @@ class WebUI {
             
             let pluginPacks = {};
             for(let a in activePlugins){
-                console.log(a);
-                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort;
+                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
@@ -645,6 +643,7 @@ class WebUI {
         router.get("/chat_channel", async(req,res) => {
             let channel = req.query.channel;
             chatSwitchChannels(channel);
+            res.send(JSON.stringify({status:"SUCCESS"}));
         });
 
         router.get("/chat_restart", async(req, res) => {
@@ -653,21 +652,40 @@ class WebUI {
         })
 
         router.get("/mod/authentication_info", async(req, res) => {
-            res.send(JSON.stringify({
-                devMode:devMode,
-                clientid: clientId,
-                redirectURI: sconfig.network.external_http_url+"/mod/authentication",
-                oscURL:sconfig.network.external_tcp_url
-            }));
+            if(req.headers.referer.startsWith("http:")){
+                res.send(JSON.stringify({
+                    devMode:devMode,
+                    clientid: clientId,
+                    redirectURI: "http://"+sconfig.network.host+":"+sconfig.network.host_port+"/mod/authentication",
+                    oscURL:sconfig.network.host,
+                    oscPort:sconfig.network.osc_tcp_port
+                }));
+            }else{
+                res.send(JSON.stringify({
+                    devMode:devMode,
+                    clientid: clientId,
+                    redirectURI: sconfig.network.external_http_url+"/mod/authentication",
+                    oscURL:sconfig.network.external_tcp_url
+                }));
+            }
+            
         });
 
         router.get("/mod/authentication", async(req, res) => {
-            console.log(req);
             let modlist = await chat.mods(channel);
-            console.log("LIST OF MODS", modlist.mods);
+            let isLocal = false;
+            if(req.headers.referer != null){
+                if(req.headers.referer.startsWith("http:")){
+                    isLocal = true;
+                }
+            }
             if(devMode){
                 activeMods[username] = "devtoken";
-                res.redirect("http://192.168.1.141:3000?moduser=lontheweaver&modtoken='devtoken");
+                res.redirect("http://"+sconfig.network.host+":"+sconfig.network.host_port+"?moduser="+username);
+                return;
+            }else if(isLocal){
+                activeMods[username] = "devtoken";
+                res.redirect("http://"+sconfig.network.host+":"+sconfig.network.host_port+"/mod?moduser="+username);
                 return;
             }
 
@@ -703,7 +721,6 @@ class WebUI {
             .then((response)=>{
                 
                 let modUsername = response.data.login;
-                console.log(modlist.mods, modUsername);
                 if(modlist.mods.includes(modUsername) || modUsername==sconfig.broadcaster.username){
                     console.log("Welcome "+modUsername+"!");
                     activeMods[modUsername] = modToken;
@@ -920,7 +937,7 @@ class WebUI {
                 
                 await Axios.post('https://id.twitch.tv/oauth2/token'+appParams)
                         .then((response)=>{
-                            console.log(response);
+                            
                             if(typeof response.data.access_token != "undefined"){
                                 appToken = response.data.access_token;
                             }

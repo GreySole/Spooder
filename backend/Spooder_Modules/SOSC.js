@@ -1,31 +1,50 @@
 const fs = require("fs");
+const OSC = require('osc-js');
+const OBSOSC = require("./OBSOSC.js");
 
 class SOSC {
-
-    OSC = require('osc-js');
-
     osc = null;
     oscTCP = null;
+    obs = null;
     udpClients = sconfig.network.udp_clients
+    monitorLogs = {
+        logs:[],
+        liveLogging:0
+    };
 
-    sendToTCP = (address, oscValue) => {
-        var OSC = this.OSC;
-        console.log("Sending ",address, oscValue, "to", "overlay");
+    constructor(){
+        this.initializeOSC();
+    }
+
+    sendToMonitor = (proto, direction, data) => {
+        this.monitorLogs.logs.push({protocol:proto, direction:direction, data:data});
+        if(this.monitorLogs.logs.length > 200){
+            this.monitorLogs.logs.shift();
+        }
+        if(this.monitorLogs.liveLogging == 1){
+            this.oscTCP.send(new OSC.Message("/frontend/monitor", JSON.stringify({protocol:proto, direction:direction, data:data})));
+        }
+    }
+
+    sendToTCP = (address, oscValue, log) => {
+        if(log==null){log=true;}
         let newMessage = null;
-        console.log("OSC VALUE", typeof oscValue, oscValue instanceof Array);
         if(oscValue instanceof Array == false){
             newMessage = new OSC.Message(address, oscValue);
         }else{
             newMessage = new OSC.Message(address, oscValue[0], oscValue[1]);
         }
-        this.oscTCP.send(new OSC.Message("/frontend/monitor",JSON.stringify({"types":newMessage.types,"address":address, "content":oscValue})));
+    
+        if(log == true){
+            this.sendToMonitor("tcp", "send", {types:newMessage.types, address:address, data:oscValue});
+        }
+        
         this.oscTCP.send(newMessage);
     }
     
     sendToUDP = (dest, address, oscValue) => {
-        var OSC = this.OSC;
         var udpClients = this.udpClients;
-        console.log("SENDING TO UDP", dest, address, oscValue);
+        
         let valueType = "int";
         if(!isNaN(oscValue)){
             if(typeof oscValue == "string"){
@@ -40,7 +59,7 @@ class SOSC {
         }
         else if(!isNaN(oscValue.split(",")[0])){valueType = "ii"}
         else{valueType = "s"}
-        
+        this.sendToMonitor("udp", "send", {dest:dest, types:valueType, address:address, data:oscValue});
         if(dest == -1){return;}
         else if(dest == -2){
             let allMessage = new OSC.Message(address, oscValue);
@@ -62,17 +81,12 @@ class SOSC {
         }
     }
 
-    
-    constructor(){
-        this.initializeOSC();
-    }
-
     updateOSCListeners(){
 
         var osc = this.osc;
         var oscTCP = this.oscTCP;
 
-        console.log("OSC TUNNELS", osctunnels);
+        
         for(let o in osctunnels){
             var oscTCP = this.oscTCP;
             if(o=="sectionname"){continue;}
@@ -109,7 +123,6 @@ class SOSC {
     }
 
     initializeOSC(){
-        var OSC = this.OSC;
         
         var udpConfig = {
             type:'udp4',
@@ -127,6 +140,7 @@ class SOSC {
         var osc = this.osc;
 
         osc.on("*", message =>{
+            this.sendToMonitor("udp", "receive", {types:message.types, address:message.address, data:message.args});
             for(let p in activePlugins){
                 if(activePlugins[p].onOSC != null){
                     activePlugins[p].onOSC(message);
@@ -147,7 +161,10 @@ class SOSC {
         });
 
         oscTCP.on("*", message => {
-
+            if(!message.address.startsWith("/frontend/monitor")){
+                this.sendToMonitor("tcp", "receive", {types:message.types, address:message.address, data:message.args});
+            }
+            
             let address = message.address.split("/");
 
             for(let p in activePlugins){
@@ -165,10 +182,16 @@ class SOSC {
                         activePlugins[p].onOSC(message);
                     }
                 }
+            }
 
-                if(address[1] == "mod" && address[1] == p){
-                    if(activePlugins[p].onMod != null){
-                        activePlugins[p].onMod(message);
+            if(address[1] == "frontend"){
+                if(address[2] == "monitor"){
+                    if(address[3] == "logging"){
+                        this.monitorLogs.liveLogging = message.args[0];
+                    }else if(address[3] == "get"){
+                        if(message.args[0] == "all"){
+                            this.sendToTCP("/frontend/monitor/get/all", JSON.stringify(this.monitorLogs), false);
+                        }
                     }
                 }
             }
@@ -228,13 +251,21 @@ class SOSC {
                 oscTCP.send(new OSC.Message("/"+pluginName+"/settings", settingsJSON));
                 return;
             }
+
+            if(message.address.startsWith("/obs")){
+                if(this.obs != null){
+                    this.obs.onOSC(message);
+                }
+            }
             
-            console.log("I heard something! (TCP)", message);
         });
 
         oscTCP.open();
 
         this.updateOSCListeners();
+
+        this.obs = new OBSOSC();
+        this.obs.autoLogin();
     }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "spooder",
-  "version": "0.2.3",
+  "version": "0.3",
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.js",
   "scripts": {
@@ -20,7 +20,7 @@
     "express": "^4.18.1",
     "express-fileupload": "^1.4.0",
     "fs-extra": "^10.1.0",
-    "obs-websocket-js": "^5.0.0-beta.2",
+    "obs-websocket-js": "^5.0.0",
     "osc-js": "^2.3.2",
     "twitch-js": "^2.0.0-beta.43"
   }

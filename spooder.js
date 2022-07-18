@@ -167,17 +167,13 @@ if(initMode){
 	global.appToken = "";
 
 	global.sosc = new SOSC();
-	global.sendToTCP = (address, oscValue)=>{sosc.sendToTCP(address, oscValue)};
+	global.sendToTCP = (address, oscValue, log)=>{sosc.sendToTCP(address, oscValue, log)};
 	global.sendToUDP = (dest, address, oscValue)=>{sosc.sendToUDP(dest, address, oscValue)};
 
 	global.webUI = new WebUI(devMode);
 
 	const {Chat} = require("twitch-js");
 	global.chat = null;
-
-	function onAuthenticationFailure(){
-		webUI.onAuthenticationFailure();
-	}
 
 	const run = async() => {
 		console.log("Running chat...");
@@ -237,13 +233,12 @@ if(initMode){
 
 				if(command[0] == "mod" && (message.tags.mod == 1 || message.tags.badges.broadcaster == true)){
 					let modCommand = command[1];
-					if(modCommand = "lock" || modCommand == "unlock"){
+					if(modCommand == "lock" || modCommand == "unlock"){
 						let target = command[2];
 						for(let e in events){
 							if(target == "all"){
 								modlocks.events[e] = modCommand=="lock"?1:0;
 								sendToTCP("/mod/"+message.username+"/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
-								sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all event chat commands");
 							}else if(e==target){
 								modlocks.events[e] = modCommand=="lock"?1:0;
 								sendToTCP("/mod/"+message.username+"/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
@@ -253,12 +248,11 @@ if(initMode){
 							
 						}
 
+
 						for(let p in activePlugins){
 							if(target == "all"){
 								modlocks.plugins[p] = modCommand=="lock"?1:0;
 								sendToTCP("/mod/"+message.username+"/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
-								sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all plugin chat commands");
-								return;
 							}else if(p == target){
 								if(command[3] == null){
 									modlocks.plugins[p] = modCommand=="lock"?1:0;
@@ -277,6 +271,7 @@ if(initMode){
 								}
 							}
 						}
+						sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all chat commands");
 					}else if(modCommand == "blacklist"){
 						let modAction = command[2];
 						let viewer = command[3];
@@ -313,26 +308,41 @@ if(initMode){
 							return;
 						}
 
-						for(let e in events){
-							if(events[e].type == command[1] && command.length==2){
-								commands.push("!"+e);
-							}else if(events[e].type == command[1] && command.length > 2){
-								if(e.toUpperCase() == command[2].toUpperCase()){
-									sayInChat(events[e].description);
-									done = true;
+						
+						if(command[1] == "event" || command[1] == "events"){
+							for(let e in events){
+								if(command.length == 2){
+									commands.push(e);
+								}else{
+									if(command[2] == e){
+										sayInChat(events[e].name+" | Chat command: "+
+										(events[e].triggers.chat.enabled?events[e].triggers.chat.command:" No chat command")+
+										" | Reward: "+
+										(events[e].triggers.redemption.enabled?"It has a channel point reward":"No channel point reward")+
+										" | Description: "+
+										events[e].description);
+										done = true;
+									}
 								}
 							}
 						}
-						for(let p in activePlugins){
-							if(p.toUpperCase() == command[1].toUpperCase() && command.length==2){
-								commands = Object.keys(activePlugins[p].commandList);
-							}else if(command.length > 2){
-								if(activePlugins[p].commandList[command[2]] != null){
-									sayInChat(activePlugins[p].commandList[command[2]]);
-									done = true;
+
+						if(command[1] == "plugin" || command[1] == "plugins"){
+							for(let p in activePlugins){
+								
+								if(command.length == 2){
+									commands.push(p);
+								}else{
+									if(command[2] == p && command.length == 3){
+										commands = Object.keys(activePlugins[p].commandList);
+									}else if(command[2] == p){
+										if(activePlugins[p].commandList[command[3]] != null){
+											sayInChat(activePlugins[p].commandList[command[3]]);
+											done = true;
+										}
+									}
 								}
 							}
-							
 						}
 						if(commands.length == 0 && done == false){
 							sayInChat("I'm not sure what "+command[1]+" is (^_^;)");
@@ -341,7 +351,6 @@ if(initMode){
 						}
 						
 					}else{
-						
 						sayInChat("Hi, I'm "+sconfig.bot.bot_name+". "+sconfig.bot.introduction);
 					}
 				}
