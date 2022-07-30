@@ -59,23 +59,38 @@ class SOSC {
         }
         else if(!isNaN(oscValue.split(",")[0])){valueType = "ii"}
         else{valueType = "s"}
+        
+        if(valueType == "ii"){
+            oscValue = oscValue.split(",");
+            for(let o in oscValue){
+                if(!isNaN(oscValue[o])){
+                    if(oscValue[o].includes(".")){
+                        oscValue[o] = parseFloat(oscValue[o]);
+                    }else{
+                        oscValue[o] = parseInt(oscValue[o]);
+                    }
+                }
+                
+            }
+        }
         this.sendToMonitor("udp", "send", {dest:dest, types:valueType, address:address, data:oscValue});
         if(dest == -1){return;}
         else if(dest == -2){
-            let allMessage = new OSC.Message(address, oscValue);
+            let allMessage = null;
             if(valueType == "ii"){
-                oscValue = oscValue.split(",");
-                allMessage = new OSC.Message(address, parseInt(oscValue[0]), parseFloat(oscValue[1]));
+                allMessage = new OSC.Message(address, oscValue[0], oscValue[1]);
+            }else{
+                allMessage = new OSC.Message(address, oscValue);
             }
             for(let u in udpClients){
                 this.osc.send(allMessage, {host: udpClients[u].ip, port: udpClients[u].port});
             }
         }else{
-            let message = new OSC.Message(address, oscValue);
-            //console.log("UDP MESSAGE", message);
+            let message = null;
             if(valueType == "ii"){
-                oscValue = oscValue.split(",");
-                message = new OSC.Message(address, parseInt(oscValue[0]), parseFloat(oscValue[1]));
+                message = new OSC.Message(address, oscValue[0], oscValue[1]);
+            }else{
+                message = new OSC.Message(address, oscValue);
             }
             this.osc.send(message, {host:udpClients[dest].ip, port:udpClients[dest].port});
         }
@@ -86,7 +101,6 @@ class SOSC {
         var osc = this.osc;
         var oscTCP = this.oscTCP;
 
-        
         for(let o in osctunnels){
             var oscTCP = this.oscTCP;
             if(o=="sectionname"){continue;}
@@ -115,7 +129,7 @@ class SOSC {
                             sendToUDP(-2,osctunnels[o]["addressTo"], message.args.join(","));
                         break;
                         default:
-                            sendToUDP(-2, osctunnels[o]["addressTo"], message.args.join(","));
+                            sendToUDP(osctunnels[o]["handlerTo"], osctunnels[o]["addressTo"], message.args.join(","));
                     }
                 });
             }
