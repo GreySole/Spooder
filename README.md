@@ -8,6 +8,8 @@ Finally use `npm run start` to start Spooder's web and OSC services.
 
 Open Spooder's Web UI in your browser either by localhost:3000 or your local network address at port 3000.
 
+Setup Walkthrough: https://www.youtube.com/watch?v=qSu1XhV0848
+
 # User Authentication
 Authentication will only work on localhost, the machine Spooder is running.
 
