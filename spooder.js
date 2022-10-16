@@ -114,6 +114,7 @@ if(initMode){
 }else{
 
 	global.uptime = 0;
+	global.chatDisconnected = false;
 	
 	activeEvents = {};
 	chatEvents = [];
@@ -175,20 +176,36 @@ if(initMode){
 	const {Chat} = require("twitch-js");
 	global.chat = null;
 
-	const run = async() => {
+	const run = async(startCase) => {
 		console.log("Running chat...");
-		if(chat != null){chat.removeAllListeners();}
+		if(chat != null){
+			await chat.disconnect();
+			chat.removeAllListeners();
+		}
 
 		chat = new Chat({
 			"username":username,
 			"token":token,
 			"onAuthenticationFailure":webUI.onAuthenticationFailure,
-			"connectionTimeout":10000,
-			"joinTimeout":10000
+			"connectionTimeout":60000,
+			"joinTimeout":60000
 		});
 		
 		await chat.connect().catch(error=>{console.error(error)});
-		await chat.join(channel).catch(error=>{console.error(error)});
+		chat.join(channel).then(()=>{
+			if(startCase == "restart"){
+				sayInChat("Hey y'all, I'm back :D");
+			}else if(startCase == "switch"){
+				sayInChat("Hi there! I'm "+sconfig.bot.bot_name+", a Spooder bot! I'm with "+sconfig.broadcaster.username);
+			}else if(startCase == "reconnect"){
+				sayInChat("Stream reconnected. I'm okay :)");
+			}else if(startCase == "disconnected"){
+				sayInChat("Stream disconnected. Hold on a sec...");
+			}else if(startCase != null){
+				sayInChat(startCase);
+			}
+		}).catch(error=>{console.error(error)});
+
 		
 		chat.on("*", (message) =>{
 
@@ -202,7 +219,7 @@ if(initMode){
 
 				let command = message.message.substr(1).split(" ");
 
-				if(command[0] == "stop" && (message.tags.mod == 1 || message.tags.badges.broadcaster == true)){
+				if(command[0] == "stop" && (chatIsMod(message) || chatIsBroadcaster(message))){
 					let cEvent = command[1];
 					if(cEvent == "all"){
 						let eventCount = 0;
@@ -231,7 +248,7 @@ if(initMode){
 					
 				}
 
-				if(command[0] == "mod" && (message.tags.mod == 1 || message.tags.badges.broadcaster == true)){
+				if(command[0] == "mod" && (chatIsMod(message) || chatIsBroadcaster(message))){
 					let modCommand = command[1];
 					if(modCommand == "lock" || modCommand == "unlock"){
 						let target = command[2];
@@ -290,12 +307,32 @@ if(initMode){
 					}
 				}
 
-				for(let e in events){
-					if(modlocks.events[e] == 1){continue;}
-					if(events[e].triggers.chat.enabled
-						&& message.message.startsWith(events[e].triggers.chat.command)){
-							runCommands(message, e);
+				
+
+				if(command[0] == "commands"){
+					let commandsArray = getChatCommands();
+					sayInChat("Here's the chat command list: "+commandsArray.join(", "));
+					return;
+				}
+
+				if(command[0] == "plugins"){
+					if(command.length == 1){
+						let pluginList = Object.keys(activePlugins);
+						sayInChat("Use this command like !plugins [plugin-name] [plugin-command] to get info on an active plugin. Plugin names are: "+pluginList.join(", "));
+						return;
+					}else{
+						if(command[1] == p && command.length == 2){
+							let commandList = Object.keys(activePlugins[p].commandList);
+							sayInChat("Commands for "+p+" are: "+commandList.join((", ")));
+							return;
+						}else if(command[1] == p){
+							if(activePlugins[p].commandList[command[2]] != null){
+								sayInChat(activePlugins[p].commandList[command[2]]);
+								return;
+							}
+						}
 					}
+					
 				}
 				
 				if(command[0] == sconfig.bot.help_command){
@@ -319,6 +356,8 @@ if(initMode){
 										(events[e].triggers.chat.enabled?events[e].triggers.chat.command:" No chat command")+
 										" | Reward: "+
 										(events[e].triggers.redemption.enabled?"It has a channel point reward":"No channel point reward")+
+										" | OSC: "+
+										(events[e].triggers.osc.enabled?"Triggered by OSC":"No OSC Trigger")+
 										" | Description: "+
 										events[e].description);
 										done = true;
@@ -347,12 +386,22 @@ if(initMode){
 						if(commands.length == 0 && done == false){
 							sayInChat("I'm not sure what "+command[1]+" is (^_^;)");
 						}else if(done == false){
-							sayInChat("Commands for "+command[1]+" are: "+stringifyArray(commands));
+							
+							sayInChat(command[1]+" are: "+stringifyArray(commands));
 						}
 						
 					}else{
 						sayInChat("Hi, I'm "+sconfig.bot.bot_name+". "+sconfig.bot.introduction);
 					}
+				}
+			}
+
+			for(let e in events){
+				if(modlocks.events[e] == 1){continue;}
+				
+				if(events[e].triggers.chat.enabled
+					&& message.message.startsWith(events[e].triggers.chat.command)){
+						runCommands(message, e);
 				}
 			}
 			
@@ -381,7 +430,7 @@ if(initMode){
 
 	function sayAlreadyOn(name){
 		for(let c in activeEvents[name]){
-			console.log(activeEvents[name][c].etype);
+			//console.log(activeEvents[name][c].etype);
 			if(activeEvents[name][c].etype == "event"){
 				sayInChat(events[name].name+" is cooling down. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name][c]["timeout"]))+"s");
 				break;
@@ -389,32 +438,74 @@ if(initMode){
 		}
 	}
 
+	function getChatCommands(){
+		let commandsArray = [];
+		for(let e in events){
+			if(events[e].triggers.chat.enabled == true){
+				commandsArray.push(events[e].triggers.chat.command);
+			}
+		}
+		return commandsArray;
+	}
+
 	function stringifyArray(a){
 		return a.join(", ");
 	}
 
-	global.sayInChat = (message) =>{
+	global.sayInChat = async (message) =>{
 		chat.once("USERSTATE", (uState)=>{
 			uState.message = message;
 		})
-		chat.say(channel,message);
+		
+		if(message.length >= 490){
+			let limit = 490;
+			let totalMessages = Math.ceil(message.length/limit);
+			
+			for(let stringpos=0; stringpos<message.length; stringpos+=limit){
+				
+				if(stringpos+limit > message.length){
+					await chat.say(channel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
+				}else{
+					//console.log(stringpos, stringpos.limit);
+					message.substring()
+					await chat.say(channel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+				}
+			}
+		}else{
+			await chat.say(channel,message)
+			.catch(e=>{
+				console.log("CHAT ERROR", e);
+				restartChat(message);
+			});
+		}
+		
 	}
 
-	global.chatSwitchChannels = async (newChannel) =>{
+	global.chatSwitchChannels = async (newChannel) => {
+		await webUI.validateChatbot();
 		await chat.disconnect();
 		channel = newChannel;
-		run();
+		run("switch");
 	}
 
 	global.disconnectChat = () => {
 		chat.disconnect();
 	}
 
-	global.restartChat = async () => {
+	global.restartChat = async (message) => {
 		console.log("Restarting Chat");
+		await webUI.validateChatbot();
 		await chat.disconnect();
 		chat.removeAllListeners();
-		run();
+		run(message);
+	}
+
+	global.chatIsMod = (message) => {
+		return message.tags.mod == 1;
+	}
+
+	global.chatIsBroadcaster = (message) => {
+		return message.tags.badges.broadcaster == true;
 	}
 
 	function convertDuration(numSeconds){
@@ -433,27 +524,61 @@ if(initMode){
 
 	global.runCommands = (eventData, eventName) => {
 		
-		if(eventData.username){
-			eventData.username = eventData.tags.displayName;
-		}else{
-			eventData.username = eventData.user_name;
+		let isChat = eventData.message!=null;
+		let isReward = eventData.user_name!=null;
+		let isOSC = eventData.address!=null;
+		if(isChat){
+			eventData.displayName = eventData.tags.displayName;
+		}else if(isReward){
+			eventData.username = eventData.user_name.toLowerCase();
+			eventData.displayName = eventData.user_name;
+		}else if(isOSC){
+			eventData.username = username;
+			eventData.displayName = username;
 		}
+
+		eventData.user_name = eventData.username;
 
 		let event = events[eventName];
 
-		if(activeEvents[eventName] != null){
-			if(event.chatnotification == true){
-				sayAlreadyOn(eventName);
+		if(isChat){
+			if(activeEvents[eventName] != null){
+				if(chatIsBroadcaster(eventData)){
+					commandArgs = eventData.message.split(" ");
+					if(commandArgs[1] != null){
+						if(commandArgs[1].toLowerCase() == "off"){
+							for(e in activeEvents[eventName]){
+								if(activeEvents[eventName][e] != "event"){
+									activeEvents[eventName][e]["function"]();
+								}
+							}
+							delete activeEvents[eventName];
+							return;
+						}
+					}
+				}
+				
+				if(event.chatnotification == true){
+					sayAlreadyOn(eventName);
+				}
+				return;
 			}
-			return;
+		}else if(isOSC){
+			if(event.triggers.osc.handletype == "toggle" && activeEvents[eventName] != null){
+				for(e in activeEvents[eventName]){
+					if(activeEvents[eventName][e] != "event"){
+						activeEvents[eventName][e]["function"]();
+					}
+				}
+				delete activeEvents[eventName];
+				return;
+			}
 		}
-
 		
-
-		if(event.chatnotification == true){
+		if(isChat && event.chatnotification == true){
 			sayInChat(eventData.username+" has activated "+event.name+"!");
 			sendToTCP("/events/start/"+eventName, eventData.username+" has activated "+event.name+"!");
-			createTimeout(eventName, "event", function(){
+			createTimeout(eventName, null, "event", function(){
 				sayInChat(event.name+" has been deactivated!");
 				sendToTCP("/events/end/"+eventName, event.name+" has been deactivated!");
 			}, event.cooldown);
@@ -479,25 +604,95 @@ if(initMode){
 				break;
 				case 'plugin':
 					setTimeout(() => {
-						if(typeof activePlugins[eCommand.pluginname].onEvent == "undefined"){
-							console.log(activePlugins[eCommand.pluginname], "onEvent() NOT FOUND");
-							return;
+						if(activePlugins[eCommand.pluginname] != null){
+							if(typeof activePlugins[eCommand.pluginname].onEvent == "undefined"){
+								console.log(activePlugins[eCommand.pluginname], "onEvent() NOT FOUND");
+								return;
+							}
 						}
-						
+						eventData.eventInfo = event;
 						activePlugins[eCommand.pluginname].onEvent(eCommand.eventname, eventData);
 					}, eCommand.delay);
 					
 				break;
 				case 'software':
+
 					
+
 					setTimeout(() => {
 						if(eCommand.etype == "timed"){
 							let eventDuration = parseInt(eCommand.duration);
-
-							sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
-
-							createTimeout(eventName, eCommand.etype, function(){
+							let commandArgs = null;
+							if(isChat && chatIsBroadcaster(eventData)){
+								commandArgs = eventData.message.split(" ");
+								if(commandArgs[1] != null){
+									if(commandArgs[1].toLowerCase() == "on"){
+										eventDuration = -1;
+									}
+								}
+							}else if(isOSC){
+								if(event.triggers.osc.handletype == "toggle"){
+									eventDuration = -1;
+								}
+							}
+							let commandUsed = false;
+							for(let ae in activeEvents){
+								if(ae==eventName){continue;}
+								for(let command in activeEvents[ae]){
+									//console.log(ae, activeEvents[ae], command);
+									if(activeEvents[ae][command].etype=="event"){continue;}
+									if(activeEvents[ae][command].event.address == eCommand.address){
+										if(activeEvents[ae][command].event.valueOn.includes(",")){
+											let valueID = activeEvents[ae][command].event.valueOn.split(",");
+											if(eCommand.valueOn.includes(",")){
+												let valueID2 = eCommand.valueOn.split(",");
+												if(valueID[0].trim() == valueID2[0].trim() && eCommand.priority < activeEvents[ae][command].event.priority){
+													//console.log("Ignoring event value to "+eCommand.address+" from "+ae+" valueID: "+valueID[0]);
+													commandUsed = true;
+												}
+											}
+										}else if(eCommand.priority < activeEvents[ae][command].event.priority){
+											commandUsed = true;
+										}
+										
+										continue;
+									}
+								}
+							}
+							if(!commandUsed){
+								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
+							}
+							
+							//console.log(activeEvents);
+							createTimeout(eventName, eCommand, eCommand.etype, function(){
+								for(let ae in activeEvents){
+									if(ae==eventName){continue;}
+									for(let command in activeEvents[ae]){
+										if(activeEvents[ae][command].etype=="event"){continue;}
+										if(activeEvents[ae][command].event.address == eCommand.address){
+											if(activeEvents[ae][command].event.valueOn.includes(",")){
+												let valueID = activeEvents[ae][command].event.valueOn.split(",");
+												if(eCommand.valueOn.includes(",")){
+													let valueID2 = eCommand.valueOn.split(",");
+													if(valueID[0].trim() == valueID2[0].trim()){
+														//console.log("Applied current event value to "+eCommand.address+" from "+ae+" valueID: "+valueID[0]);
+														sendToUDP(eCommand.dest_udp, activeEvents[ae][command].event.address, activeEvents[ae][command].event.valueOn);
+													}else{
+														continue;
+													}
+												}
+											}else{
+												//console.log("Applied current event value to "+eCommand.address+" from "+ae);
+												sendToUDP(eCommand.dest_udp, activeEvents[ae][command].event.address, activeEvents[ae][command].event.valueOn);
+											}
+											
+											return;
+										}
+									}
+								}
+								//console.log("Turning off "+eCommand.address);
 								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOff);
+								
 							}, eventDuration);
 								
 						}else if(eCommand.etype == "oneshot"){
@@ -507,6 +702,7 @@ if(initMode){
 							}, 500);
 						}
 					}, eCommand.delay);
+					
 				break;
 			}
 		}
@@ -518,8 +714,11 @@ if(initMode){
 			
 			//Loop 1 for action
 			for(let command in activeEvents[e]){
-				sosc.sendToTCP("/events/time/"+e+"/"+activeEvents[e][command]["etype"], uptime-activeEvents[e][command]["timeout"]);
-				if(uptime >= activeEvents[e][command]["timeout"]){
+				if(activeEvents[e][command]["timeout"]!= -1){
+					sosc.sendToTCP("/events/time/"+e+"/"+activeEvents[e][command]["etype"], uptime-activeEvents[e][command]["timeout"]);
+				}
+				
+				if(activeEvents[e][command]["timeout"]!= -1 && uptime >= activeEvents[e][command]["timeout"]){
 					
 					activeEvents[e][command]["function"]();
 					activeEvents[e][command].finished = true;
@@ -540,13 +739,15 @@ if(initMode){
 		}
 	};
 
-	function createTimeout(name, etype, funct, seconds){
+	function createTimeout(name, command, etype, funct, seconds){
 		if(activeEvents[name] == null){
 			activeEvents[name] = [];
 		}
+		let timeout = seconds>-1?uptime+seconds:-1;
 		activeEvents[name].push({
 			"function": funct,
-			"timeout": uptime+seconds,
+			"event": command,
+			"timeout": timeout,
 			"etype": etype
 		});
 	}

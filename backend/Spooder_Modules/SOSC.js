@@ -155,6 +155,27 @@ class SOSC {
 
         osc.on("*", message =>{
             this.sendToMonitor("udp", "receive", {types:message.types, address:message.address, data:message.args});
+
+            for(let e in events){
+                if(events[e].triggers.osc?.enabled == true){
+                    if(message.address == events[e].triggers.osc.address){
+                        if(events[e].triggers.osc.type != "double"){
+                            if(eval(message.args[0]+events[e].triggers.osc.condition+events[e].triggers.osc.value)){
+                            
+                                runCommands(message, e);
+                            }
+                        }else{
+                            if(eval(message.args[0]+events[e].triggers.osc.condition+events[e].triggers.osc.value
+                                +" && "+message.args[1]+events[e].triggers.osc.condition2+events[e].triggers.osc.value2)){
+                            
+                                runCommands(message, e);
+                            }
+                        }
+                        
+                    }
+                }
+            }
+
             for(let p in activePlugins){
                 if(activePlugins[p].onOSC != null){
                     activePlugins[p].onOSC(message);

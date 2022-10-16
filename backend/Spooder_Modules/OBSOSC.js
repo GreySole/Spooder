@@ -34,6 +34,11 @@ class OBSOSC{
     }
 
     statusInterval = null;
+    deckClients = {};
+    streamReconnecting = false;
+    streamBleeding = false;
+    streamBleedCount = 0;
+    skippedFrames = 0;
     
     async connect(url, port, password){
         console.log("CONNECTING TO OBS...");
@@ -67,6 +72,12 @@ class OBSOSC{
             obs.on("InputMuteStateChanged", (data)=>{
                 sendToTCP("/obs/event/InputMuteStateChanged", JSON.stringify(data));
             });
+            obs.on("InputVolumeChanged", (data)=>{
+                sendToTCP("/obs/event/InputVolumeChanged", JSON.stringify(data));
+            })
+            obs.on("SceneItemEnableStateChanged", (data) => {
+                sendToTCP("/obs/event/SceneItemEnableStateChanged", JSON.stringify(data));
+            })
             obs.on("ExitStarted", () => {
                 obs.disconnect();
                 sendToTCP("/obs/status/shutdown", "OBS has shutdown");
@@ -157,6 +168,38 @@ class OBSOSC{
                                 for(let o in objects){
                                     if(objects[o] == "stream"){
                                         finalStatusObj[objects[o]] = await obs.call("GetStreamStatus");
+                                        if(finalStatusObj[objects[o]].outputReconnecting == true && this.streamReconnecting == false){
+                                            restartChat("disconnected");
+                                            this.streamReconnecting = true;
+                                            this.skippedFrames = 0;
+                                        }else if(finalStatusObj[objects[o]].outputReconnecting == false && this.streamReconnecting == true){
+                                            this.streamReconnecting = false;
+                                            restartChat("reconnect");
+                                        }
+
+                                        if(this.streamReconnecting == false){
+                                            if(finalStatusObj[objects[o]].outputSkippedFrames > this.skippedFrames){
+                                                this.skippedFrames = finalStatusObj[objects[o]].outputSkippedFrames;
+                                                if(this.streamBleeding == false){
+                                                    this.streamBleedCount++;
+                                                    if(this.streamBleedCount >= 10){
+                                                        this.streamBleedCount = 0;
+                                                        this.streamBleeding = true;
+                                                        sayInChat("Looks like the stream is bleeding frames :( I'll let you know when it stops.");
+                                                    }
+                                                }
+                                            }else{
+                                                if(this.streamBleeding == true){
+                                                    this.streamBleedCount++;
+                                                    if(this.streamBleedCount >= 10){
+                                                        this.streamBleedCount = 0;
+                                                        this.streamBleeding = false;
+                                                        sayInChat("I think the bleeding stopped. Refresh your browser to catch up :D");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
                                     }else if(objects[o] == "record"){
                                         finalStatusObj[objects[o]] = await obs.call("GetRecordStatus");
                                     }else if(objects[o] == "obs"){
@@ -195,24 +238,57 @@ class OBSOSC{
                             sendToTCP("/obs/get/input/list", JSON.stringify(data));
                         })
                     }else if(address[4] == "volumelist"){
-                        obs.call("GetInputList")
-                        .then(async data=>{
-                            let finalVolumeData = {};
-                            for(let i in data.inputs){
-                                if(data.inputs[i].inputName.includes("™")){
-                                    console.log("There is a ™ on "+data.inputs[i].inputName+". JSON won't like this, so deck mode might crash :(");
-                                }
-                                let volumeData = await obs.call("GetInputVolume", {inputName:data.inputs[i].inputName}).catch(e=>{});
-                                let volumeMuteData = await obs.call("GetInputMute", {inputName:data.inputs[i].inputName}).catch(e=>{});
-                                if(volumeData != null){
-                                    finalVolumeData[data.inputs[i].inputName] = {
-                                        volumeData:volumeData,
-                                        volumeMuteData:volumeMuteData
+                        let finalInputList = {
+                            items:{},
+                            groups:{}
+                        };
+    
+                        obs.call("GetCurrentProgramScene")
+                        .then(programScene=>{
+                            finalInputList.currentProgramSceneName = programScene.currentProgramSceneName;
+                            obs.call("GetSceneItemList", {sceneName:programScene.currentProgramSceneName})
+                            .then(async sceneItemListRaw=>{
+                                
+                                let sceneItemList = sceneItemListRaw.sceneItems;
+                                
+                                for(let item in sceneItemList){
+                                    
+                                    finalInputList.items[sceneItemList[item].sceneItemId] = {
+                                        name:sceneItemList[item].sourceName,
+                                        id:sceneItemList[item].sceneItemId,
+                                        enabled:sceneItemList[item].sceneItemEnabled,
+                                    }
+
+                                    let volumeData = await obs.call("GetInputVolume", {inputName:sceneItemList[item].sourceName}).catch(e=>{});
+                                    let volumeMuteData = await obs.call("GetInputMute", {inputName:sceneItemList[item].sourceName}).catch(e=>{});
+                                    if(volumeData != null){
+                                        
+                                        finalInputList.items[sceneItemList[item].sceneItemId].volumeData = volumeData;
+                                        finalInputList.items[sceneItemList[item].sceneItemId].volumeMuteData = volumeMuteData;
+                                    }
+
+                                    if(sceneItemList[item].isGroup == true){
+                                        let thisGroupItems = await obs.call("GetGroupSceneItemList", {sceneName:sceneItemList[item].sourceName})
+                                        .then(groupItemData=>groupItemData.sceneItems);
+                                        finalInputList.groups[sceneItemList[item].sourceName] = thisGroupItems;
+                                        for(let gi in thisGroupItems){
+                                            let thisVolumeData = await obs.call("GetInputVolume", {inputName:thisGroupItems[gi].sourceName}).catch(e=>{});
+                                            let thisVolumeMuteData = await obs.call("GetInputMute", {inputName:thisGroupItems[gi].sourceName}).catch(e=>{});
+                                            finalInputList.items[gi+thisGroupItems[gi].sceneItemId] = {
+                                                name:thisGroupItems[gi].sourceName,
+                                                id:thisGroupItems[gi].sceneItemId,
+                                                enabled:thisGroupItems[gi].sceneItemEnabled,
+                                                volumeData:thisVolumeData,
+                                                volumeMuteData:thisVolumeMuteData
+                                            }
+                                        }
+                                        
                                     }
                                 }
-                            }
-                            sendToTCP("/obs/get/input/volumelist", JSON.stringify(finalVolumeData));
-                        })
+                                sendToTCP("/obs/get/input/volumelist", JSON.stringify(finalInputList));
+                                
+                            });
+                        });
                     }
                 }else if(address[3] == "status"){
                     let objects = message.args[0].split("|");
@@ -232,6 +308,37 @@ class OBSOSC{
                         obs.call("GetSceneList")
                         .then(sceneData=>{
                             sendToTCP("/obs/get/scene/list", JSON.stringify(sceneData));
+                        });
+                    }else if(address[4] == "itemlist"){
+
+                        let finalInputList = {
+                            items:{},
+                            groups:{}
+                        };
+    
+                        obs.call("GetCurrentProgramScene")
+                        .then(programScene=>{
+                            finalInputList.currentProgramSceneName = programScene.currentProgramSceneName;
+                            obs.call("GetSceneItemList", {sceneName:programScene.currentProgramSceneName})
+                            .then(async sceneItemListRaw=>{
+                                
+                                let sceneItemList = sceneItemListRaw.sceneItems;
+                                console.log(sceneItemList);
+                                for(let item in sceneItemList){
+                                    finalInputList.items[sceneItemList[item].sceneItemIndex] = {
+                                        name:sceneItemList[item].sourceName,
+                                        id:sceneItemList[item].sceneItemId,
+                                        enabled:sceneItemList[item].sceneItemEnabled,
+                                        locked:sceneItemList[item].sceneItemLocked,
+                                    }
+                                    if(sceneItemList[item].isGroup == true){
+                                        finalInputList.groups[sceneItemList[item].sourceName] = await obs.call("GetGroupSceneItemList", {sceneName:sceneItemList[item].sourceName})
+                                    .then(groupItemData=>groupItemData.sceneItems);
+                                    }
+                                }
+                                sendToTCP("/obs/get/scene/itemlist", JSON.stringify(finalInputList));
+                                
+                            });
                         });
                     }else if(address[4] == "preview"){
                         obs.call("GetCurrentPreviewScene")
@@ -281,6 +388,11 @@ class OBSOSC{
                     }
                 }else if(address[3] == "studiomode"){
                     obs.call("SetStudioModeEnabled", {studioModeEnabled:message.args[0]});
+                }else if(address[3] == "source"){
+                    if(address[4] == "enabled"){
+                        let eObj = JSON.parse(message.args[0]);
+                        obs.call("SetSceneItemEnabled", {sceneName:eObj.sceneName, sceneItemId:eObj.sceneItemId, sceneItemEnabled:eObj.sceneItemEnabled});
+                    }
                 }
             }
         }

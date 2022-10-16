@@ -13,7 +13,7 @@ Setup Walkthrough: https://www.youtube.com/watch?v=qSu1XhV0848
 # User Authentication
 Authentication will only work on localhost, the machine Spooder is running.
 
-Log into Twitch.tv as the broadcaster and click Authorize at the top right. Once done, Spooder will store your user access token and log you in to chat automatically unless you start Spooder with `npm run start-noautologin`.
+Log into Twitch.tv as the broadcaster and click the bar at the top to open the navigation menu. You can authorize your Twitch account for the chat bot (only works on localhost, not local IP) Once done, Spooder will store your user access token and log you in to chat automatically unless you start Spooder with `npm run start-noautologin`.
 
 Go to the EventSub tab and click "Save Current Oauth as Broadcaster." The broadcaster Oauth is used for pulling channel point custom rewards. Once done, you may log out of Twitch.tv and back in as a bot account. Then click authorize to store and use your bot's Oauth for chat if you wish.
 
@@ -21,7 +21,7 @@ Go to the EventSub tab and click "Save Current Oauth as Broadcaster." The broadc
 One last necessity is the UDP clients. Those are machines with software listening for OSC like Resolume, Max, and Ableton. Define the IP and port of the machine, add to the clients list, and save your config. They should show up in the events tab for configuring software type commands.
 
 # Creating Events
-Events have two triggers. A chat command and channel point reward. Make sure to save your broadcaster oauth to link channel point rewards.
+Events have three triggers. A chat command, channel point reward, and OSC. Make sure to save your broadcaster oauth to link channel point rewards.
 
 Commands:
 
@@ -31,8 +31,12 @@ Plugin - Choose a plugin and event name to send the event data to. This will go 
 
 Software - Make sure you set up your udp machines in the Config tab. This command will send an OSC command to the specified address to the specified machine. "Timed" events send the OSC at valueOn until the set duration, then send the OSC at valueOff. "One Shot" events send valueOn and then valueOff immediately with the duration used as a cooldown instead.
 
-# The Help Command
+# Helping Commands
 The help command is set in the config. It's prefixed with ! in the backend so no need to prefix it on Config. It works like '!help <type> <command>'. The types are event and plugin. To see a full list of events, call `!help event`. Then with the listed commands, call `!help event command` to see the command's description. This also works with plugins if they're set in the commandList object. By itself, the help command introduces your Spooder to new viewers. The introduction is also set on Config.
+You can also call !commands to list all chat commands from events with a chat command enabled. You can also list a plugin's chat commands through the !plugins command.
+
+# Toggling Events
+Toggling events is specific to software (UDP) commands. This will ignore the set times of commands and run them until triggered again. You can trigger a toggle by saying "on" or "off" after an event's chat command. You can also do this with the OSC trigger and setting it to "toggle."
 
 # Moderating Spooder
 Spooder comes with two big chat commands for moderation. !stop will stop any event currently running. You can use it like '!stop eventname' to stop a certain event (The event name is the initial name set when the event was created). You can also use '!stop all' to stop all running events. !mod is the base command for you and your mods to lock/unlock events and plugins or adding and removing names from the user blacklist. The 'all' argument works for lock and unlock as well. So you can use '!mod lock all' to lockdown Spooder entirely and use '!mod unlock all' to lift all Spooder's locks. Knowing all the event names and the consistant changes to the events and plugins that may be. I recommend using the new Mod UI. More information about Accessing Externally below.
@@ -45,17 +49,18 @@ Sample Plugin: https://github.com/GreySole/Spooder-Sample-Plugin
 These tunnels simply listen for OSC from overlays or software and repeat them to another address. So that software like TouchOSC can control other devices or overlays.
 
 # Accessing Externally
-Some of Spooder's features require an https url to access through the internet. EventSubs, Channel Point Rewards, and the Mod UI need this. One way to do this is to set up a free ngrok.io account. You will need two tunnels. One with the web server's hosting port and one with the TCP OSC port. Be sure to set both of them as http tunnels as the TCP tunnel is by websocket. Doing this with ngrok is fairly simple, but I will be posting tutorial videos soon. Once both tunnels are running, save them to your config on external_http_url and external_tcp_url.
+Some of Spooder's features require an https url to access through the internet. EventSubs, Channel Point Rewards, and the Mod UI need this. One way to do this is to set up a free ngrok.io account. You will need two tunnels. One with the web server's hosting port and one with the TCP OSC port. Be sure to set both of them as http tunnels as the TCP tunnel is by websocket. Once both tunnels are running, save them to your config on external_http_url and external_tcp_url.
+Note: Spooder's Web-UI is blocked from the external link. Only you can see Spooder's config and deck on your local network.
 
 # EventSubs
 Note: callback_url has moved to the Config tab as external_http_url.
 With the broadcaster username set in config and broadcaster oauth saved, you can subscribe to events with that broadcaster. 
-Each subscription can be handled in any combination of ways like events. The only difference is being able to send event data straight to an overlay like an alertbox. Send to plugin doesn't have a field for event name as it is already named as the event subscribed (e.g. channel.follow).
+Each subscription can be handled in any combination of ways like events. The only difference is being able to send event data straight to an overlay like an alertbox.
 
 channel.channel_points_custom_reward_redemption.add and update are needed to link custom rewards to Spooder events. That won't need any handler enabled on the EventSub tab.
 
 # Connecting to OBS
-Check out Deck Mode in the Web UI and you'll find the OBS Remote. Enter your OBS machine's info to connect. Spooder connects to OBS on the backend with a custom OSC front to control it. The controls are pretty basic now, but there's more to come.
+Check out Deck Mode in the Web UI and you'll find the OBS Remote. Enter your OBS machine's info to connect. Spooder connects to OBS on the backend with a custom OSC front to control it.
 
 # The Mod UI
 If you've set up both external tunnels in the Config, you can share the web tunnel link to your mods as it is with '/mod' at the end of it. The Mod UI will ask your mods for authorization and will check to see if they are a mod on your channel. Once authorized, your mods have access to Spooder's locks, blacklist, and plugin utilities in a simple GUI. This interface is also themable and mods can synchronize their themes across all their devices connected. So a mod can login on desktop to edit their theme and then login on mobile. Click sync on desktop to synchronize the desktop's settings with the mobile's settings.
