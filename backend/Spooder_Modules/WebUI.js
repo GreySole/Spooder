@@ -1170,25 +1170,28 @@ class WebUI {
 
             if(type == "channel.channel_points_custom_reward_redemption.add"){
 
-                if(event.status == "fulfilled"){
-                    for(let e in events){
-                        if(events[e].triggers.redemption.enabled
-                            && events[e].triggers.redemption.id == event.reward.id){
+                for(let e in events){
+                    if(events[e].triggers.redemption.enabled
+                        && events[e].triggers.redemption.id == event.reward.id){
+                            if(event.status == "fulfilled" || events[e].triggers.redemption.override == true){
                                 runCommands(event, e);
                             }
-                    }
+                        }
                 }
 
             }else if(type == "channel.channel_points_custom_reward_redemption.update"){
-                if(event.status == "fulfilled"){
-                    for(let e in events){
-                        if(events[e].triggers.redemption.enabled
-                            && events[e].triggers.redemption.id == event.reward.id){
+
+                for(let e in events){
+                    if(events[e].triggers.redemption.enabled
+                        && events[e].triggers.redemption.id == event.reward.id
+                        && events[e].triggers.redemption.override == false){
+                            if(event.status == "fulfilled"){
                                 runCommands(event, e);
+                            }else{
+                                sayInChat(event.user_name+" Sorry, the "+event.reward.title+" is a no go.");
                             }
-                    }
-                }else{
-                    sayInChat(event.user_name+" Sorry, the "+event.reward.title+" is a no go.");
+                            
+                        }
                 }
             }
 
@@ -1224,8 +1227,46 @@ class WebUI {
         async function getAppToken(){
             if(appToken == ""){
 
-                var twitchScopes = fs.readFileSync("./twitch_scopes.json",{encoding:'utf8'});
-                twitchScopes = JSON.parse(twitchScopes);
+                var twitchScopes = {
+                    "channel.update":"",
+                    "channel.follow":"",
+                    "channel.subscribe":"channel:read:subscriptions",
+                    "channel.subscription.end":"channel:read:subscriptions",
+                    "channel.subscription.gift":"channel:read:subscriptions",
+                    "channel.subscription.message":"channel:read:subscriptions",
+                    "channel.cheer":"bits:read",
+                    "channel.raid":"",
+                    "channel.ban":"channel:moderate",
+                    "channel.unban":"channel:moderate",
+                    "channel.moderator.add":"moderation:read",
+                    "channel.moderator.remove":"moderation:read",
+                    "channel.channel_points_custom_reward.add":"channel:read:redemptions",
+                    "channel.channel_points_custom_reward.update":"channel:read:redemptions",
+                    "channel.channel_points_custom_reward.remove":"channel:read:redemptions",
+                    "channel.channel_points_custom_reward_redemption.add":"channel:read:redemptions",
+                    "channel.channel_points_custom_reward_redemption.update":"channel:read:redemptions",
+                    "channel.poll.begin":"channel:read:polls",
+                    "channel.poll.progress":"channel:read:polls",
+                    "channel.poll.end":"channel:read:polls",
+                    "channel.prediction.begin":"channel:read:predictions",
+                    "channel.prediction.progress":"channel:read:predictions",
+                    "channel.prediction.lock":"channel:read:predictions",
+                    "channel.prediction.end":"channel:read:predictions",
+                    "drop.entitlement.grant":"",
+                    "extension.bits_transaction.create":"",
+                    "channel.goal.begin":"channel:read:goals",
+                    "channel.goal.progress":"channel:read:goals",
+                    "channel.goal.end":"channel:read:goals",
+                    "channel.hype_train.begin":"channel:read:hype_train",
+                    "channel.hype_train.progress":"channel:read:hype_train",
+                    "channel.hype_train.end":"channel:read:hype_train",
+                    "stream.online":"",
+                    "stream.offline":"",
+                    "user.authorization.grant":"",
+                    "user.authorization.revoke":"",
+                    "user.update":""
+                };
+                
                 let scopeString = "";
                 for(let t in twitchScopes){
                     if(twitchScopes[t] == ""){continue;}

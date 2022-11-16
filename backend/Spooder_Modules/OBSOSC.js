@@ -156,6 +156,7 @@ class OBSOSC{
                         });
                     }else{
                         obs.off("InputVolumeMeters");
+                        sendToTCP("/obs/event/InputVolumeMeters", 1, false);
                     }
                 }
             }else if(address[2] == "status"){
@@ -171,6 +172,7 @@ class OBSOSC{
                                         if(finalStatusObj[objects[o]].outputReconnecting == true && this.streamReconnecting == false){
                                             restartChat("disconnected");
                                             this.streamReconnecting = true;
+                                            this.streamBleeding = false;
                                             this.skippedFrames = 0;
                                         }else if(finalStatusObj[objects[o]].outputReconnecting == false && this.streamReconnecting == true){
                                             this.streamReconnecting = false;
@@ -323,7 +325,6 @@ class OBSOSC{
                             .then(async sceneItemListRaw=>{
                                 
                                 let sceneItemList = sceneItemListRaw.sceneItems;
-                                console.log(sceneItemList);
                                 for(let item in sceneItemList){
                                     finalInputList.items[sceneItemList[item].sceneItemIndex] = {
                                         name:sceneItemList[item].sourceName,
