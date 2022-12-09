@@ -9,6 +9,7 @@ class SOSC {
     udpClients = sconfig.network.udp_clients
     monitorLogs = {
         logs:[],
+        pluginlogs:[],
         liveLogging:0
     };
 
@@ -17,12 +18,25 @@ class SOSC {
     }
 
     sendToMonitor = (proto, direction, data) => {
-        this.monitorLogs.logs.push({protocol:proto, direction:direction, data:data});
-        if(this.monitorLogs.logs.length > 200){
+        let timestamp = Date.now();
+        this.monitorLogs.logs.push({timestamp:timestamp, type:"osc", protocol:proto, direction:direction, data:data});
+        if(this.monitorLogs.logs.length > 1000){
             this.monitorLogs.logs.shift();
         }
         if(this.monitorLogs.liveLogging == 1){
-            this.oscTCP.send(new OSC.Message("/frontend/monitor", JSON.stringify({protocol:proto, direction:direction, data:data})));
+            this.oscTCP.send(new OSC.Message("/frontend/monitor/osc", JSON.stringify({timestamp:timestamp, type:"osc", protocol:proto, direction:direction, data:data})));
+        }
+    }
+
+    pluginError = (pluginName, type, message) => {
+        let timestamp = Date.now();
+        this.monitorLogs.pluginlogs.push({timestamp:timestamp, type:"plugin", name:pluginName, type:type, message:message});
+        if(this.monitorLogs.pluginlogs.length > 1000){
+            this.monitorLogs.pluginlogs.shift();
+        }
+
+        if(this.monitorLogs.liveLogging == 1){
+            this.oscTCP.send(new OSC.Message("/frontend/monitor/plugin", JSON.stringify({timestamp:timestamp, type:"plugin", name:pluginName, type:type, message:message})));
         }
     }
 
@@ -226,7 +240,20 @@ class SOSC {
                     }else if(address[3] == "get"){
                         if(message.args[0] == "all"){
                             this.sendToTCP("/frontend/monitor/get/all", JSON.stringify(this.monitorLogs), false);
+                            return;
                         }
+                    }
+                }
+            }
+
+            if(address[1] == "spooder"){
+                if(address[2] == "plugin"){
+                    if(address[3] == "error"){
+                        
+                        let errorObj = JSON.parse(message.args[0]);
+                        //console.log("GOT PLUGIN ERROR", errorObj);
+                        this.pluginError(errorObj.name, errorObj.type, errorObj.message);
+                        return;
                     }
                 }
             }
@@ -234,26 +261,27 @@ class SOSC {
             if(address[1] == "mod"){
                 if(address[3] == "lock"){
                     if(address[4] == "event"){
-                        modlocks.events[address[5]] = message.args[0];
-                        sayInChat(address[2]+(message.args[0]==1?" locked ":" unlocked ")+address[5]);
+                        lockEvent(address[2], message.args[0], address[5]);
                         
                     }else if(address[4] == "plugin"){
-                        if(modlocks.plugins[address[5]] == null){modlocks.plugins[address[5]] = {}}
+                        
                         if(address[6] == null){
-                            modlocks.plugins[address[5]] = message.args[0];
-                            sayInChat(address[2]+(message.args[0]==1?" locked ":" unlocked ")+address[5]+" chat commands");
+                            lockPlugin(address[2], message.args[0], address[5])
                         }else{
-                            activePlugins[address[5]].modmap.locks[address[6]] = message.args[0];
-                            sayInChat(address[2]+(message.args[0]==1?" locked ":" unlocked ")+address[6]+" in "+address[5]);
+                            lockPlugin(address[2], message.args[0], address[5], address[6]);
                         }
                         
                     }
                 }else if(address[3] == "blacklist"){
-                    modlocks.blacklist[address[4]] = message.args[0];
+                    blacklistUser(address[4]);
                     fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
-                        console.log("Blacklist saved!");
-                    });
+						console.log("Mod file saved!");
+					});
                     sayInChat(address[2]+(message.args[0]==1?" blacklisted ":" unblacklisted ")+address[4]);
+                }else if(address[3] == "spamguard"){
+                    setSpamGuard(address[4]);
+                    
+                    sayInChat(address[2]+" turned "+(message.args[0]==1?" on ":" off ")+"Spam Guard");
                 }else if(address[3] == "get"){
                     if(address[4] == "all"){
                         sendToTCP("/mod/"+address[2]+"/get", 
@@ -263,16 +291,23 @@ class SOSC {
                             _modlocks:modlocks
                         }));
                     }
-                }else if(address[3] == "sync"){
+                }else if(address[3] == "save"){
                     if(address[4] == "theme"){
-                        sendToTCP("/mod/"+address[2]+"/sync/theme", message.args[0]);
+                        if(themes.modui[address[2]] == null){themes.modui[address[2]] = {}}
+                        themes.modui[address[2]] = JSON.parse(message.args[0]);
+                        fs.writeFile(backendDir+"/settings/themes.json", JSON.stringify(themes), "utf-8", (err, data)=>{
+                            console.log("Themes saved!");
+                        });
+                        sendToTCP("/mod/"+address[2]+"/save/theme", message.args[0]);
                     }
                 }
                 sendToTCP(message.address, message.args[0]);
+                return;
             }
 
             //Tell the overlay it's connected
             if(message.address.endsWith("/connect")){
+                console.log("PLUGIN CONNECTED");
                 oscTCP.send(new OSC.Message(message.address.split("/")[1]+'/connect/success', 1.0));
                 return;
             }
@@ -291,6 +326,7 @@ class SOSC {
                 if(this.obs != null){
                     this.obs.onOSC(message);
                 }
+                return;
             }
             
         });

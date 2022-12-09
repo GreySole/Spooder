@@ -33,6 +33,7 @@ class OBSOSC{
         });
     }
 
+    connected = false;
     statusInterval = null;
     deckClients = {};
     streamReconnecting = false;
@@ -46,6 +47,7 @@ class OBSOSC{
             await obs.connect("ws://"+url+":"+port, password, {
                 eventSubscriptions: EventSubscription.All | EventSubscription.InputVolumeMeters | EventSubscription.Ui
             });
+            this.connected = true;
             sendToTCP("/obs/status/connection", 1);
             obs.on("StreamStateChanged", (data)=>{
                 sendToTCP("/obs/event/StreamStateChanged", JSON.stringify(data));
@@ -80,6 +82,7 @@ class OBSOSC{
             })
             obs.on("ExitStarted", () => {
                 obs.disconnect();
+                this.connected = false;
                 sendToTCP("/obs/status/shutdown", "OBS has shutdown");
             })
             console.log("OBS CONNECT SUCCESS");
@@ -87,6 +90,31 @@ class OBSOSC{
         }catch(error){
             console.log("OBS ERROR", error.message, obs);
         }
+        
+    }
+
+    async getInputList(){
+        return new Promise((res, rej) => {
+            obs.call("GetInputList")
+            .then(data=>{
+                res(data.inputs);
+            }).catch(e=>rej(e));
+        })
+    }
+
+    setInputMute(iName, iMute){
+        
+        obs.call("SetInputMute", {inputName:iName, inputMuted:iMute});
+    }
+
+    async call(name, data){
+        return new Promise((res, rej) => {
+            if(data){
+                obs.call(name, data).then(obsData=>{res(obsData)}).catch(e=>rej(e));
+            }else{
+                obs.call(name).then(obsData=>{res(obsData)}).catch(e=>rej(e));
+            }
+        })
         
     }
 
@@ -218,6 +246,7 @@ class OBSOSC{
                     }else{
                         clearInterval(this.statusInterval);
                         this.statusInterval = null;
+                        sendToTCP("/obs/status/interval", 1, false);
                     }
                 }
             }else if(address[2] == "get"){

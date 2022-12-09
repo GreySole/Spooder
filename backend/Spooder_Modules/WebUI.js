@@ -1,6 +1,40 @@
 const Axios = require("axios");
 const fs = require("fs-extra");
 
+const { networkInterfaces } = require('os');
+
+const nets = networkInterfaces();
+const results = Object.create(null); // Or just '{}', an empty object
+var suggestedNet = null;
+
+for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+        // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+        // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
+        const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4
+        if (net.family === familyV4Value && !net.internal) {
+            if (!results[name]) {
+                results[name] = [];
+            }
+            results[name].push(net.address);
+            if(net.address.startsWith("192")){
+                suggestedNet = net.address;
+            }
+        }
+    }
+}
+
+const chmodr = require('chmodr');
+const fsPromises = require('fs/promises');
+const ngrok = require("ngrok");
+
+const express = require('express');
+const bodyParser = require("body-parser");
+const AdmZip = require('adm-zip');
+const fileUpload = require('express-fileupload');
+const path = require("path");
+const crypto = require("crypto");
+
 class WebUI {
 
     constructor(devMode){
@@ -8,15 +42,9 @@ class WebUI {
         var expressPort = null;
         var webUI = this;
 
-        const Axios = require("axios");
-        const chmodr = require('chmodr');
-        const fsPromises = require('fs/promises');
-
-        const express = require('express');
-        const bodyParser = require("body-parser");
-        const AdmZip = require('adm-zip');
-        const fileUpload = require('express-fileupload');
-        const path = require("path");
+        if(sconfig.network.externalhandle == "ngrok" && sconfig.network.ngrokauthtoken != ""){
+            startNgrok();
+        }
 
         const clientId = oauth['client-id'];
         const clientSecret = oauth['client-secret'];
@@ -48,10 +76,28 @@ class WebUI {
         channel = "#"+sconfig.broadcaster.username;
         expressPort = devMode===false?sconfig.network.host_port:3001;
         app.use("/",router);
+        if(devMode === false){
+            router.use("/", express.static(frontendDir+'/main/build'));
+        }
+        router.use("/mod", express.static(frontendDir+'/mod/build'));
+
         router.use("/overlay", express.static(backendDir+'/web/overlay'));
-        router.use("/mod", express.static(backendDir+'/web/mod/build'));
         router.use("/utility", express.static(backendDir+'/web/utility'));
         router.use("/settings", express.static(backendDir+'/web/settings'));
+        router.use("/icons", express.static(backendDir+'/web/icons'));
+
+        router.use(bodyParser.urlencoded({extended:true}));
+        router.use(bodyParser.json());
+        router.use("/install_plugin",fileUpload());
+        router.use("/upload_plugin_asset/*",fileUpload());
+        router.use("/checkin_settings", fileUpload());
+        router.use("/checkin_plugins", fileUpload());
+        router.use(express.json({verify: this.verifyTwitchSignature}));
+
+        app.use((req, res, next) => {
+            res.status(404).send("<h1>Page not found on the server</h1>")
+        })        
+
         router.get("/overlay/get", async(req, res) => {
 
             let isExternal = req.query.external;
@@ -84,18 +130,6 @@ class WebUI {
 
             res.send({express: JSON.stringify(oscInfo)});
         });
-
-        if(devMode === false){
-            router.use("/", express.static(frontendDir));
-        }
-
-        router.use(bodyParser.urlencoded({extended:true}));
-        router.use(bodyParser.json());
-        router.use("/install_plugin",fileUpload());
-        router.use("/upload_plugin_asset/*",fileUpload());
-        router.use("/checkin_settings", fileUpload());
-        router.use("/checkin_plugins", fileUpload());
-        router.use(express.json({verify: this.verifyTwitchSignature}));
 
         router.get('/handle', async (req,res)=>{
             console.log("Got code");
@@ -210,11 +244,25 @@ class WebUI {
             
         });
 
-        router.get('/command_table', (req, res) => {
+        router.get('/command_table', async (req, res) => {
+            let obs = {};
+            if(sosc.obs.connected){
+                let obsInputs = await callOBS("GetInputList");
+                let obsScenes = await callOBS("GetSceneList");
+                obs.inputs = obsInputs.inputs;
+                obs.scenes = obsScenes.scenes;
+                obs.sceneItems = {};
+                
+                for(let s in obs.scenes){
+                    obs.sceneItems[obs.scenes[s].sceneName] = await callOBS("GetSceneItemList", {sceneName:obs.scenes[s].sceneName});
+                }
+            }
+            console.log("OBS OBJ", obs);
             let props = {
                 "events":events,
                 "groups":eventGroups,
-                "plugins":Object.keys(activePlugins)
+                "plugins":Object.keys(activePlugins),
+                "obs":obs
             };
             res.send({express: JSON.stringify(props)});
         });
@@ -234,28 +282,24 @@ class WebUI {
         });
 
         router.get('/server_state', async (req, res) => {
-            //var themeFile = fs.readFileSync(backendDir+"/settings/themes.json", {encoding:'utf8'});
             var oscReturn = {
                 host:sconfig.network.host,
                 port:sconfig.network.osc_tcp_port,
                 udp_clients:sconfig.network["udp_clients"],
-                plugins:Object.keys(activePlugins)
+                plugins:Object.keys(activePlugins),
             }
 
             var hostReturn = {
                 port:expressPort
             }
             
-            if(username == "" || username == null){
-                res.send({user:"","clientID": oauth["client-id"], osc:oscReturn, host:hostReturn});
-            }else{
-                res.send({
-                    "user":username,
-                    "clientID": oauth["client-id"],
-                    "osc":oscReturn,
-                    "host":hostReturn
-                });
-            }
+            res.send({
+                "user":username,
+                "clientID": oauth["client-id"],
+                "osc":oscReturn,
+                "host":hostReturn,
+                "themes":themes
+            });
         });
 
         router.post("/saveCommandList", async (req, res) => {
@@ -269,15 +313,41 @@ class WebUI {
         });
 
         router.post("/saveConfig", async (req, res) => {
+            let statusMsg = "";
+            if(sconfig.network.externalhandle == "ngrok" && req.body.network.externalhandle != "ngrok"){
+                stopNgrok();
+                statusMsg += " (Ngrok stopped)";
+            }else if(sconfig.network.externalhandle != "ngrok" && req.body.network.externalhandle == "ngrok"){
+                sconfig.network.ngrokauthtoken = req.body.network.ngrokauthtoken;
+                await startNgrok();
+                statusMsg += " (Ngrok started)";
+            }
+
+            if(sconfig.network.externalhandle != req.body.network.externalhandle || sconfig.network.external_http_url != req.body.external_http_url){
+                sconfig.network.externalhandle = req.body.network.externalhandle;
+                sconfig.network.external_http_url = req.body.network.external_http_url;
+                sconfig.network.ngrokauthtoken = sconfig.network.ngrokauthtoken;
+                refreshEventSubs();
+                statusMsg += " (Refreshing EventSubs)";
+            }
+            
             
             fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
+                
                 sconfig = req.body;
-                res.send({status:"SAVE SUCCESS"});
+                res.send({status:statusMsg});
                 console.log("SAVED THE CONFIG");
             });
-            
-            //restartOSC();
         });
+
+        router.post("/saveCustomSpooder", async (req, res) => {
+            themes.spooderpet = req.body;
+            fs.writeFile(backendDir+"/settings/themes.json", JSON.stringify(themes), "utf-8", (err, data)=>{
+                let statusMsg = "Spooder Saved!"
+                res.send({status:statusMsg});
+                console.log("SAVED THE SPOODER");
+            });
+        })
 
         router.post("/saveOSCTunnels", async(req, res) => {
             fs.writeFile(backendDir+"/settings/osc-tunnels.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
@@ -297,8 +367,6 @@ class WebUI {
         })
 
         router.post('/install_plugin', async (req, res) => {
-            console.log("INSTALL PLUGIN",req.files);
-            
             try{
                 if(!req.files){
                     console.log("NO FILES FOUND");
@@ -309,6 +377,15 @@ class WebUI {
                 }else{
                     let pluginZip = req.files.file;
                     let pluginDirName = pluginZip.name.split(".")[0];
+                    let renameCount = 1;
+                    while(fs.existsSync(path.join(backendDir, "plugins", pluginDirName))){
+                        if(!fs.existsSync(path.join(backendDir, "plugins", pluginDirName+renameCount))){
+                            pluginDirName += renameCount;
+                            break;
+                        }else{
+                            renameCount++;
+                        }
+                    }
 
                     //Make /tmp
                     if(!fs.existsSync(backendDir+"/tmp")){
@@ -321,6 +398,7 @@ class WebUI {
                     let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
                     let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
                     let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
+                    let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
                     //Cleanup before install
                     if(fs.existsSync(tempFile)){
                         await fs.rm(tempFile);
@@ -370,6 +448,15 @@ class WebUI {
                             
                         });
                     }
+
+                    if(fs.existsSync(tempDir+"/icon.png")){
+                        await fs.move(tempDir+"/icon.png", iconDir, {overwrite:true});
+
+                        chmodr(overlayDir,0o777, (err) => {
+                            if(err) throw err;
+                            
+                        });
+                    }
                     
                     console.log("COMPLETE!");
                     fs.rm(tempFile);
@@ -395,6 +482,7 @@ class WebUI {
             let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
             let utilityDir = path.join(backendDir, "web", "utility", pluginName);
             let settingsDir = path.join(backendDir, "web", "settings", pluginName);
+            let iconFile = path.join(backendDir, "web", "icons", pluginName+".png");
             if(fs.existsSync(pluginDir)){
                 fs.copySync(pluginDir, tempDir+"/command");
             }
@@ -408,6 +496,14 @@ class WebUI {
 
             if(fs.existsSync(utilityDir)){
                 fs.copySync(utilityDir, tempDir+"/utility");
+            }
+
+            if(fs.existsSync(settingsDir)){
+                fs.copySync(settingsDir, tempDir+"/settings");
+            }
+
+            if(fs.existsSync(iconFile)){
+                fs.copyFileSync(iconFile, tempDir+"/icon.png");
             }
 
             let zip = new AdmZip();
@@ -426,6 +522,10 @@ class WebUI {
 
             if(fs.existsSync(tempDir+"/settings")){
                 zip.addLocalFolder(tempDir+"/settings", "/settings");
+            }
+
+            if(fs.existsSync(tempDir+"/icon.png")){
+                zip.addLocalFile(tempDir+"/icon.png");
             }
             
             zip.writeZip(tempDir+"/"+pluginName+".zip");
@@ -458,9 +558,12 @@ class WebUI {
                     message: 'No file uploaded'
                 })
             }else{
+                if(!fs.existsSync(path.join(backendDir, "backup", "settings"))){
+                    fs.mkdirSync(path.join(backendDir, "backup", "settings"));
+                }
                 req.files.file.mv(path.join(backendDir, "backup", "settings", req.files.file.name));
                 let newSettingsBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
-                console.log(newSettingsBackups);
+                
                 res.send({newbackups:newSettingsBackups});
             }
         })
@@ -473,9 +576,12 @@ class WebUI {
                     message: 'No file uploaded'
                 })
             }else{
+                if(!fs.existsSync(path.join(backendDir, "backup", "plugins"))){
+                    fs.mkdirSync(path.join(backendDir, "backup", "plugins"));
+                }
                 req.files.file.mv(path.join(backendDir, "backup", "plugins", req.files.file.name));
                 let newSettingsBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
-                console.log(newSettingsBackups);
+                
                 res.send({newbackups:newSettingsBackups});
             }
         })
@@ -505,7 +611,7 @@ class WebUI {
                     throw new Error(e.message);
                 }
                 let newSettingsBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
-                console.log(newSettingsBackups);
+                
                 res.send({newbackups:newSettingsBackups});
                 console.log("BACKUP COMPLETE");
             });
@@ -774,14 +880,28 @@ class WebUI {
 
         router.post('/delete_plugin', async(req, res) => {
             
-            let thisBody = req.body
+            let thisBody = req.body;
             
             let pluginName = thisBody.pluginName;
 
             let pluginDir = path.join(backendDir,"plugins", pluginName);
             let overlayDir = path.join(backendDir,"web", "overlay", pluginName);
+            let utilityDir = path.join(backendDir,"web", "utility", pluginName);
+            let settingsDir = path.join(backendDir,"web", "settings", pluginName);
+            let iconFile = path.join(backendDir,"web", "icons", pluginName+".png");
             await fs.rm(pluginDir, {recursive:true});
-            await fs.rm(overlayDir, {recursive:true});
+            if(fs.existsSync(overlayDir)){
+                await fs.rm(overlayDir, {recursive:true});
+            }
+            if(fs.existsSync(utilityDir)){
+                await fs.rm(utilityDir, {recursive:true});
+            }
+            if(fs.existsSync(settingsDir)){
+                await fs.rm(settingsDir, {recursive:true});
+            }
+            if(fs.existsSync(iconFile)){
+                await fs.rm(iconFile);
+            }
             res.send(JSON.stringify({status:"SUCCESS"}));
             getPlugins();
         });
@@ -802,6 +922,7 @@ class WebUI {
             
             let pluginPacks = {};
             for(let a in activePlugins){
+                //console.log(activePlugins[a], a);
                 let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
@@ -820,6 +941,10 @@ class WebUI {
                 let utilityDir = path.join(backendDir, "web", "utility", a);
                 let settingsDir = path.join(backendDir, "web", "settings", a);
                 pluginPacks[a] = {
+                    "name":activePlugins[a]._name==null?a:activePlugins[a]._name,
+                    "version":activePlugins[a]._version==null?"Unknown Version":activePlugins[a]._version,
+                    "author":activePlugins[a]._author==null?"Unknown Author":activePlugins[a]._author,
+                    "description":activePlugins[a]._description==null?"":activePlugins[a]._description,
                     "settings":thisPlugin,
                     "settings-form":thisPluginForm,
                     "assets":thisPluginAssets,
@@ -848,7 +973,7 @@ class WebUI {
             let plugin = {};
             let a = req.params['0'];
             let thisPlugin = fs.readFileSync(backendDir+"/plugins/"+a+"/settings.json", {encoding:'utf8'});
-            let thisPluginIcon = backendDir+"/overlay/"+a+"/icon.png";
+            let thisPluginIcon = backendDir+"/icons/"+a+".png";
 
             let assetDir = path.join(backendDir, "web", "overlay", a, "assets");
                 
@@ -939,9 +1064,14 @@ class WebUI {
             });
         });
 
+        router.get("/refresh_eventsub", async(req,res)=>{
+            await refreshEventSubs();
+            res.send({status:"SUCCESS"});
+        })
+
         router.get("/init_followsub", async(req,res) => {
             let subStatus = await initEventSub(req.query.type);
-            console.log(subStatus);
+            
             res.send(JSON.stringify({status:subStatus}));
         });
 
@@ -954,29 +1084,9 @@ class WebUI {
         router.get("/chat_restart", async(req, res) => {
             restartChat("restart");
             res.send(JSON.stringify({status:"SUCCESS"}));
-        })
-
-        router.get("/mod/authentication_info", async(req, res) => {
-            if(req.headers.referer.startsWith("http:")){
-                res.send(JSON.stringify({
-                    devMode:devMode,
-                    clientid: clientId,
-                    redirectURI: "http://"+sconfig.network.host+":"+sconfig.network.host_port+"/mod/authentication",
-                    oscURL:sconfig.network.host,
-                    oscPort:sconfig.network.osc_tcp_port
-                }));
-            }else{
-                res.send(JSON.stringify({
-                    devMode:devMode,
-                    clientid: clientId,
-                    redirectURI: sconfig.network.external_http_url+"/mod/authentication",
-                    oscURL:sconfig.network.external_tcp_url
-                }));
-            }
-            
         });
 
-        router.get("/mod/authentication", async(req, res) => {
+        router.post("/mod/authentication", async(req, res) => {
             let modlist = await chat.mods(channel);
             let isLocal = false;
             if(req.headers.referer != null){
@@ -984,57 +1094,44 @@ class WebUI {
                     isLocal = true;
                 }
             }
-            if(devMode){
-                activeMods[username] = "devtoken";
-                res.redirect("http://"+sconfig.network.host+":"+sconfig.network.host_port+"?moduser="+username);
-                return;
-            }else if(isLocal){
-                activeMods[username] = "devtoken";
-                res.redirect("http://"+sconfig.network.host+":"+sconfig.network.host_port+"/mod?moduser="+username);
+
+            if(isLocal){
+                activeMods[username] = "active";
+                res.send({status:"active", localUser:username});
                 return;
             }
 
-            var twitchParams = "?client_id="+clientId+
-                "&client_secret="+clientSecret+
-                "&grant_type=authorization_code"+
-                "&code="+req.query.code+
-                "&redirect_uri="+sconfig.network.external_http_url+"/mod/authentication"+
-                "&response_type=code";
-                
-            let modToken = null;
-            await Axios.post('https://id.twitch.tv/oauth2/token'+twitchParams)
-                    .then((response)=>{
-                        
-                        if(typeof response.data.access_token != "undefined"){
-                            modToken = response.data.access_token;
-                            
-
-                        }
-                    }).catch(error=>{
-                        console.error(error);
-                        return;
-                    });
-            console.log("Got token");
+            let moduser = req.body.moduser;
+            let modcode = req.body.code;
             
-            await Axios({
-                url: 'https://id.twitch.tv/oauth2/validate',
-                method: 'get',
-                headers:{
-                    "Authorization": "Bearer "+modToken
+            if(modlist.includes(moduser) && modData["trusted_users"][moduser]?.includes("m")){
+                if(modData["trusted_users_pw"][moduser] == null){
+                    let newSalt = crypto.randomBytes(16).toString('hex');
+                    let newHash = crypto.pbkdf2Sync(modcode, newSalt, 1000, 64, `sha512`).toString('hex');
+                    activeMods[moduser] = "pending";
+                    modData["trusted_users_pw"][moduser] = {
+                        salt:newSalt,
+                        hash:newHash
+                    };
+                    sayInChat(moduser+" if you're trying to access the Mod UI, please call '!mod verify' to authenticate your device.");
+                    res.send({status:"new"});
+                }else{
+                    if(activeMods[moduser] != "pending"){
+                        if(crypto.pbkdf2Sync(modcode, modData["trusted_users_pw"][moduser].salt, 1000, 64, `sha512`).toString(`hex`) === modData["trusted_users_pw"][moduser].hash){
+                            console.log("Welcome back, "+moduser+"!");
+                            activeMods[moduser] = "active";
+                            res.send({status:"active"});
+                        }else{
+                            res.send({status:"badpassword"});
+                        }
+                    }else{
+                        res.send({status:"stillpending"});
+                    }
+                    
                 }
-            })
-            .then((response)=>{
-                
-                let modUsername = response.data.login;
-                if(modlist.mods.includes(modUsername) || modUsername==sconfig.broadcaster.username){
-                    console.log("Welcome "+modUsername+"!");
-                    activeMods[modUsername] = modToken;
-                    res.redirect(sconfig.network.external_http_url+"/mod?moduser="+modUsername);
-                }
-                
-            }).catch(error=>{
-                console.error("ERROR",error);
-            });
+            }else{
+                res.send({status:"untrusted"});
+            }
         });
 
         router.get("/mod/currentviewers", async(req,res) => {
@@ -1054,7 +1151,7 @@ class WebUI {
         });
 
         router.get("/mod/utilities", async(req, res) => {
-            if(Object.keys(activeMods).includes(req.query.moduser)){
+            if(activeMods[req.query.moduser] == "active"){
                 let modevents = {};
                 for(let e in events){
                     if(events[e].triggers.chat.enabled){
@@ -1074,12 +1171,18 @@ class WebUI {
                         utility:hasUtility
                     }
                 }
-                
+                let modTheme = null;
+                if(themes.modui[req.query.moduser] != null){
+                    modTheme = themes.modui[req.query.moduser];
+                }
                 res.send(JSON.stringify({
                     status:"ok",
-                    events:modevents,
-                    plugins:modplugins,
-                    modlocks:modlocks
+                    modmap:{
+                        events:modevents,
+                        plugins:modplugins,
+                        modlocks:modlocks,
+                    },
+                    theme:modTheme
                 }));
             }else{
                 res.send(JSON.stringify({
@@ -1092,7 +1195,7 @@ class WebUI {
         router.post("/webhooks/callback", async (req, res) => {
             const messageType = req.header("Twitch-Eventsub-Message-Type");
             if (messageType === "webhook_callback_verification") {
-                console.log("Verifying Webhook");
+                console.log("Verifying Webhook", req.body.subscription.type);
                 return res.status(200).send(req.body.challenge);
             }
 
@@ -1195,12 +1298,12 @@ class WebUI {
                 }
             }
 
-        res.status(200).end();
+            res.status(200).end();
         });
 
         app.listen(expressPort);
 
-        console.log("Spooder Web UI is running at", "http://"+sconfig.network.host+":"+expressPort);
+        console.log("Spooder Web UI is running at", "http://localhost:"+expressPort+" and http://"+suggestedNet+":"+expressPort);
 
         async function getBroadcasterID(){
             if(broadcasterUserID==0){
@@ -1295,6 +1398,64 @@ class WebUI {
                         });
             }
         }
+
+        async function getEventSubs(){
+            await getAppToken();
+            if(appToken ==""){
+                console.log("NO APP TOKEN");
+                return;
+            }
+            let response = await Axios({
+                url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
+                method: 'GET',
+                headers:{
+                    "Client-Id": oauth["client-id"],
+                    "Authorization": " Bearer "+appToken,
+                    "Content-Type": "application/json"
+                }
+            }).catch(error=>{
+                console.error(error);
+                return;
+            });
+            return response.data;
+        }
+
+        async function refreshEventSubs(){
+            let subs = await getEventSubs();
+            for(let s in subs.data){
+                
+                if(subs.data[s].transport.callback != sconfig.network.external_http_url){
+                    await deleteEventSub(subs.data[s].id)
+                }
+            }
+            let subtype = "";
+            for(let s in subs.data){
+                subtype = subs.data[s].type;
+                if(subs.data[s].type == "channel.raid"){
+                    if(subs.data[s].condition.to_broadcaster_user_id != ""){
+                        subtype += "-send"
+                    }else{
+                        subtype += "-receive";
+                    }
+                }
+                await initEventSub(subtype);
+            }
+        }
+
+        async function deleteEventSub(id){
+            await Axios({
+                url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+id,
+                method: 'DELETE',
+                headers:{
+                    "Client-Id": oauth["client-id"],
+                    "Authorization": " Bearer "+appToken,
+                    "Content-Type": "application/json"
+                }
+            }).catch(error=>{
+                console.error(error);
+                return;
+            });
+        }
         
         async function initEventSub(eventType){
             await getAppToken();
@@ -1341,6 +1502,58 @@ class WebUI {
             
         };
 
+        async function startNgrok(){
+            if(maintainenceMode == true){
+                return;
+            }
+            
+            await ngrok.connect({
+                authtoken:sconfig.network.ngrokauthtoken,
+            });
+            let napi = ngrok.getApi();
+            
+            let tunnels = await napi.listTunnels();
+            for(let t in tunnels.tunnels){
+                napi.stopTunnel(tunnels.tunnels[t].name);
+            }
+
+            let httpURL = await napi.startTunnel({
+                name:"webui",
+                proto:"http",
+                addr:sconfig.network.host_port
+            });
+
+            tunnels = await napi.listTunnels();
+
+            for(let t in tunnels.tunnels){
+                if(tunnels.tunnels[t].proto == "http"){
+                    napi.stopTunnel(tunnels.tunnels[t].name);
+                }
+            }
+
+            let oscURL = await napi.startTunnel({
+                name:"modui",
+                proto:"http",
+                addr:sconfig.network.osc_tcp_port
+            });
+
+            tunnels = await napi.listTunnels();
+
+            for(let t in tunnels.tunnels){
+                if(tunnels.tunnels[t].proto == "http"){
+                    napi.stopTunnel(tunnels.tunnels[t].name);
+                }
+            }
+            
+            sconfig.network.external_http_url = httpURL.public_url;
+            sconfig.network.external_tcp_url = oscURL.public_url;
+            refreshEventSubs();
+        }
+    
+        function stopNgrok(){
+            ngrok.disconnect();
+        }
+
         async function getPlugins(){
             try {
               const dir = await fsPromises.opendir(backendDir+'/plugins');
@@ -1348,6 +1561,13 @@ class WebUI {
               for await (const dirent of dir){
                 delete require.cache[require.resolve(backendDir+'/plugins/'+dirent.name)];
                 activePlugins[dirent.name] = new (require(backendDir+'/plugins/'+dirent.name))();
+                if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/package.json")){
+                    let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
+                    activePlugins[dirent.name]._name = pluginMeta.name;
+                    activePlugins[dirent.name]._author = pluginMeta.author;
+                    activePlugins[dirent.name]._version = pluginMeta.version;
+                    activePlugins[dirent.name]._description = pluginMeta.description;
+                }
                 if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/settings.json")){
                     activePlugins[dirent.name].settings = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/settings.json",{encoding:'utf8'}));
                     if(activePlugins[dirent.name].onSettings != null){
@@ -1365,7 +1585,6 @@ class WebUI {
 
     onLogin = null;
 
-    crypto = require("crypto");
     twitchSigningSecret = process.env.TWITCH_SIGNING_SECRET;
 
     verifyTwitchSignature = (req, res, buf, encoding) => {
@@ -1403,7 +1622,9 @@ class WebUI {
 
     onAuthenticationFailure = () =>{
         console.log("Authentication failed, refreshing...");
-        if(refreshToken == "" || refreshToken == null){return;}
+        if(refreshToken == "" || refreshToken == null){
+            console.log("NO REFRESH TOKEN IN OAUTH.JSON");
+            return;}
         
         return new Promise((res, rej) => {
             let clientId = oauth["client-id"];
@@ -1465,8 +1686,9 @@ class WebUI {
 	};
 
 	async autoLogin(){
-
-        
+        if(token == "" || token == null){
+            console.log("No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens.")
+        }
         await Axios({
             url: 'https://id.twitch.tv/oauth2/validate',
             method: 'get',
@@ -1491,7 +1713,10 @@ class WebUI {
 	}
 
 	async validateBroadcaster(){
-		
+		if(oauth.broadcaster_token == "" || oauth.broadcaster_token == null){
+            console.log("No broadcaster auth saved. Authorizing on the Web UI saves your auth tokens for chat. If that's your broadcasting account, then go to the EventSub tab and click 'Save Current Oauth as Broadcaster'. You can have both pairs of tokens be the same. If you want a separate account for chat. Log in to twitch.tv as your bot account and authorize on the Web UI.");
+            return;
+        }
 		await Axios({
 			url: 'https://id.twitch.tv/oauth2/validate',
 			method: 'get',
@@ -1513,6 +1738,10 @@ class WebUI {
 	}
 
     async validateChatbot(){
+        if(token == "" || token == null){
+            console.log("No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens. If this is a fresh Spooder, you'll want to log in to twitch.tv as the account you use to broadcast first. Then go to the EventSub tab to copy your auth tokens to broadcaster.");
+            return;
+        }
 		return new Promise((res, rej)=>{
             Axios({
                 url: 'https://id.twitch.tv/oauth2/validate',

@@ -1,5 +1,28 @@
 const fs = require("fs");
 
+const { networkInterfaces } = require('os');
+
+const nets = networkInterfaces();
+const results = Object.create(null); // Or just '{}', an empty object
+var suggestedNet = null;
+
+for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+        // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+        // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
+        const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4
+        if (net.family === familyV4Value && !net.internal) {
+            if (!results[name]) {
+                results[name] = [];
+            }
+            results[name].push(net.address);
+            if(net.address.startsWith("192")){
+                suggestedNet = net.address;
+            }
+        }
+    }
+}
+
 class Initializer{
 
     constructor(){
@@ -27,7 +50,8 @@ class Initializer{
             
             readline.question("Client Secret: ", cs => {
                 initData.clientSecret = cs;
-                
+                console.log("Here are the network interfaces found on this device", results);
+                console.log("I suggest using this one: ", suggestedNet);
                 readline.question("IP Address for OSC/Web hosting (Usually 192.168.*.*): ", ip => {
                     initData.hostIP = ip;
     
@@ -63,6 +87,8 @@ class Initializer{
                                         "sectionname":"Network",
                                         "host":initData.hostIP,
                                         "host_port":3000,
+                                        "externalhandle":"ngrok",
+                                        "ngrokauthtoken":"",
                                         "external_http_url":"",
                                         "external_tcp_url":"",
                                         "udp_clients":{},
@@ -70,6 +96,34 @@ class Initializer{
                                         "osc_tcp_port":3333
                                     }
                                 };
+
+                                var newMod = {
+                                    "trusted_users": {},
+                                    "trusted_users_pw": {}
+                                }
+
+                                var newThemes = {
+                                    webui:{},
+                                    "spooderpet": {
+                                        "bigeyeleft": "o",
+                                        "bigeyeright": "o",
+                                        "littleeyeleft": "\u00ba",
+                                        "littleeyeright": "\u00ba",
+                                        "fangleft": " ",
+                                        "fangright": " ",
+                                        "mouth": "\u03c9",
+                                        "colors": {
+                                            "bigeyeleft": "white",
+                                            "bigeyeright": "white",
+                                            "littleeyeleft": "white",
+                                            "littleeyeright": "white",
+                                            "fangleft": "white",
+                                            "fangright": "white",
+                                            "mouth": "white"
+                                        }
+                                    },
+                                    modui:{}
+                                }
                                 
                                 fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(newAuth), "utf-8", (err, data)=>{
                                     fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(newConfig), "utf-8", (err, data)=>{
@@ -77,7 +131,11 @@ class Initializer{
                                             fs.writeFile(backendDir+"/settings/mod-blacklist.json", "{}", "utf-8", (err, data)=>{
                                                 fs.writeFile(backendDir+"/settings/eventsub.json", "{}", "utf-8", (err, data)=>{
                                                     fs.writeFile(backendDir+"/settings/commands.json", "{}", "utf-8", (err, data)=>{
+                                                        fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(newMod), "utf-8", (err, data)=>{
+                                                            fs.writeFile(backendDir+"/settings/themes.json", JSON.stringify(newThemes), "utf-8", (err, data)=>{
                                                         
+                                                            });
+                                                        });
                                                     });
                                                 });
                                             });
