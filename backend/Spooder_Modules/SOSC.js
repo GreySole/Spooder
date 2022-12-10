@@ -307,7 +307,6 @@ class SOSC {
 
             //Tell the overlay it's connected
             if(message.address.endsWith("/connect")){
-                console.log("PLUGIN CONNECTED");
                 oscTCP.send(new OSC.Message(message.address.split("/")[1]+'/connect/success', 1.0));
                 return;
             }

@@ -257,7 +257,7 @@ class WebUI {
                     obs.sceneItems[obs.scenes[s].sceneName] = await callOBS("GetSceneItemList", {sceneName:obs.scenes[s].sceneName});
                 }
             }
-            console.log("OBS OBJ", obs);
+            
             let props = {
                 "events":events,
                 "groups":eventGroups,
@@ -922,7 +922,7 @@ class WebUI {
             
             let pluginPacks = {};
             for(let a in activePlugins){
-                //console.log(activePlugins[a], a);
+                
                 let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
@@ -1151,7 +1151,7 @@ class WebUI {
         });
 
         router.get("/mod/utilities", async(req, res) => {
-            if(activeMods[req.query.moduser] == "active"){
+            if(activeMods[req.query.moduser] == "active" || req.headers.referer.startsWith("http:")){
                 let modevents = {};
                 for(let e in events){
                     if(events[e].triggers.chat.enabled){
@@ -1175,8 +1175,20 @@ class WebUI {
                 if(themes.modui[req.query.moduser] != null){
                     modTheme = themes.modui[req.query.moduser];
                 }
+                let oscURL = null;
+                let oscPort = null;
+                if(req.headers.referer.startsWith("http:")){
+                    oscURL = sconfig.network.host;
+                    oscPort = sconfig.network.osc_tcp_port;
+                    
+                }else{
+                    oscURL = sconfig.network.external_tcp_url;
+                }
+    
                 res.send(JSON.stringify({
                     status:"ok",
+                    oscURL:oscURL,
+                    oscPort:oscPort,
                     modmap:{
                         events:modevents,
                         plugins:modplugins,
@@ -1402,7 +1414,7 @@ class WebUI {
         async function getEventSubs(){
             await getAppToken();
             if(appToken ==""){
-                console.log("NO APP TOKEN");
+                console.log("No app token found");
                 return;
             }
             let response = await Axios({

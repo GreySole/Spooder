@@ -102,6 +102,7 @@ global.refreshFiles = () => {
 		let eventsObj = JSON.parse(commandFile);
 		events = eventsObj.events;
 		eventGroups = eventsObj.groups;
+		console.log("Got Events");
 	}catch(e){
 		//console.error(e);
 		if(e.code == "ENOENT"){
@@ -119,7 +120,7 @@ global.refreshFiles = () => {
 		var modFile = fs.readFileSync(backendDir+"/settings/mod.json", {encoding:'utf8'});
 		let modObj = JSON.parse(modFile);
 		modData = modObj;
-		
+		console.log("Got Mod Data");
 	}catch(e){
 		//console.error(e);
 		if(e.code == "ENOENT"){
@@ -138,7 +139,7 @@ global.refreshFiles = () => {
 		var modBLFile = fs.readFileSync(backendDir+"/settings/mod-blacklist.json", {encoding:'utf8'});
 		let modBLObj = JSON.parse(modBLFile);
 		modlocks.blacklist = modBLObj;
-		
+		console.log("Got Mod Blacklist");
 	}catch(e){
 		//console.error(e);
 		if(e.code == "ENOENT"){
@@ -157,6 +158,7 @@ global.refreshFiles = () => {
 		var themeFile = fs.readFileSync(backendDir+"/settings/themes.json", {encoding:'utf8'});
 		let themeObj = JSON.parse(themeFile);
 		themes = themeObj;
+		console.log("Got Themes");
 	}catch(e){
 		//console.error(e);
 		if(e.code == "ENOENT"){
@@ -580,7 +582,6 @@ if(initMode){
 					await chat.say(channel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
 				}else{
 					//console.log(stringpos, stringpos.limit);
-					message.substring()
 					await chat.say(channel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
 				}
 			}
@@ -819,7 +820,7 @@ if(initMode){
 						}
 					}
 				}
-				if(activeEvents[name][c].cooldownnotification == true){
+				if(event.cooldownnotification == true){
 					sayAlreadyOn(eventName);
 				}
 				
