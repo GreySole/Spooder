@@ -571,7 +571,10 @@ if(initMode){
 	}
 
 	global.sayInChat = async (message) =>{
-		
+		if(message == null || message == ""){
+			console.log("EMPTY MESSAGE");
+			return;
+		}
 		if(message.length >= 490){
 			let limit = 490;
 			let totalMessages = Math.ceil(message.length/limit);
