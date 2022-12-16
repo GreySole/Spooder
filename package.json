@@ -14,7 +14,7 @@
   "license": "GPL-3.0",
   "dependencies": {
     "adm-zip": "^0.5.9",
-    "axios": "^1.2.0",
+    "axios": "^1.2.1",
     "body-parser": "^1.20.0",
     "buffer": "^6.0.3",
     "chmodr": "^1.2.0",

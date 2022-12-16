@@ -1,4 +1,7 @@
 # Getting Started
+
+Requires Node v14 and up.
+
 Use `npm install` to install Spooder's dependencies.
 
 Then use `npm run init` to initialize your Spooder's configuration.

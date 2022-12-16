@@ -1034,7 +1034,6 @@ class WebUI {
                 }
             })
             .then((response)=>{
-                
                 res.send(JSON.stringify(response.data));
             }).catch(error=>{
                 console.error(error);
