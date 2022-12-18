@@ -95,8 +95,9 @@ class WebUI {
         router.use(express.json({verify: this.verifyTwitchSignature}));
 
         app.use((req, res, next) => {
+            
             res.status(404).send("<h1>Page not found on the server</h1>")
-        })        
+        });
 
         router.get("/overlay/get", async(req, res) => {
 
@@ -1126,7 +1127,6 @@ class WebUI {
                     }else{
                         res.send({status:"stillpending"});
                     }
-                    
                 }
             }else{
                 res.send({status:"untrusted"});

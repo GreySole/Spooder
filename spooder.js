@@ -533,7 +533,7 @@ if(initMode){
 						runCommands(message, e, commandMatch);
 					}
 				}else{
-					if(message.message.toLowerCase().startsWith(events[e].triggers.chat.command)){
+					if(message.message.toLowerCase().startsWith(events[e].triggers.chat.command) || message.message.substring(1).toLowerCase().startsWith(events[e].triggers.chat.command)){
 						runCommands(message, e);
 					}
 				}
@@ -632,7 +632,7 @@ if(initMode){
 	}
 
 	global.chatIsBroadcaster = (message) => {
-		return message.tags.badges.broadcaster == true;
+		return message.tags.badges?.broadcaster == true;
 	}
 
 	global.getChatters = async (type) => {
