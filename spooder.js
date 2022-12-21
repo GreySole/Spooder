@@ -334,6 +334,7 @@ if(initMode){
 			}
 			
 		}
+		if(message.tags.badges == null){message.tags.badges = {};}
 		message.tags.emotes = newEmotes;
 		return message;
 	}
@@ -369,7 +370,9 @@ if(initMode){
 					if(lockEvent(message.username, modCommand, eventtarget) == true && eventtarget != "all"){return;}
 					if(lockPlugin(message.username, modCommand, plugin, target) == true && plugin != "all"){return;}
 					if(command[2] == "all"){
-						sayInChat(moduser+" "+(modCommand=="lock"?"locked":"unlocked")+" all chat commands");
+						lockEvent(message.username, modCommand, eventtarget);
+						lockPlugin(message.username, modCommand, plugin, target);
+						sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all chat commands");
 					}
 				}else if(modCommand == "blacklist"){
 					let modAction = command[2];
@@ -598,11 +601,17 @@ if(initMode){
 		
 	}
 
-	global.chatSwitchChannels = async (newChannel) => {
+	global.chatSwitchChannels = async (newChannel, leaveMessage, joinMessage) => {
 		await webUI.validateChatbot();
+		if(leaveMessage != null && leaveMessage != ""){sayInChat(leaveMessage);}
 		await chat.disconnect();
 		channel = newChannel;
-		run("switch");
+		if(joinMessage != null && joinMessage != ""){
+			run(joinMessage);
+		}else{
+			run();
+		}
+		
 	}
 
 	global.disconnectChat = () => {
@@ -692,9 +701,10 @@ if(initMode){
 		}
 		let pluginLocked = false;
 		for(let p in activePlugins){
-			if(target == "all"){
+			if(plugin == "all"){
+				
 				modlocks.plugins[p] = modCommand=="lock"?1:0;
-				sayInChat(moduser+" "+(modCommand=="lock"?"locked":"unlocked")+" all plugin chat commands");
+				sendToTCP("/mod/"+moduser+"/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
 				pluginLocked = true;
 			}else if(p == plugin){
 				if(modlocks.plugins[p] == null){modlocks.plugins[p] = {}}

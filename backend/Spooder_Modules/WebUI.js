@@ -1077,7 +1077,9 @@ class WebUI {
 
         router.get("/chat_channel", async(req,res) => {
             let channel = req.query.channel;
-            chatSwitchChannels(channel);
+            let leaveMessage = req.query.leavemessage;
+            let joinMessage = req.query.joinmessage;
+            chatSwitchChannels(channel, leaveMessage, joinMessage);
             res.send(JSON.stringify({status:"SUCCESS"}));
         });
 
