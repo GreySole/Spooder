@@ -13,7 +13,7 @@
 <a href="#accessing-externally">Accessing Externally</a><br>
 <a href="#eventsubs">EventSubs</a><br>
 <a href="#connecting-to-obs">Connecting to OBS</a><br>
-<a href="#connecting-to-discord-wip">Connecting to OBS</a><br>
+<a href="#connecting-to-discord-wip">Connecting to Discord</a><br>
 <a href="#developing-web-ui-and-mod-ui">Developing Web UI and Mod UI</a><br>
 <a href="#have-questions">Have Questions?</a><br>
 
