@@ -1,6 +1,25 @@
+###### Table of Contents<br>
+<a href="#getting-started">Getting Started</a><br>
+<a href="#user-authentication">User Authentication</a><br>
+<a href="#udp-clients">UDP Clients</a><br>
+<a href="#creating-events">Creating Events</a><br>
+<a href="#helping-commands">Helping Commands</a><br>
+<a href="#toggling-events">Toggling Events</a><br>
+<a href="#moderating-spooder">Moderating Spooder</a><br>
+<a href="#the-mod-ui">The Mod UI</a><br>
+<a href="#authenticating-mods">Authenticating Mods</a><br>
+<a href="#creatingmanaging-plugins">Creating/Managing Plugins</a><br>
+<a href="#osc-tunnels">OSC Tunnels</a><br>
+<a href="#accessing-externally">Accessing Externally</a><br>
+<a href="#eventsubs">EventSubs</a><br>
+<a href="#connecting-to-obs">Connecting to OBS</a><br>
+<a href="#connecting-to-discord-wip">Connecting to OBS</a><br>
+<a href="#developing-web-ui-and-mod-ui">Developing Web UI and Mod UI</a><br>
+<a href="#have-questions">Have Questions?</a><br>
+
 # Getting Started
 
-Requires Node v14 and up.
+Requires Node v16.9.0 and up.
 
 Use `npm install` to install Spooder's dependencies.
 
@@ -50,6 +69,12 @@ Toggling events is specific to software (UDP) commands. This will ignore the set
 # Moderating Spooder
 Spooder comes with two big chat commands for moderation. !stop will stop any event currently running. You can use it like '!stop eventname' to stop a certain event (The event name is the initial name set when the event was created). You can also use '!stop all' to stop all running events. !mod is the base command for you and your mods to lock/unlock events and plugins or adding and removing names from the user blacklist. The 'all' argument works for lock and unlock as well. So you can use '!mod lock all' to lockdown Spooder entirely and use '!mod unlock all' to lift all Spooder's locks. Knowing all the event names and the consistant changes to the events and plugins that may be. I recommend using the new Mod UI.
 
+# The Mod UI
+If you've set up both external tunnels in the Config, you can share the web tunnel link to your mods as it is with '/mod' at the end of it. While there are built-in chat commands for Spooder moderation, there's a lot to moderate, and a lot of ways setups can change. The Mod UI is a graphical interface that can lock events, blacklist users from using Spooder, lockdown plugins entirely, or lock specific events in plugins (depends whether the plugin dev implemented them). Mods can also access plugin utility pages, but they cannot access your Web UI. The interface is also themable and themes are saved in your themes.json file.
+
+# Authenticating Mods
+Don't worry, it's not that easy for just anyone to use the Mod UI. First the broadcaster must trust their users using '!mod trust username' which will store the username in mod.json with trust level "m" for Mod. Then mods log into the Mod UI using their Twitch username and any password they want. They are matching their username with what you have on file and creating a password to log into your Spooder. Finally, mods verify their identity by calling '!mod verify' in the broadcaster's chat to save their password and they can then access the Mod UI with their new credentials. Passwords are encrypted and stored in mod.json. This way your Ngrok link can change and all mods need to do is login with their credentials.
+
 # Creating/Managing Plugins
 Plugins take in the same data Spooder's events do and how they work is entirely up to you. Check out the sample plugin repository to get started with making plugins. The Plugins tab in Spooder's Web UI can install plugins by uploading the plugin as a zip file. Once installed, you can configure the plugin's settings, upload assets to the plugin, and export the plugin. Note: Exported plugins will not include its assets folder.
 Sample Plugin: https://github.com/GreySole/Spooder-Sample-Plugin
@@ -71,11 +96,8 @@ channel.channel_points_custom_reward_redemption.add and update are needed to lin
 # Connecting to OBS
 Check out Deck Mode in the Web UI and you'll find the OBS Remote. Enter your OBS machine's info to connect. Spooder connects to OBS on the backend with a custom OSC front to control it. The OBS Remote has all the essentials to run your stream. Stream/Record buttons, source toggles, scene switcher with studio mode support, and volume control. Groups are supported for both source and volume controls. Volume meters are grouped in a unified meter and have a group mute button. Changing volume also allows you to confirm your change or revert back to its previous level.
 
-# The Mod UI
-If you've set up both external tunnels in the Config, you can share the web tunnel link to your mods as it is with '/mod' at the end of it. While there are built-in chat commands for Spooder moderation, there's a lot to moderate, and a lot of ways setups can change. The Mod UI is a graphical interface that can lock events, blacklist users from using Spooder, lockdown plugins entirely, or lock specific events in plugins (depends whether the plugin dev implemented them). Mods can also access plugin utility pages, but they cannot access your Web UI. The interface is also themable and themes are saved in your themes.json file.
-
-# Authenticating Mods
-Don't worry, it's not that easy for just anyone to use the Mod UI. First the broadcaster must trust their users using '!mod trust username' which will store the username in mod.json with trust level "m" for Mod. Then mods log into the Mod UI using their Twitch username and any password they want. They are matching their username with what you have on file and creating a password to log into your Spooder. Finally, mods verify their identity by calling '!mod verify' in the broadcaster's chat to save their password and they can then access the Mod UI with their new credentials. Passwords are encrypted and stored in mod.json. This way your Ngrok link can change and all mods need to do is login with their credentials.
+# Connecting to Discord (WIP)
+There isn't event/eventsub support yet, but you can now make plugins for a Discord bot! It currently receives any message in your server(s) and sends them to plugins with the onDiscord(type, data) function. Add your bot token in the Config tab under Discord Settings. You can also automatically send your mod link from Ngrok to a private channel so your mods get the new link instantly when Spooder starts. (You'll need to save and restart Spooder after adding the token to get your channels)
 
 # Developing Web UI and Mod UI
 Use `npm run dev` to run Spooder in development mode. This sets the web UI's hosting port to 3001. In another shell, use `npm run start-front` to run the web UI's development server which will run your configured port like usual. Use `npm run build-front` to create an optimized build for the web UI. When built, Spooder can be started up normally with your changes to the web UI. You could also just set the proxy on either UI's package.json file to be your configured port. Then the dev server will run on a different port.

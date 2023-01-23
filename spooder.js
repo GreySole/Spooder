@@ -1,10 +1,14 @@
 const Initializer = require("./backend/Spooder_Modules/Init.js");
 const WebUI = require("./backend/Spooder_Modules/WebUI.js");
-const SOSC = require("./backend/Spooder_Modules/SOSC.js");
+const SOSC = require("./backend/Spooder_Modules/OSC.js");
 
 var devMode = process.argv.length>2?process.argv[2] == "-d":false;
 var initMode = process.argv.length>2?process.argv[2] == "-i":false;
 var noAutoLogin = process.argv.length>2?process.argv[2] == "-a":false;
+
+var spooderLog = (...content) => {
+    console.log(logEffects("Bright"),logEffects("FgYellow"), ...content, logEffects("Reset"));
+}
 
 global.maintainenceMode = process.argv.length>2?process.argv[2] == "-e":false;
 
@@ -13,6 +17,7 @@ global.frontendDir = __dirname+"/webui";
 
 const fs = require('fs-extra');
 const path = require('path');
+
 
 let settingsDir = path.join(backendDir, "settings");
 
@@ -34,142 +39,126 @@ global.modlocks = {
 	plugins:{},
 	blacklist:{}
 };
-global.themes = {};
+global.themes = {
+	webui:{},
+	"spooderpet": {
+		"bigeyeleft": "o",
+		"bigeyeright": "o",
+		"littleeyeleft": "\u00ba",
+		"littleeyeright": "\u00ba",
+		"fangleft": " ",
+		"fangright": " ",
+		"mouth": "\u03c9",
+		"colors": {
+			"bigeyeleft": "white",
+			"bigeyeright": "white",
+			"littleeyeleft": "white",
+			"littleeyeright": "white",
+			"fangleft": "white",
+			"fangright": "white",
+			"mouth": "white"
+		}
+	},
+	modui:{}
+};
 
 global.refreshFiles = () => {
 
-	try{
-		var oauthFile = fs.readFileSync(backendDir+"/settings/oauth.json",{encoding:'utf8'});
-		oauth = JSON.parse(oauthFile);
-		console.log("Got OAuth Settings");
-		if(oauth['client-id'] == "editme" || oauth['client-secret'] == "editme" ||
-		oauth['client-id'] == "" || oauth['client-secret'] == "" ||
-		oauth['client-id'] == null || oauth['client-secret'] == null){
-			console.error("No Twitch authentication credentials found. \n\
-			Create an app on dev.twitch.tv and run 'npm run init' to fill in your client id and secret.");
-		}
-	}catch(e){
-		console.error(e);
-		console.error("There's a problem with the oauth file. We'll keep running, but you won't be able to connect to chat.");
-	}
-	
-	try{
-		var configFile = fs.readFileSync(backendDir+"/settings/config.json",{encoding:'utf8'});
-		sconfig = JSON.parse(configFile);
-		console.log("Got Config");
-	}catch(e){
-		console.error(e);
-		console.error("There's a problem with the config file. Switching to init mode.");
-		initMode = true;
-	}
-	
-	try{
-		var oscTunnelFile = fs.readFileSync(backendDir+"/settings/osc-tunnels.json",{encoding:'utf8'});
-		osctunnels = JSON.parse(oscTunnelFile);
-		console.log("Got OSC Tunnels");
-	}catch(e){
-		
-		if(e.code == "ENOENT"){
-			fs.writeFile(backendDir+"/settings/osc-tunnels.json", JSON.stringify(osctunnels), "utf-8", (err, data)=>{
-                //console.log("osc-tunnels.json not found. New file created.");
-            });
-		}else{
-			console.error(e);
-			console.log("Something's wrong with the OSC Tunnels. You can rebuild this in the web UI.");
-		}
-		
-	}
-	
-	try{
-		var eventSubFile = fs.readFileSync(backendDir+"/settings/eventsub.json",{encoding:'utf8'});
-		eventsubs = JSON.parse(eventSubFile);
-		console.log("Got EventSub Settings");
-	}catch(e){
-		if(e.code == "ENOENT"){
-			let newEventSubFile = {enabled:false, callback_url:"", events:{}};
-			fs.writeFile(backendDir+"/settings/eventsub.json", JSON.stringify(newEventSubFile), "utf-8", (err, data)=>{
-                //console.log("eventsub.json not found. New file created.");
-				eventsubs = newEventSubFile;
-            });
-		}else{
-			console.error(e);
-			console.log("Something's wrong with the Eventsubs file. You can rebuild this in the web UI.");
-		}
-	}
+	let settingsFiles = {
+		"oauth":"oauth.json",
+		"sconfig":"config.json",
+		"events":"commands.json",
+		"eventsubs":"eventsub.json",
+		"modData":"mod.json",
+		"osctunnels":"osc-tunnels.json",
+		"themes":"themes.json"
+	};
 
-	try{
-		var commandFile = fs.readFileSync(backendDir+"/settings/commands.json", {encoding:'utf8'});
-		let eventsObj = JSON.parse(commandFile);
-		events = eventsObj.events;
-		eventGroups = eventsObj.groups;
-		console.log("Got Events");
-	}catch(e){
-		//console.error(e);
-		if(e.code == "ENOENT"){
-			fs.writeFile(backendDir+"/settings/commands.json", JSON.stringify(events), "utf-8", (err, data)=>{
-                //console.log("commands.json not found. New file created.");
-            });
-		}else{
-			console.error(e);
-			console.log("Something's wrong with the command file. You can rebuild this in the web UI.");
-		}
-		
-	}
-
-	try{
-		var modFile = fs.readFileSync(backendDir+"/settings/mod.json", {encoding:'utf8'});
-		let modObj = JSON.parse(modFile);
-		modData = modObj;
-		console.log("Got Mod Data");
-	}catch(e){
-		//console.error(e);
-		if(e.code == "ENOENT"){
-			fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify({"trusted_users_pw":{},"trusted_users":{}}), "utf-8", 
-			(err, data)=>{
-                //console.log("commands.json not found. New file created.");
-            });
-		}else{
-			console.error(e);
+	for(let s in settingsFiles){
+		try{
+			if(!fs.existsSync(backendDir+"/settings/"+settingsFiles[s])){
+				spooderLog("Can't find "+settingsFiles[s]);
+				return;
+			}
+			var settingFile = fs.readFileSync(backendDir+"/settings/"+settingsFiles[s],{encoding:'utf8'});
+			switch(s){
+				case "events":
+					let eventsObj = JSON.parse(settingFile);
+					events = eventsObj.events;
+					eventGroups = eventsObj.groups;
+				break;
+				default:
+					global[s] = JSON.parse(settingFile);
+			}
 			
+			spooderLog("Got "+settingsFiles[s]);
+			
+		}catch(e){
+			console.error(e);
+			console.error("There's a problem with the "+s+" file.");
 		}
-		
+
+		if(oauth['client-id'] == "editme" || oauth['client-secret'] == "editme" ||
+			oauth['client-id'] == "" || oauth['client-secret'] == "" ||
+			oauth['client-id'] == null || oauth['client-secret'] == null){
+				console.error("No Twitch authentication credentials found. \n\
+				Create an app on dev.twitch.tv and run 'npm run init' to fill in your client id and secret.");
+		}
 	}
 
 	try{
 		var modBLFile = fs.readFileSync(backendDir+"/settings/mod-blacklist.json", {encoding:'utf8'});
 		let modBLObj = JSON.parse(modBLFile);
 		modlocks.blacklist = modBLObj;
-		console.log("Got Mod Blacklist");
+		spooderLog("Got Mod Blacklist");
 	}catch(e){
 		//console.error(e);
 		if(e.code == "ENOENT"){
 			fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify({}), "utf-8", 
 			(err, data)=>{
-                //console.log("commands.json not found. New file created.");
-            });
+				//spooderLog("commands.json not found. New file created.");
+			});
 		}else{
 			console.error(e);
 			
 		}
-		
 	}
+}
 
-	try{
-		var themeFile = fs.readFileSync(backendDir+"/settings/themes.json", {encoding:'utf8'});
-		let themeObj = JSON.parse(themeFile);
-		themes = themeObj;
-		console.log("Got Themes");
-	}catch(e){
-		//console.error(e);
-		if(e.code == "ENOENT"){
-			fs.writeFile(backendDir+"/settings/commands.json", JSON.stringify(events), "utf-8", (err, data)=>{
-                //console.log("commands.json not found. New file created.");
-            });
-		}else{
-			console.error(e);
-			console.log("Something's wrong with the command file. You can rebuild this in the web UI.");
-		}
-		
+global.logEffects = (effect) => {
+	let effects = {
+		Reset:"\x1b[0m",
+		Bright:"\x1b[1m",
+		Dim:"\x1b[2m",
+		Underscore:"\x1b[4m",
+		Blink:"\x1b[5m",
+		Reverse:"\x1b[7m",
+		Hidden:"\x1b[8m",
+
+		FgBlack:"\x1b[30m",
+		FgRed:"\x1b[31m",
+		FgGreen:"\x1b[32m",
+		FgYellow:"\x1b[33m",
+		FgBlue:"\x1b[34m",
+		FgMagenta:"\x1b[35m",
+		FgCyan:"\x1b[36m",
+		FgWhite:"\x1b[37m",
+		FgGray:"\x1b[90m",
+
+		BgBlack:"\x1b[40m",
+		BgRed:"\x1b[41m",
+		BgGreen:"\x1b[42m",
+		BgYellow:"\x1b[43m",
+		BgBlue:"\x1b[44m",
+		BgMagenta:"\x1b[45m",
+		BgCyan:"\x1b[46m",
+		BgWhite:"\x1b[47m",
+		BgGray:"\x1b[100m"
+	};
+	if(effects[effect] != null){
+		return effects[effect];
+	}else{
+		return "";
 	}
 }
 
@@ -182,481 +171,51 @@ if(initMode){
 }else{
 
 	global.uptime = 0;
-	global.chatDisconnected = false;
 	
 	activeEvents = {};
-	chatEvents = [];
 
 	global.activeMods = {};
 
 	global.udpClients = sconfig.network["udp_clients"];
 	global.activePlugins = {};
 
-	global.username = "";
-	global.channel = null;
-	global.broadcasterUserID = 0;
-
-	global.token = "";
-	global.refreshToken = "";
-
-	if(oauth.token != null && oauth.token != ""){
-		token = oauth.token;
-	}
-
-	if(oauth.refreshToken != null && oauth.refreshToken != ""){
-		refreshToken = oauth.refreshToken;
-	}
-
-	//For Event Subs
-	global.appToken = "";
-
 	global.sosc = new SOSC();
 	global.sendToTCP = (address, oscValue, log)=>{sosc.sendToTCP(address, oscValue, log)};
 	global.sendToUDP = (dest, address, oscValue)=>{sosc.sendToUDP(dest, address, oscValue)};
 
-	global.webUI = new WebUI(devMode);
+	const Discord = require("./backend/Spooder_Modules/Discord.js");
+	const Twitch = require("./backend/Spooder_Modules/Twitch.js");
 
-	const tmi = require("tmi.js");
-	global.chat = null;
+	global.webUI = new WebUI();
 	
-	checkForSpamming = (viewername) => {
-		
-		if(modlocks.blacklist[viewername] == null){
-			modlocks.blacklist[viewername] = {
-				active:0,
-				timeout:null,
-				commandCount:1,
-				lastCommand:Date.now()
-			};
-			return false;
+	let webRouter = webUI.startServer(devMode);
+	global.twitch = new Twitch(webRouter);
+	global.discord = new Discord(webRouter);
+	webUI.onNgrokStart = function(){
+		twitch.refreshEventSubs();
+		if(discord.loggedIn && discord.config.autosendngrok?.enabled){
+			spooderLog("SENDING NGROK TO MODS");
+			discord.sendToChannel(discord.config.autosendngrok.destguild, discord.config.autosendngrok.destchannel, sconfig.network.external_http_url+"/mod");
 		}
+	}
 
-		if(modlocks.blacklist[viewername].active == 1){
-			if(Date.now() >= modlocks.blacklist[viewername].timeout){
-				modlocks.blacklist[viewername].active = 0;
-				modlocks.blacklist[viewername].commandCount = 1;
-			}else{
-				return true;
-			}
-		}
-
-		if(Date.now()-modlocks.blacklist[viewername].lastCommand <= 2000){
-			modlocks.blacklist[viewername].commandCount++;
-		}else{
-			modlocks.blacklist[viewername].commandCount = 1;
-		}
-		modlocks.blacklist[viewername].lastCommand = Date.now();
-		if(modlocks.blacklist[viewername].commandCount >= 6){
-			sayInChat("Hey, cut that out "+viewername+", you're on cooldown for a minute.");
-			modlocks.blacklist[viewername].active = 1;
-			modlocks.blacklist[viewername].timeout = Date.now()+60000;
-			return true;
+	
+	startServices();
+	async function startServices(){
+		if(!noAutoLogin){
+			await twitch.autoLogin().catch(e=>{});
+			await discord.autoLogin().catch(e=>{});
 		}
 		
-		return false;
-	}
-
-	const run = async(startCase) => {
-		console.log("Running chat...");
-		if(chat != null){
-			if(chat.readyState() == "OPEN" || chat.readyState() == "CONNECTING"){
-				await chat.disconnect();
-			}
-			chat.off("message", processMessage);
-			chat.off("connectFailed", webUI.onAuthenticationFailure);
-			chat.off("disconnect", restartChat);
+	
+		if(sconfig.network.externalhandle == "ngrok" && sconfig.network.ngrokauthtoken != ""){
+			webUI.startNgrok();
 		}
 
-		chat = new tmi.Client({
-			options:{debug:true},
-			identity:{
-				username:username,
-				password:token
-			}
-		});
-		
-		await chat.connect().catch(error=>{console.error(error); webUI.onAuthenticationFailure();});
-		chat.join(channel).then(()=>{
-			if(startCase == "restart"){
-				sayInChat("Chat restarted, I'm back :D");
-			}else if(startCase == "switch"){
-				sayInChat("Hi there! I'm "+sconfig.bot.bot_name+", a Spooder bot! I'm with "+sconfig.broadcaster.username);
-			}else if(startCase == "reconnect"){
-				sayInChat("Stream reconnected. I'm okay :)");
-			}else if(startCase == "disconnected"){
-				sayInChat("Stream disconnected. Hold on a sec...");
-			}else if(startCase != null){
-				sayInChat(startCase);
-			}
-		}).catch(error=>{console.error(error)});
-
-		
-		chat.on("message", processMessage);
-		chat.on("connectFailed", webUI.onAuthenticationFailure);
-		chat.on("disconnect", restartChat);
-		upInterval = setInterval(runInterval, 1000);
-	};
-
-	webUI.onLogin = run;
-
-	if(token != "" && noAutoLogin == false){
-		console.log("Token found! Validating...");
-		webUI.autoLogin();
+		webUI.getPlugins();
 	}
 
-	if(oauth.broadcaster_token != null
-		&& oauth.broadcaster_token != ""
-		&& oauth.token != oauth.broadcaster_token){
-			webUI.validateBroadcaster();
-	}
-
-	//We switched to tmi.js but we're reforming the message data to reflect its fork, twitch-js.
-	//I was going to rewrite the overlays to work with tmi, but I think twitch-js has a better obj structure.
-	//Why switch to tmi.js? Well, I felt tmi was more stable and better maintained than twitch-js. Not sure if I'm right...but it felt right.
-	function twitchjsify(channel, tags, txt){
-		let message = {
-			channel:channel,
-			username:tags.username,
-			displayName:tags["display-name"],
-			tags:tags,
-			message:txt
-		};
-
-		let emotes = tags.emotes;
-		let newEmotes = [];
-		for(let e in emotes){
-			for(let ei in emotes[e]){
-				newEmotes.push({
-					id:e,
-					start:parseInt(emotes[e][ei].split("-")[0]),
-					end: parseInt(emotes[e][ei].split("-")[1])
-				});
-			}
-			
-		}
-		if(message.tags.badges == null){message.tags.badges = {};}
-		message.tags.emotes = newEmotes;
-		return message;
-	}
-
-	function processMessage(channel, tags, txt, self){
-		let message = twitchjsify(channel, tags, txt);
-		message.tags.displayName = message.displayName;
-		if(typeof message.message == "undefined"){return;}
-		
-		if(message.message.startsWith("!")){
-			if(modlocks.spamguard == 1){
-				if(checkForSpamming(message.username) == true){
-					return;
-				}
-			}
-			
-			let command = message.message.substr(1).split(" ");
-
-			if(command[0] == "stop" && (chatIsMod(message) || chatIsBroadcaster(message))){
-				let cEvent = command[1];
-				stopEvent(cEvent);
-				return;
-			}
-
-			if(command[0] == "mod" && (chatIsMod(message) || chatIsBroadcaster(message))){
-				let modCommand = command[1];
-				if(modCommand == "spamguard"){
-					setSpamGuard(command[2]);
-				}else if(modCommand == "lock" || modCommand == "unlock"){
-					let eventtarget = command[2];
-					let plugin = command[2];
-					let target = command.length>=4?command[3]:null;
-					if(lockEvent(message.username, modCommand, eventtarget) == true && eventtarget != "all"){return;}
-					if(lockPlugin(message.username, modCommand, plugin, target) == true && plugin != "all"){return;}
-					if(command[2] == "all"){
-						lockEvent(message.username, modCommand, eventtarget);
-						lockPlugin(message.username, modCommand, plugin, target);
-						sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all chat commands");
-					}
-				}else if(modCommand == "blacklist"){
-					let modAction = command[2];
-					let viewer = command[3];
-					if(modAction == "add"){
-						modlocks.blacklist[viewer] == 1;
-						sayInChat(message.username+" blacklisted "+viewer);
-						sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 1);
-					}else if(modAction == "remove"){
-						modlocks.blacklist[viewer] == 0;
-						sayInChat(message.username+" unblacklisted "+viewer);
-						sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 0);
-					}
-					fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
-						console.log("Mod file saved!");
-					});
-				}else if(modCommand == "trust" && chatIsBroadcaster(message)){
-					if(command.length>2){
-						let trustedUser = command[2].startsWith("@")?command[2].substring(1).trim():command[2].trim();
-						modData["trusted_users"][trustedUser] = "m";
-						fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(modData), "utf-8", (err, data)=>{
-							console.log("Mod file saved!");
-							sayInChat(trustedUser+" has been added as a trustworthy user for the Mod UI!");
-						});
-					}else{
-						sayInChat("Trust a user to interact with the Mod UI");
-					}
-				}else if(modCommand == "verify"){
-					if(activeMods[message.username]?.startsWith("pending")){
-						activeMods[message.username] = "active";
-						fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(modData), "utf-8", (err, data)=>{
-							console.log("Mod file saved!");
-							sayInChat(message.username+" you're all set! Refresh the Mod UI to gain access.");
-						});
-					}else{
-						sayInChat(message.username+" you're not waiting for Mod UI verification. Access the Mod UI to start authorizing your device.")
-					}
-					
-				}
-			}
-
-			if(command[0] == "commands"){
-				let commandsArray = getChatCommands();
-				sayInChat("Here's the chat command list: "+commandsArray.join(", "));
-				return;
-			}
-
-			if(command[0] == "plugins"){
-				if(command.length == 1){
-					let pluginList = Object.keys(activePlugins);
-					sayInChat("Use this command like !plugins [plugin-name] [plugin-command] to get info on an active plugin. Plugin names are: "+pluginList.join(", "));
-					return;
-				}else{
-					if(command[1] == p && command.length == 2){
-						let commandList = Object.keys(activePlugins[p].commandList);
-						sayInChat("Commands for "+p+" are: "+commandList.join((", ")));
-						return;
-					}else if(command[1] == p){
-						if(activePlugins[p].commandList[command[2]] != null){
-							sayInChat(activePlugins[p].commandList[command[2]]);
-							return;
-						}
-					}
-				}
-				
-			}
-			
-			if(command[0] == sconfig.bot.help_command){
-				if(command.length>1){
-					let commands = [];
-					let done = false;
-
-					if(command[1] == "help"){
-						sayInChat("Pass a command type like '!"+sconfig.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+sconfig.bot.help_command+" event command' to get a description of what that command does. Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]");
-						return;
-					}
-
-					
-					if(command[1] == "event" || command[1] == "events"){
-						for(let e in events){
-							if(command.length == 2){
-								commands.push(e);
-							}else{
-								if(command[2] == e){
-									sayInChat(events[e].name+" | Chat command: "+
-									(events[e].triggers.chat.enabled?events[e].triggers.chat.command:" No chat command")+
-									" | Reward: "+
-									(events[e].triggers.redemption.enabled?"It has a channel point reward":"No channel point reward")+
-									" | OSC: "+
-									(events[e].triggers.osc.enabled?"Triggered by OSC":"No OSC Trigger")+
-									" | Description: "+
-									events[e].description);
-									done = true;
-								}
-							}
-						}
-					}
-
-					if(command[1] == "plugin" || command[1] == "plugins"){
-						for(let p in activePlugins){
-							
-							if(command.length == 2){
-								commands.push(p);
-							}else{
-								if(command[2] == p && command.length == 3){
-									commands = Object.keys(activePlugins[p].commandList);
-								}else if(command[2] == p){
-									if(activePlugins[p].commandList[command[3]] != null){
-										sayInChat(activePlugins[p].commandList[command[3]]);
-										done = true;
-									}
-								}
-							}
-						}
-					}
-					if(commands.length == 0 && done == false){
-						sayInChat("I'm not sure what "+command[1]+" is (^_^;)");
-					}else if(done == false){
-						
-						sayInChat(command[1]+" are: "+stringifyArray(commands));
-					}
-					
-				}else{
-					sayInChat("Hi, I'm "+sconfig.bot.bot_name+". "+sconfig.bot.introduction);
-				}
-			}
-		}
-
-		for(let e in events){
-			if(modlocks.events[e] == 1){continue;}
-			if(events[e].triggers.chat.enabled && self == false){
-				if(events[e].triggers.chat.search){
-					let commandSplit = events[e].triggers.chat.command.split(" ");
-					let commandMatch = new Array(commandSplit.length).fill(false);
-					let messageSplit = message.message.split(" ");
-					let matchIndex = 0;
-					for(let m in messageSplit){
-						if(commandSplit[matchIndex] == "*"){commandMatch[matchIndex] = messageSplit[m];}
-						if(commandSplit[matchIndex].includes("|")){
-							let cSplitOR = commandSplit[matchIndex].split("|");
-							for(let c in cSplitOR){
-								if(cSplitOR[c].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m]; break;}
-							}
-						}
-						if(commandSplit[matchIndex].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m];}
-						
-						if(commandMatch[matchIndex] != false){
-							matchIndex++;
-							if(matchIndex == commandMatch.length){
-								console.log(commandMatch);
-								break;
-							}
-						}else{
-							matchIndex = 0;
-							commandMatch = new Array(commandSplit.length).fill(false);
-						}
-						
-					}
-					
-					if(matchIndex == commandMatch.length){
-						runCommands(message, e, commandMatch);
-					}
-				}else{
-					if(message.message.toLowerCase().startsWith(events[e].triggers.chat.command) || message.message.substring(1).toLowerCase().startsWith(events[e].triggers.chat.command)){
-						runCommands(message, e);
-					}
-				}
-			}
-		}
-		
-		for(p in activePlugins){
-			if(modlocks.plugins[p] != 1){
-				activePlugins[p].onChat(message);
-			}
-		}
-	}
-
-	function sayAlreadyOn(name){
-		for(let c in activeEvents[name]){
-			if(activeEvents[name][c].etype == "event"){
-				sayInChat(events[name].name+" is cooling down. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name][c]["timeout"]))+"s");
-				break;
-			}
-		}
-	}
-
-	function getChatCommands(){
-		let commandsArray = [];
-		for(let e in events){
-			if(events[e].triggers.chat.enabled == true){
-				commandsArray.push(events[e].triggers.chat.command);
-			}
-		}
-		return commandsArray;
-	}
-
-	function stringifyArray(a){
-		return a.join(", ");
-	}
-
-	global.sayInChat = async (message) =>{
-		if(message == null || message == ""){
-			console.log("EMPTY MESSAGE");
-			return;
-		}
-		if(message.length >= 490){
-			let limit = 490;
-			let totalMessages = Math.ceil(message.length/limit);
-			
-			for(let stringpos=0; stringpos<message.length; stringpos+=limit){
-				
-				if(stringpos+limit > message.length){
-					await chat.say(channel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
-				}else{
-					//console.log(stringpos, stringpos.limit);
-					await chat.say(channel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
-				}
-			}
-		}else{
-			await chat.say(channel,message)
-			.catch(e=>{
-				console.log("CHAT ERROR", e);
-				restartChat(message);
-			});
-		}
-		
-	}
-
-	global.chatSwitchChannels = async (newChannel, leaveMessage, joinMessage) => {
-		await webUI.validateChatbot();
-		if(leaveMessage != null && leaveMessage != ""){sayInChat(leaveMessage);}
-		await chat.disconnect();
-		channel = newChannel;
-		if(joinMessage != null && joinMessage != ""){
-			run(joinMessage);
-		}else{
-			run();
-		}
-		
-	}
-
-	global.disconnectChat = () => {
-		chat.disconnect();
-	}
-
-	global.restartChat = async (message) => {
-		console.log("Restarting Chat");
-		await webUI.validateChatbot();
-		run(message);
-	}
-
-	global.chatIsFirstMessage = (message) => {
-		return message.tags["first-msg"] == true;
-	}
-
-	global.chatIsReturningChatter = (message) => {
-		return message.tags["returning-chatter"] == true;
-	}
-
-	global.chatIsMod = (message) => {
-		return message.tags.mod == true;
-	}
-
-	global.chatIsSubscriber = (message) => {
-		return message.tags.subscriber == true;
-	}
-
-	global.chatIsBroadcaster = (message) => {
-		return message.tags.badges?.broadcaster == true;
-	}
-
-	global.getChatters = async (type) => {
-		const axios = require("axios");
-		let response = await axios.get("https://tmi.twitch.tv/group/user/"+channel.substr(1)+"/chatters");
-		let chArray = [];
-		if(type == "all"){
-			for(let c in response.data.chatters){chArray = chArray.concat(response.data.chatters[c]);}
-		}else{
-			if(response.data.chatters[type] != null){
-				chArray = response.data.chatters[type];
-			}
-		}
-		return chArray;
-	}
+	
 
 	global.blacklistUser = (viewername, duration) => {
 		if(modlocks.blacklist[viewername] == null){
@@ -777,9 +336,13 @@ if(initMode){
 		return;
 	}
 
+	/*global.runCommercial = (howLong) => {
+		chat.commercial(channel,howLong);
+	}*/
+
 	global.callOBS = async (command, data) => {
 		if(sosc.obs.connected == false){
-			console.log("OBS NOT CONNECTED");
+			spooderLog("OBS NOT CONNECTED");
 			return;
 		}
 
@@ -834,7 +397,7 @@ if(initMode){
 					}
 				}
 				if(event.cooldownnotification == true){
-					sayAlreadyOn(eventName);
+					return "alreadyon";
 				}
 				
 				return;
@@ -865,6 +428,7 @@ if(initMode){
 
 		for(let c in event.commands){
 			let eCommand = event.commands[c];
+			let commandDuration = parseFloat(eCommand.duration);
 			
 			switch(eCommand.type){
 				case 'response':
@@ -875,7 +439,7 @@ if(initMode){
 							let response = await responseFunct();
 							sayInChat(response);
 						}catch(e){
-							console.log("Failed to run response script. Check the event settings to verify it.", e)
+							spooderLog("Failed to run response script. Check the event settings to verify it.", e)
 						}
 						
 					}, eCommand.delay);
@@ -884,7 +448,7 @@ if(initMode){
 					setTimeout(() => {
 						if(activePlugins[eCommand.pluginname] != null){
 							if(typeof activePlugins[eCommand.pluginname].onEvent == "undefined"){
-								console.log(activePlugins[eCommand.pluginname], "onEvent() NOT FOUND");
+								spooderLog(activePlugins[eCommand.pluginname], "onEvent() NOT FOUND");
 								return;
 							}
 						}
@@ -896,18 +460,18 @@ if(initMode){
 				case 'software':
 					setTimeout(() => {
 						if(eCommand.etype == "timed"){
-							let eventDuration = parseFloat(eCommand.duration);
+							
 							let commandArgs = null;
 							if(isChat && chatIsBroadcaster(eventData)){
 								commandArgs = eventData.message.split(" ");
 								if(commandArgs[1] != null){
 									if(commandArgs[1].toLowerCase() == "on"){
-										eventDuration = -1;
+										commandDuration = -1;
 									}
 								}
 							}else if(isOSC){
 								if(event.triggers.osc.handletype == "toggle"){
-									eventDuration = -1;
+									commandDuration = -1;
 								}
 							}
 							//Checking Active Events for commands using the same address.
@@ -963,7 +527,7 @@ if(initMode){
 								}
 								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOff);
 								
-							}, eventDuration);
+							}, commandDuration);
 								
 						}else if(eCommand.etype == "oneshot"){
 							sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
@@ -976,38 +540,38 @@ if(initMode){
 				break;
 				case "obs":
 					if(sosc.obs.connected == false){
-						console.log("OBS NOT CONNECTED");
+						spooderLog("OBS NOT CONNECTED");
 						break;
 					}
 					setTimeout(()=>{
 						if(eCommand.function == "setinputmute"){
 							if(eCommand.etype == "timed"){
-								let eventDuration = parseFloat(eCommand.duration);
+								
 								callOBS("SetInputMute", {inputName:eCommand.item, inputMuted:eCommand.valueOn==1});
 								createTimeout(eventName, eCommand, eCommand.type, function(){
 									
 									callOBS("SetInputMute", {inputName:eCommand.item, inputMuted:eCommand.valueOff==1});
-								},eventDuration);
+								},commandDuration);
 							}else{
 								callOBS("SetInputMute", {inputName:eCommand.item, inputMuted:eCommand.valueOn==1});
 							}
 						}else if(eCommand.function == "switchscenes"){
 							if(eCommand.etype == "timed"){
-								let eventDuration = parseFloat(eCommand.duration);
+								
 								callOBS("SetCurrentProgramScene", {sceneName:eCommand.itemOn});
 								createTimeout(eventName, eCommand, eCommand.type, function(){
 									callOBS("SetCurrentProgramScene", {sceneName:eCommand.itemOff});
-								},eventDuration);
+								},commandDuration);
 							}else{
 								callOBS("SetCurrentProgramScene", {sceneName:eCommand.itemOn});
 							}
 						}else if(eCommand.function == "enablesceneitem"){
 							if(eCommand.etype == "timed"){
-								let eventDuration = parseFloat(eCommand.duration);
+								
 								callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOn==1});
 								createTimeout(eventName, eCommand, eCommand.type, function(){
 									callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOff==1});
-								},eventDuration);
+								},commandDuration);
 							}else{
 								callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOn==1});
 							}
@@ -1018,13 +582,46 @@ if(initMode){
 					setTimeout(()=>{
 						if(eCommand.function == "lock"){
 							if(eCommand.targettype == "all"){
-								modlocks.lockdown = modlocks.lockdown==1?0:1;
-								lockEvent(username, modlocks.lockdown==true?"lock":"unlock", "all");
-								lockPlugin(username, modlocks.lockdown==true?"lock":"unlock", "all");
+								
+								if(eCommand.etype == "toggle"){
+									modlocks.lockdown = modlocks.lockdown==0?1:0;
+									lockEvent(username, modlocks.lockdown==0?"lock":"unlock", "all");
+									lockPlugin(username, modlocks.lockdown==0?"lock":"unlock", "all");
+									sayInChat(modlocks.lockdown==0?"Lockdown initiated! All commands are blocked.":"Lockdown lifted!");
+								}else if(eCommand.etype == "timed"){
+									modlocks.lockdown = 1;
+									lockEvent(username, "lock", "all");
+									lockPlugin(username, "lock", "all");
+									sayInChat("Lockdown initiated for "+convertDuration(commandDuration)+"! All commands are blocked until then.");
+									createTimeout(eventName, eCommand, eCommand.type, function(){
+										lockEvent(username, "unlock", "all");
+										lockPlugin(username, "unlock", "all");
+										sayInChat("Lockdown lifted!");
+									}, commandDuration);
+								}
+								
 							}else if(eCommand.targettype == "event"){
-								lockEvent(username, !modlocks.event[eCommand.target]==1?"lock":"unlock", eCommand.target);
+								
+								if(eCommand.etype == "toggle"){
+									lockEvent(username, modlocks.events[eCommand.target]==0?"lock":"unlock", eCommand.target);
+								}else if(eCommand.etype == "timed"){
+									lockEvent(username, "lock", eCommand.target);
+									createTimeout(eventName, eCommand, eCommand.type, function(){
+										lockEvent(username, "unlock", eCommand.target)
+									}, commandDuration)
+									
+								}
 							}else if(eCommand.targettype == "plugin"){
-								lockPlugin(username,!modlocks.event[eCommand.target]==1?"lock":"unlock", eCommand.target);
+								
+								if(eCommand.etype == "toggle"){
+									lockPlugin(username, modlocks.plugins[eCommand.target]==0?"lock":"unlock", eCommand.target);
+								}else if(eCommand.etype == "timed"){
+									lockPlugin(username, "lock", eCommand.target);
+									
+									createTimeout(eventName, eCommand, eCommand.type, function(){
+										lockPlugin(username, "unlock", eCommand.target)
+									}, commandDuration)
+								}
 							}
 						}else if(eCommand.function == "spamguard"){
 							setSpamGuard(modlocks.spamguard==1?"off":"on");
