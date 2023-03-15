@@ -8,7 +8,7 @@ var discordLog = (...content) => {
 class SDiscord{
 
     constructor(router){
-        router.post("/saveDiscordConfig", async(req, res) => {
+        router.post("/discord/saveDiscordConfig", async(req, res) => {
             fs.writeFile(backendDir+"/settings/discord.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 if(this.loggedIn == false && req.body.token != null && req.body.token != ""){
                     this.autoLogin();
@@ -19,7 +19,23 @@ class SDiscord{
                 
             });
         });
+
+        router.get("/discord/get_channels", async(req, res) => {
+            let guilds = this.getGuilds();
+            res.send(guilds);
+        });
+
+        router.get("/discord/config", async(req, res) => {
+            let guilds = this.getGuilds();
+            res.send({config:this.config, guilds:guilds});
+        });
         
+        router.get("/discord/user", async (req, res)=>{
+            let user = await this.client.users.fetch(req.query.userid);
+            if(user != null){
+                res.send({userInfo:user});
+            }
+        })
         this.config = fs.existsSync(backendDir+"/settings/discord.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/discord.json",{encoding:"utf-8"})):null;
     }
     config = null;
@@ -33,8 +49,9 @@ class SDiscord{
 
     autoLogin(){
         
-        const {SlashCommandBuilder, Collection} = require("discord.js");
+        const {SlashCommandBuilder, Collection, REST, Routes} = require("discord.js");
         this.commands = new Collection();
+        
         return new Promise(async (res, rej) => {
 
             let discordInfo = this.config;
@@ -49,17 +66,92 @@ class SDiscord{
                 for(let d in dCommands){
                     this.commands.set(dCommands[d].data.name, dCommands[d]);
                 }
+                console.log(`Started refreshing ${commands.length} application (/) commands.`);
+                const rest = new REST({version:"10"}).setToken(discordInfo.token);
+                const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:commands});
+
+                discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
             }else{
-                let defaultCommand = {
+                
+
+                /*let defaultCommand = {
                     data:new SlashCommandBuilder()
-                            .setName("ping")
-                            .setDescription("Replies with pong"),
+                            .setName("time")
+                            .setDescription("Replies with provided time for each user's locale")
+                            .addStringOption(option=>option.setName("inputtime")
+                                .setDescription("The time in your locale to make dynamic")
+                                .setRequired(true))
+                            .addStringOption(option=>option.setName("inputdate")
+                                .setDescription("The date to make dynamic"))
+                            .addBooleanOption(option=>option.setName("relative")
+                                .setDescription("Tell how long ago or in the future the time will be"))
+                            .addBooleanOption(option=>option.setName("code")
+                                .setDescription("Get the raw code to append to your message")),
                     async execute(interaction){
-                        await interaction.reply("Pong!");
+                        let time = new Date();
+                        
+                        let inputTime = interaction.options.get("inputtime").value.toLowerCase();
+                        let inputDate = interaction.options.get("inputdate")?.value;
+                        let isRelative = interaction.options.get("relative")?.value;
+                        let isCode = interaction.options.get("code")?.value;
+                        let pmOffset = inputTime.toLowerCase().includes("pm")?12:0;
+                        inputTime.replace("pm","");
+                        inputTime.replace("am","");
+                        let splitTime = inputTime.split(":");
+                        for(let s in splitTime){splitTime[s] = parseInt(splitTime[s])}
+                        //console.log(splitTime, pmOffset);
+                        let dynamicCode = "t";
+                        if(splitTime.length == 1){
+                            time.setHours(splitTime[0]+pmOffset);
+                            time.setMinutes(0);
+                        }
+                        if(splitTime.length == 2){
+                            time.setHours(splitTime[0]+pmOffset);
+                            time.setMinutes(splitTime[1]);
+                            time.setSeconds(0);
+                            dynamicCode = "t";
+                        }else if(splitTime.length == 3){
+                            time.setHours(splitTime[0]+pmOffset);
+                            time.setMinutes(splitTime[1]);
+                            time.setSeconds(splitTime[2]);
+                            dynamicCode = "T";
+                        }
+
+                        if(inputDate != null){
+                            console.log("Date",inputDate);
+                            dynamicCode = "f";
+                            let dateSeperator = "/";
+                            if(inputDate.includes("/")){
+                                dateSeperator = "/"
+                            }else if(inputDate.includes("-")){
+                                dateSeperator = "-";
+                            }
+
+                            let splitDate = inputDate.split(dateSeperator);
+
+                            if(splitDate.length == 2){
+                                time.setDate(splitDate[0]);
+                                time.setMonth(splitDate[1]);
+                            }else if(splitDate.length == 3){
+                                let year = splitDate[2].length==2?"20"+splitDate[2]:splitDate[2];
+                                time.setFullYear(year);
+                            }
+                        }
+                        //console.log(time.getDate(), time.getMonth(), time.getFullYear());
+                        if(isRelative == true){dynamicCode="R";}
+                        let timeCode = "<t:"+Math.floor(time.getTime()/1000)+":"+dynamicCode+">";
+                        if(isCode == true){timeCode = "```"+timeCode+"```";}
+                        //console.log(timeCode);
+                        await interaction.reply(timeCode);
                     }
                 };
                 this.commands.set(defaultCommand.data.name, defaultCommand);
-                discordLog("Default command set!", defaultCommand);
+                let commands = [defaultCommand.data.toJSON()];
+                console.log(`Started refreshing ${commands.length} application (/) commands.`);
+                const rest = new REST({version:"10"}).setToken(discordInfo.token);
+                const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:commands});
+
+                discordLog(`Successfully reloaded ${data.length} application (/) commands.`);*/
             }
             if(discordInfo.token != "" && discordInfo.token != null){
                 discordLog("STARTING DISCORD CLIENT");
@@ -88,41 +180,14 @@ class SDiscord{
             client.once(Events.ClientReady, c => {
                 this.loggedIn = true;
                 discordLog("Discord Ready! Logged in as "+c.user.tag, c.user);
-                const convertArrayToObject = (array, key) => {
-                    const initialValue = {};
-                    return array.reduce((obj, item) => {
-                      return {
-                        ...obj,
-                        [item[key]]: item,
-                      };
-                    }, initialValue);
-                  };
-                let guildCache = client.guilds.cache;
-                this.guilds = convertArrayToObject(guildCache.map(g => {
-                    
-                    let channels = g.channels.cache.map(c=>{
-                        return{
-                            id:c.id,
-                            name:c.name,
-                            type:c.type
-                        }
-                    });
-                    return{
-                        id:g.id,
-                        name:g.name,
-                        channels:convertArrayToObject(channels, "id")
-                    }
-                }) || "None", "id");
-    
                 
                 res("success");
-                //discordLog("GUILDS", this.guilds);
             });
             client.on(Events.InteractionCreate, async interaction => {
                 discordLog("DISCORD INTERACTION", interaction);
                 if(!interaction.isChatInputCommand()){return;}
     
-                let command = interaction.client.commands.get(interaction.commandName);
+                let command = this.commands.get(interaction.commandName);
     
                 if(!command){
                     console.error("Not a valid command");
@@ -139,17 +204,13 @@ class SDiscord{
             client.on(Events.MessageCreate, async message=>{
                 if(message.author.id == client.user.id){return;}
     
-                for(let a in activePlugins){
-                    if(typeof activePlugins[a].onDiscord != "undefined"){
-                        activePlugins[a].onDiscord("message", message);
-                    }
-                }
+                this.callPlugins("message", message);
                 
                 if(message.guildId == null){
-                    discordLog("Discord PM", message.author.username, message.content);
+                    discordLog("Discord PM", message.author.username, message.content, message.attachments);
                     
                 }else{
-                    discordLog("Discord", this.guilds[message.guildId].name, message.author.username, message.content);
+                    discordLog("Discord", this.getGuild(message.guildId).name, message.author.username, message.content);
                     
                     if(message.content.toLowerCase() == "join" || message.content.toLowerCase() == "come here"){
                         discordLog(message.guildId, message.channelId);
@@ -167,6 +228,19 @@ class SDiscord{
         
     }
 
+    callPlugins(type, data){
+        for(let a in activePlugins){
+            if(typeof activePlugins[a].onDiscord != "undefined"){
+                try{
+                    activePlugins[a].onDiscord(type, data);
+                }catch(e){
+                    discordLog(e);
+                }
+                
+            }
+        }
+    }
+
     joinVoiceChannel(guildId, channelId){
         voice = require('@discordjs/voice');
         let targetServer = this.client.guilds.cache.get(guildId);
@@ -174,33 +248,32 @@ class SDiscord{
             channelId: channelId, //the id of the channel to join (we're using the author voice channel)
             guildId: guildId, //guild id (using the guild where the message has been sent)
             adapterCreator: targetServer.voiceAdapterCreator //voice adapter creator
-        })
+        });
+
+        let members = this.getChannel(channelId, guildId).members;
+        let speakers = {};
+        for(let m in members){
+            speakers[m] = members[m].user;
+        }
+
+        this.callPlugins("voice", {event:"join", members:members});
+
+        discordLog("VOICE CHANNEL MEMBERS", this.getChannel(channelId, guildId).members);
+
         this.voiceChannel.receiver.speaking.on('start', (userId) => {
             //actions here
             //onDiscord(type, data);
-            for(let a in activePlugins){
-                if(typeof activePlugins[a].onDiscord != "undefined"){
-                    activePlugins[a].onDiscord("voice", {event:"start", userId:userId})
-                }
-            }
-            discordLog("Speaking", userId);
+            this.callPlugins("voice", {event:"speaking-start", userId:userId})
+            //discordLog("Speaking", userId);
         });
 
         this.voiceChannel.receiver.speaking.on('end', (userId) => {
-            for(let a in activePlugins){
-                if(typeof activePlugins[a].onDiscord != "undefined"){
-                    activePlugins[a].onDiscord("voice", {event:"end", userId:userId})
-                }
-            }
-            discordLog("Stopped", userId);
+            this.callPlugins("voice", {event:"speaking-end", userId:userId});
+            //discordLog("Stopped", userId);
         });
 
         this.client.on('voiceStateUpdate', (oldstate, newstate)=>{
-            for(let a in activePlugins){
-                if(typeof activePlugins[a].onDiscord != "undefined"){
-                    activePlugins[a].onDiscord("voice", {event:"stateupdate", oldstate:oldstate, newstate:newstate});
-                }
-            }
+            this.callPlugins("voice", {event:"state-update", oldstate:oldstate, newstate:newstate});
         });
 
         this.audioPlayer = voice.createAudioPlayer({
@@ -214,28 +287,22 @@ class SDiscord{
         if(this.audioPlayer != null){
             let resource = voice.createAudioResource(url);
             this.audioPlayer.play(resource);
-            for(let a in activePlugins){
-                if(typeof activePlugins[a].onDiscord != "undefined"){
-                    activePlugins[a].onDiscord("audio", {event:"play", resource:resource});
-                }
-            }
+            this.callPlugins("audio", {event:"play", resource:resource})
         }
     }
 
     pauseAudio(){
         if(this.audioPlayer != null){
             this.audioPlayer.pause();
-            for(let a in activePlugins){
-                if(typeof activePlugins[a].onDiscord != "undefined"){
-                    activePlugins[a].onDiscord("audio", {event:"pause"});
-                }
-            }
+            this.callPlugins("audio", {event:"pause"});
         }
-        
     }
 
     leaveVoiceChannel(){
-        if(this.voiceChannel == null) {return message.channel.send('the bot isn\'t in a voice channel')}
+        if(this.voiceChannel == null) {
+            discordLog('the bot isn\'t in a voice channel');
+            return;
+        }
         //leave
         this.audioPlayer.stop();
         this.audioPlayer = null;
@@ -244,7 +311,8 @@ class SDiscord{
     }
 
     getServerByName(servername){
-        let guilds = this.guilds;
+        if(!this.loggedIn){return null;}
+        let guilds = this.getGuilds();
         //discordLog("GUILDS", servername, guilds);
         for(let g in guilds){
             
@@ -256,9 +324,9 @@ class SDiscord{
     }
 
     getChannelByName(servername, channelname){
+        if(!this.loggedIn){return null;}
         let serverId = this.getServerByName(servername);
-        //discordLog("GOT SERVER", serverId, this.guilds[serverId]);
-        let channels = this.guilds[serverId].channels;
+        let channels = this.getGuild(serverId).channels;
         //discordLog("CHANNELS", channels);
         for(let c in channels){
             //discordLog("CHANNEL SEARCH",channels[c].name, channelname);
@@ -269,19 +337,70 @@ class SDiscord{
     }
 
     getServerName(serverId){
-        return this.guilds[serverId].name;
+        if(!this.loggedIn){return null;}
+        return this.getGuild(serverId).name;
     }
 
     getChannelName(serverId, channelId){
-        return this.guilds[serverId].channels[channelId].name;
+        if(!this.loggedIn){return null;}
+        return this.getGuild(serverId).channels[channelId].name;
     }
 
     getUser(userId){
+        if(!this.loggedIn){return null;}
         return this.client.users.cache.get(userId);
     }
 
+    findUser(userId){
+        if(!this.loggedIn){return null;}
+        return this.client.users.fetch(userId);
+    }
+
     getUserName(userId){
+        if(!this.loggedIn){return null;}
         return this.client.users.cache.get(userId).username;
+    }
+
+    getGuilds(){
+        if(!this.loggedIn){return null;}
+        const convertArrayToObject = (array, key) => {
+            const initialValue = {};
+            return array.reduce((obj, item) => {
+              return {
+                ...obj,
+                [item[key]]: item,
+              };
+            }, initialValue);
+          };
+        let guildCache = this.client.guilds.cache;
+        let guilds = convertArrayToObject(guildCache.map(g => {
+            
+            let channels = g.channels.cache.map(c=>{
+                return{
+                    id:c.id,
+                    name:c.name,
+                    type:c.type
+                }
+            });
+            return{
+                id:g.id,
+                name:g.name,
+                channels:convertArrayToObject(channels, "id")
+            }
+        }) || "None", "id");
+        return guilds;
+    }
+
+    getGuild(guildId){
+        return this.client.guilds.cache.get(guildId);
+    }
+
+    getChannel(channelId, guildId){
+        return this.client.guilds.cache.get(guildId).channels.cache.get(channelId);
+    }
+
+    getAvatar(userId, avatarId){
+        fetch("https://cdn.discordapp.com/avatars/"+userId+"/"+avatarId+".png");
     }
 
     sendToChannel(server, channel, message){

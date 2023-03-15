@@ -1,12 +1,11 @@
 const Axios = require("axios");
-const { OAuth2Routes } = require("discord.js");
 const fs = require("fs");
 
 const clientId = oauth['client-id'];
 const clientSecret = oauth['client-secret'];
 
-global.username = "";
-global.channel = null;
+global.botUsername = "";
+global.homeChannel = sconfig.broadcaster.username;
 global.broadcasterUserID = 0;
 
 global.token = "";
@@ -39,12 +38,125 @@ function sayAlreadyOn(name){
     }
 }
 
+async function getBroadcasterID(){
+    if(broadcasterUserID==0){
+        await Axios({
+            url: 'https://api.twitch.tv/helix/users?login='+sconfig.broadcaster.username,
+            method: 'get',
+            headers:{
+                "Authorization": "Bearer "+token,
+                "Client-Id":clientId
+            }
+        })
+        .then((response)=>{
+            broadcasterUserID = response.data.data[0].id;
+        }).catch(error=>{
+            console.error(error);
+            if(error.response?.status == 401){
+                onAuthenticationFailure();
+            }
+            return;
+        });
+    }
+}
+
+async function getAppToken(){
+    if(appToken == ""){
+
+        var twitchScopes = [
+            'channel:moderate',
+            'chat:read',
+            'chat:edit', 
+            'whispers:read', 
+            'whispers:edit', 
+            'analytics:read:extensions', 
+            'analytics:read:games', 
+            'bits:read', 
+            'channel:edit:commercial', 
+            'channel:manage:broadcast', 
+            'channel:read:charity', 
+            'channel:manage:extensions', 
+            'channel:manage:moderators', 
+            'channel:manage:polls', 
+            'channel:manage:predictions', 
+            'channel:manage:raids', 
+            'channel:manage:redemptions', 
+            'channel:manage:schedule', 
+            'channel:manage:videos', 
+            'channel:read:editors', 
+            'channel:read:goals', 
+            'channel:read:hype_train', 
+            'channel:read:polls', 
+            'channel:read:predictions', 
+            'channel:read:redemptions', 
+            'channel:read:stream_key', 
+            'channel:read:subscriptions', 
+            'channel:read:vips', 
+            'channel:manage:vips', 
+            'clips:edit', 
+            'moderation:read', 
+            'moderator:manage:announcements', 
+            'moderator:manage:automod',
+            'moderator:read:automod_settings', 
+            'moderator:manage:automod_settings', 
+            'moderator:manage:banned_users', 
+            'moderator:read:blocked_terms',
+            'moderator:manage:chat_messages',
+            'moderator:read:chat_settings',
+            'moderator:manage:chat_settings',
+            'moderator:read:chatters',
+            'moderator:read:shield_mode',
+            'moderator:manage:shield_mode',
+            'user:edit',
+            'user:edit:follows',
+            'user:manage:blocked_users',
+            'user:read:blocked_users',
+            'user:read:broadcast',
+            'user:manage:chat_color',
+            'user:read:email',
+            'user:read:follows',
+            'user:read:subscriptions',
+            'user:manage:whispers'
+           ];
+        
+        let scopeString = "";
+        for(let t in twitchScopes){
+            if(twitchScopes[t] == ""){continue;}
+            if(scopeString == ""){
+                scopeString += twitchScopes[t];
+            }else{
+                scopeString += "+"+twitchScopes[t];
+            }
+            
+        }
+
+        var appParams = "?client_id="+oauth["client-id"]+
+            "&client_secret="+oauth["client-secret"]+
+            "&grant_type=client_credentials"+
+            "&scope="+scopeString;
+        
+        await Axios.post('https://id.twitch.tv/oauth2/token'+appParams)
+                .then((response)=>{
+                    
+                    if(typeof response.data.access_token != "undefined"){
+                        appToken = response.data.access_token;
+                    }
+                }).catch(error=>{
+                    console.error(error);
+                    return;
+                });
+    }
+}
+
 //We switched to tmi.js but we're reforming the message data to reflect its fork, twitch-js.
 //I was going to rewrite the overlays to work with tmi, but I think twitch-js has a better obj structure.
 //Why switch to tmi.js? Well, I felt tmi was more stable and better maintained than twitch-js. Not sure if I'm right...but it felt right.
 function twitchjsify(channel, tags, txt){
     let message = {
-        channel:channel,
+        channel:channel.replace("#",""),
+        respond:(responseTxt)=>{
+            sayInChat(responseTxt, channel.replace("#",""));
+        },
         username:tags.username,
         displayName:tags["display-name"],
         tags:tags,
@@ -143,9 +255,50 @@ function processMessage(channel, tags, txt, self){
             }
         }
 
+        if(command[0] == "share"){
+            
+            if(command[1] == null){
+                sayInChat("Join another channel on the side with certain plugins and commands enabled!");
+            }else{
+                let shareUser = command[1];
+                if(command[2] == null){
+                    if(shares[shareUser] == null){sayInChat("Share with that user isn't available");}
+                }else{
+                    if(shares[shareUser] == null){shares[shareUser] = {
+                        enabled:false,
+                        commands:[],
+                        plugins:[]
+                    }};
+                    if(command[2] == "join"){
+                        
+                        let joinmsg = message.message.substring(("!share "+shareUser+" join").length);
+                        joinChannel(shareUser, joinmsg);
+                    }else if(command[2] == "leave"){
+                        
+                        let partmsg = message.message.substring(("!share "+shareUser+" leave").length);
+                        leaveChannel(shareUser, partmsg);
+                    }else if(command[2] == "set"){
+                        if(command[3] == "commands"){
+                            let setCommands = message.message.substring(("!share "+shareUser+" set commands").length).replaceAll(" ","").split(",");
+                            shares[shareUser].commands = setCommands;
+                            sayInChat("Commands set for "+shareUser);
+                        }else if(command[3] == "plugins"){
+                            let setPlugins = message.message.substring(("!share "+shareUser+" set plugins").length).replaceAll(" ","").split(",");
+                            shares[shareUser].plugins = setPlugins;
+                            sayInChat("Plugins set for "+shareUser);
+                        }
+                    }else{
+                        sayInChat(shareUser+" will have these commands shared: "+shares[shareUser].commands.join(", ")+" and these plugins: "+shares[shareUser].plugins.join(", "));
+                    }
+
+                    fs.writeFileSync(backendDir+"/settings/share.json", JSON.stringify(shares));
+                }
+            }
+        }
+
         if(command[0] == "commands"){
-            let commandsArray = getChatCommands();
-            sayInChat("Here's the chat command list: "+commandsArray.join(", "));
+            let commandsArray = getChatCommands(message.channel);
+            sayInChat("Here's the chat command list: "+commandsArray.join(", "), message.channel);
             return;
         }
 
@@ -231,6 +384,12 @@ function processMessage(channel, tags, txt, self){
     }
 
     for(let e in events){
+        if(message.channel != sconfig.broadcaster.username){
+            if(!shares[message.channel]?.commands.includes(e)){
+                continue;
+            }
+        }
+        
         if(modlocks.events[e] == 1){continue;}
         if(events[e].triggers.chat.enabled && self == false){
             if(events[e].triggers.chat.search){
@@ -245,8 +404,16 @@ function processMessage(channel, tags, txt, self){
                         for(let c in cSplitOR){
                             if(cSplitOR[c].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m]; break;}
                         }
-                    }
-                    if(commandSplit[matchIndex].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m];}
+                    }else if(commandSplit[matchIndex].startsWith(">")){
+                        
+                        if(messageSplit[m].startsWith(commandSplit[matchIndex].replace(">", ""))){
+                            commandMatch[matchIndex] = messageSplit[m];
+                        }
+                    }else if(commandSplit[matchIndex].startsWith("<")){
+                        if(messageSplit[m].endsWith(commandSplit[matchIndex].replace("<", ""))){
+                            commandMatch[matchIndex] = messageSplit[m];
+                        }
+                    }else if(commandSplit[matchIndex].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m];}
                     
                     if(commandMatch[matchIndex] != false){
                         matchIndex++;
@@ -279,7 +446,13 @@ function processMessage(channel, tags, txt, self){
     
     for(p in activePlugins){
         if(modlocks.plugins[p] != 1){
-            activePlugins[p].onChat(message);
+            if(message.channel != sconfig.broadcaster.username){
+                if(shares[message.channel]?.plugins.includes(p)){
+                    activePlugins[p].onChat(message);
+                }
+            }else{
+                activePlugins[p].onChat(message);
+            }
         }
     }
 }
@@ -322,7 +495,7 @@ function checkForSpamming(viewername){
 }
 
 function processCheer(channel, userstate, message){
-    twitchLog("CHEER", userstate);
+    twitchLog("CHEER: This won't do anything yet", userstate);
 }
 
 const runChat = async(startCase) => {
@@ -340,13 +513,13 @@ const runChat = async(startCase) => {
     chat = new tmi.Client({
         options:{debug:true},
         identity:{
-            username:username,
+            username:botUsername,
             password:token
         }
     });
     
     await chat.connect().catch(error=>{console.error(error); onAuthenticationFailure();});
-    chat.join(channel).then(()=>{
+    chat.join(homeChannel).then(()=>{
         if(startCase == "restart"){
             sayInChat("Chat restarted, I'm back :D");
         }else if(startCase == "reconnect"){
@@ -366,9 +539,18 @@ const runChat = async(startCase) => {
     upInterval = setInterval(runInterval, 1000);
 };
 
-function getChatCommands(){
+function getChatCommands(shareChannel){
+
     let commandsArray = [];
+    
     for(let e in events){
+       //console.log("CHECKING ", e);
+        if(shareChannel != null && shareChannel != sconfig.broadcaster.username && shares[shareChannel]?.enabled == true){
+            if(!shares[shareChannel].commands.includes(e)){
+                //console.log("Command skipped", e, shareChannel);
+                continue;
+            }
+        }
         if(events[e].triggers.chat.enabled == true){
             if(events[e].triggers.chat.command.startsWith("!")){
                 commandsArray.push(events[e].triggers.chat.command);
@@ -451,14 +633,14 @@ var reoccuringMessageCount = Math.round(Math.random()*10);
 class STwitch{
     constructor(router){
         let expressPort = sconfig.network.host_port;
-        router.get('/handle', async (req,res)=>{
+        router.get('/twitch/authorize', async (req,res)=>{
             twitchLog("Got code");
             token = req.query.code;
             var twitchParams = "?client_id="+clientId+
                 "&client_secret="+clientSecret+
                 "&grant_type=authorization_code"+
                 "&code="+token+
-                "&redirect_uri=http://localhost:"+expressPort+"/handle"+
+                "&redirect_uri=http://localhost:"+expressPort+"/twitch/authorize"+
                 "&response_type=code";
                 
                 
@@ -490,7 +672,7 @@ class STwitch{
             })
             .then((response)=>{
                 
-                username = response.data.login;
+                botUsername = response.data.login;
             }).catch(error=>{
                 console.error(error);
                 return;
@@ -499,7 +681,7 @@ class STwitch{
             res.redirect("http://localhost:"+(expressPort));
         });
 
-        router.get("/revoke", async(req, res) => {
+        router.get("/twitch/revoke", async(req, res) => {
             let cid = clientId;
             let revokeBroadcaster = req.query.broadcaster == true;
             let revokeToken = token;
@@ -554,7 +736,7 @@ class STwitch{
             });
         });
 
-        router.get("/save_auth_to_broadcaster", async(req, res) => {
+        router.get("/twitch/save_auth_to_broadcaster", async(req, res) => {
             oauth["broadcaster_token"] = token;
             oauth["broadcaster_refreshToken"] = refreshToken;
             fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
@@ -563,7 +745,7 @@ class STwitch{
             });
         });
 
-        router.post("/saveEventSubs", async(req, res) => {
+        router.post("/twitch/saveEventSubs", async(req, res) => {
             delete req.body.callback_url;
             fs.writeFile(backendDir+"/settings/eventsub.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 eventsubs = req.body;
@@ -571,14 +753,14 @@ class STwitch{
             });
         })
 
-        router.get("/eventsubs", async(req, res) => {
+        router.get("/twitch/eventsubs", async(req, res) => {
             let sendSubs = Object.assign(eventsubs);
             sendSubs.callback_url = sconfig.network.external_http_url;
             sendSubs.spooderevents = Object.keys(events);
             res.send(JSON.stringify(sendSubs));
         });
 
-        router.get("/get_eventsub", async(req,res) => {
+        router.get("/twitch/get_eventsubs", async(req,res) => {
             await getAppToken();
             if(appToken ==""){
                 twitchLog("NO APP TOKEN");
@@ -602,7 +784,7 @@ class STwitch{
             });
         });
 
-        router.get("/get_channelpoint_rewards", async(req, res) => {
+        router.get("/twitch/get_channelpoint_rewards", async(req, res) => {
             if(oauth.broadcaster_token=="" || oauth.broadcaster_token == null){
                 res.send({status:"NO BROADCASTER TOKEN"});
                 return;
@@ -635,7 +817,7 @@ class STwitch{
             });
         });
 
-        router.get("/delete_eventsub", async(req,res) => {
+        router.get("/twitch/delete_eventsub", async(req,res) => {
             
             await Axios({
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+req.query.id,
@@ -655,18 +837,50 @@ class STwitch{
             });
         });
 
-        router.get("/refresh_eventsub", async(req,res)=>{
-            await refreshEventSubs();
+        router.get("/twitch/refresh_eventsubs", async(req,res)=>{
+            await this.refreshEventSubs();
             res.send({status:"SUCCESS"});
         })
 
-        router.get("/init_followsub", async(req,res) => {
-            let subStatus = await initEventSub(req.query.type);
+        router.get("/twitch/init_eventsub", async(req,res) => {
+            
+            let subStatus = await initEventSub(req.query.type, req.query.user_id);
             
             res.send(JSON.stringify({status:subStatus}));
         });
 
-        router.get("/chat_channel", async(req,res) => {
+        router.get("/twitch/get_eventsubs_by_user", async(req,res) => {
+            let twitchid = req.query.twitchid;
+            
+            if(twitchid == null){
+                twitchid = broadcasterUserID;
+            }
+            
+            await getAppToken();
+            if(appToken ==""){
+                twitchLog("NO APP TOKEN");
+                return;
+            }
+            await Axios({
+                url: 'https://api.twitch.tv/helix/eventsub/subscriptions?user_id='+twitchid,
+                method: 'GET',
+                headers:{
+                    "Client-Id": oauth["client-id"],
+                    "Authorization": " Bearer "+appToken,
+                    "Content-Type": "application/json"
+                }
+            })
+            .then((response)=>{
+                
+                res.send(JSON.stringify(response.data));
+            }).catch(error=>{
+                console.error(error);
+
+                return;
+            });
+        })
+
+        router.get("/twitch/chat_channel", async(req,res) => {
             let channel = req.query.channel;
             let leaveMessage = req.query.leavemessage;
             let joinMessage = req.query.joinmessage;
@@ -674,7 +888,7 @@ class STwitch{
             res.send(JSON.stringify({status:"SUCCESS"}));
         });
 
-        router.get("/chat_restart", async(req, res) => {
+        router.get("/twitch/chat_restart", async(req, res) => {
             restartChat("restart");
             res.send(JSON.stringify({status:"SUCCESS"}));
         });
@@ -682,7 +896,7 @@ class STwitch{
         router.get("/mod/currentviewers", async(req,res) => {
             
             await Axios({
-                url: "https://tmi.twitch.tv/group/user/"+channel.substr(1)+"/chatters",
+                url: "https://tmi.twitch.tv/group/user/"+homeChannel.substr(1)+"/chatters",
                 method: 'get',
             })
             .then((response)=>{
@@ -696,7 +910,7 @@ class STwitch{
         });
 
         //HTTPS ROUTER
-        router.post("/webhooks/callback", async (req, res) => {
+        router.post("/webhooks/eventsub", async (req, res) => {
             const messageType = req.header("Twitch-Eventsub-Message-Type");
             if (messageType === "webhook_callback_verification") {
                 twitchLog("Verifying Webhook", req.body.subscription.type);
@@ -710,6 +924,16 @@ class STwitch{
                 `Receiving ${type} request`,
                 event
             );
+
+            if(event.broadcaster_user_id != broadcasterUserID){
+                if(type == "stream.online"){
+                    webUI.setShare(event.broadcaster_user_login, true);
+                }else if(type == "stream.offline"){
+                    webUI.setShare(event.broadcaster_user_login, false);
+                }
+                res.status(200).end();
+                return;
+            }
 
             if(type == "channel.raid"){
                 await getBroadcasterID();
@@ -774,11 +998,13 @@ class STwitch{
 
                 if(eventsubs.events[type].plugin != null){
                     if(eventsubs.events[type].plugin.enabled){
-                        if(activePlugins[eventsubs.events[type].plugin.pluginname] != null){
-                            if(typeof activePlugins[eventsubs.events[type].plugin.pluginname].onEvent == "undefined"){
-                                twitchLog("NO ONEVENT FUNCTION FOUND ON "+eventsubs.events[type].plugin.pluginname);
-                            }else{
-                                activePlugins[eventsubs.events[type].plugin.pluginname].onEvent(eventsubs.events[type].plugin.eventname, event);
+                        let plugin = eventsubs.events[type].plugin;
+                        if(activePlugins[plugin.pluginname] != null){
+                            if(typeof activePlugins[plugin.pluginname].onPreEvent){
+                                twitchLog("NO ONEVENT FUNCTION FOUND ON "+plugin.pluginname);
+                                activePlugins[plugin.pluginname].onPreEvent(plugin.eventname, event);
+                            }else if(typeof activePlugins[plugin.pluginname].onEvent){
+                                activePlugins[plugin.pluginname].onEvent(plugin.eventname, event);
                             }
                         }
                     }
@@ -887,116 +1113,6 @@ class STwitch{
             }
         }
 
-        async function getBroadcasterID(){
-            if(broadcasterUserID==0){
-                await Axios({
-                    url: 'https://api.twitch.tv/helix/users?login='+sconfig.broadcaster.username,
-                    method: 'get',
-                    headers:{
-                        "Authorization": "Bearer "+token,
-                        "Client-Id":clientId
-                    }
-                })
-                .then((response)=>{
-                    broadcasterUserID = response.data.data[0].id;
-                }).catch(error=>{
-                    console.error(error);
-                    if(error.response?.status == 401){
-                        onAuthenticationFailure();
-                    }
-                    return;
-                });
-            }
-        }
-
-        async function getAppToken(){
-            if(appToken == ""){
-
-                var twitchScopes = [
-                    'channel:moderate',
-                    'chat:read',
-                    'chat:edit', 
-                    'whispers:read', 
-                    'whispers:edit', 
-                    'analytics:read:extensions', 
-                    'analytics:read:games', 
-                    'bits:read', 
-                    'channel:edit:commercial', 
-                    'channel:manage:broadcast', 
-                    'channel:read:charity', 
-                    'channel:manage:extensions', 
-                    'channel:manage:moderators', 
-                    'channel:manage:polls', 
-                    'channel:manage:predictions', 
-                    'channel:manage:raids', 
-                    'channel:manage:redemptions', 
-                    'channel:manage:schedule', 
-                    'channel:manage:videos', 
-                    'channel:read:editors', 
-                    'channel:read:goals', 
-                    'channel:read:hype_train', 
-                    'channel:read:polls', 
-                    'channel:read:predictions', 
-                    'channel:read:redemptions', 
-                    'channel:read:stream_key', 
-                    'channel:read:subscriptions', 
-                    'channel:read:vips', 
-                    'channel:manage:vips', 
-                    'clips:edit', 
-                    'moderation:read', 
-                    'moderator:manage:announcements', 
-                    'moderator:manage:automod',
-                    'moderator:read:automod_settings', 
-                    'moderator:manage:automod_settings', 
-                    'moderator:manage:banned_users', 
-                    'moderator:read:blocked_terms',
-                    'moderator:manage:chat_messages',
-                    'moderator:read:chat_settings',
-                    'moderator:manage:chat_settings',
-                    'moderator:read:chatters',
-                    'moderator:read:shield_mode',
-                    'moderator:manage:shield_mode',
-                    'user:edit',
-                    'user:edit:follows',
-                    'user:manage:blocked_users',
-                    'user:read:blocked_users',
-                    'user:read:broadcast',
-                    'user:manage:chat_color',
-                    'user:read:email',
-                    'user:read:follows',
-                    'user:read:subscriptions',
-                    'user:manage:whispers'
-                   ];
-                
-                let scopeString = "";
-                for(let t in twitchScopes){
-                    if(twitchScopes[t] == ""){continue;}
-                    if(scopeString == ""){
-                        scopeString += twitchScopes[t];
-                    }else{
-                        scopeString += "+"+twitchScopes[t];
-                    }
-                    
-                }
-
-                var appParams = "?client_id="+oauth["client-id"]+
-                    "&client_secret="+oauth["client-secret"]+
-                    "&grant_type=client_credentials"+
-                    "&scope="+scopeString;
-                
-                await Axios.post('https://id.twitch.tv/oauth2/token'+appParams)
-                        .then((response)=>{
-                            
-                            if(typeof response.data.access_token != "undefined"){
-                                appToken = response.data.access_token;
-                            }
-                        }).catch(error=>{
-                            console.error(error);
-                            return;
-                        });
-            }
-        }
-
         async function getEventSubs(){
             await getAppToken();
             if(appToken ==""){
@@ -1029,14 +1145,18 @@ class STwitch{
             let subtype = "";
             for(let s in subs.data){
                 subtype = subs.data[s].type;
+                let bid = subs.data[s].condition.broadcaster_user_id;
                 if(subs.data[s].type == "channel.raid"){
                     if(subs.data[s].condition.to_broadcaster_user_id != ""){
-                        subtype += "-send"
-                    }else{
                         subtype += "-receive";
+                        bid = subs.data[s].condition.to_broadcaster_user_id;
+                    }else{
+                        subtype += "-send";
+                        bid = subs.data[s].condition.from_broadcaster_user_id;
                     }
                 }
-                await initEventSub(subtype);
+                
+                await initEventSub(subtype, bid);
             }
         }
 
@@ -1055,19 +1175,23 @@ class STwitch{
             });
         }
         
-        async function initEventSub(eventType){
+        async function initEventSub(eventType, bid){
             await getAppToken();
-            await getBroadcasterID();
-
+            
+            if(bid == null){
+                await getBroadcasterID();
+                bid = broadcasterUserID;
+            }
+            
             var condition = {};
 
             if(!eventType.startsWith("channel.raid")){
-                condition = {"broadcaster_user_id":broadcasterUserID};
+                condition = {"broadcaster_user_id":bid};
             }else{
                 if(eventType.split("-")[1] == "receive"){
-                    condition = {"to_broadcaster_user_id":broadcasterUserID};
+                    condition = {"to_broadcaster_user_id":bid};
                 }else{
-                    condition = {"from_broadcaster_user_id":broadcasterUserID};
+                    condition = {"from_broadcaster_user_id":bid};
                 }
                 eventType = eventType.split("-")[0];
             }
@@ -1087,7 +1211,7 @@ class STwitch{
                         "condition":condition,
                         "transport":{
                             "method": "webhook",
-                            "callback":sconfig.network.external_http_url+"/webhooks/callback",
+                            "callback":sconfig.network.external_http_url+"/webhooks/eventsub",
                             "secret":"imasecretboi"
                         }
                     }
@@ -1100,7 +1224,8 @@ class STwitch{
             
         };
 
-        global.sayInChat = async (message) =>{
+        global.sayInChat = async (message, chatChannel) =>{
+            if(chatChannel == null){chatChannel = homeChannel}
             if(message == null || message == ""){
                 twitchLog("EMPTY MESSAGE");
                 return;
@@ -1112,14 +1237,14 @@ class STwitch{
                 for(let stringpos=0; stringpos<message.length; stringpos+=limit){
                     
                     if(stringpos+limit > message.length){
-                        await chat.say(channel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
+                        await chat.say(homeChannel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
                     }else{
                         //twitchLog(stringpos, stringpos.limit);
-                        await chat.say(channel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+                        await chat.say(homeChannel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
                     }
                 }
             }else{
-                await chat.say(channel,message)
+                await chat.say(chatChannel,message)
                 .catch(e=>{
                     twitchLog("CHAT ERROR", e);
                     restartChat(message);
@@ -1131,7 +1256,7 @@ class STwitch{
             await this.validateChatbot();
             if(leaveMessage != null && leaveMessage != ""){sayInChat(leaveMessage);}
             await chat.disconnect();
-            channel = newChannel;
+            homeChannel = newChannel;
             if(joinMessage != null && joinMessage != ""){
                 runChat(joinMessage);
             }else{
@@ -1142,6 +1267,16 @@ class STwitch{
     
         global.disconnectChat = () => {
             chat.disconnect();
+        }
+
+        global.joinChannel = async (channelname, joinmsg)=>{
+            await chat.join(channelname);
+            sayInChat(joinmsg, channelname);
+        }
+
+        global.leaveChannel = async (channelname, partmsg)=>{
+            sayInChat(partmsg, channelname);
+            await chat.part(channelname);
         }
     
         global.restartChat = async (message) => {
@@ -1172,7 +1307,7 @@ class STwitch{
     
         global.getChatters = async (type) => {
             const axios = require("axios");
-            let response = await axios.get("https://tmi.twitch.tv/group/user/"+channel.substr(1)+"/chatters");
+            let response = await axios.get("https://tmi.twitch.tv/group/user/"+homeChannel.substr(1)+"/chatters");
             let chArray = [];
             if(type == "all"){
                 for(let c in response.data.chatters){chArray = chArray.concat(response.data.chatters[c]);}
@@ -1245,11 +1380,69 @@ class STwitch{
                     return;
                 }
             }
+
+            await getBroadcasterID();
+            await getAppToken();
     
             runChat();
             res("success");
         })
         
+	}
+
+    async getChannelInfo(){
+        return new Promise((res, rej) => {
+            Axios({
+                url: "https://api.twitch.tv/helix/channels?broadcaster_id="+broadcasterUserID,
+                method: 'GET',
+                headers:{
+                    "Authorization": "Bearer "+appToken,
+                    "Client-Id":clientId,
+                }
+            })
+            .then((response)=>{
+                if(response.data.data[0] != null){
+                    
+                    res(response.data.data);
+                }else{
+                    res(false);
+                }
+                
+            }).catch(error=>{
+                rej(error);
+            });
+        })
+    }
+
+    getChannels(){
+        if(chat == null){return null;}
+        if(chat.readyState() == "OPEN"){
+            return chat.getChannels();
+        }else{
+            return null;
+        }
+    }
+
+    getUserInfo(user){
+
+		return new Promise(async (res, rej)=>{
+			fetch("https://api.twitch.tv/helix/users?login="+user, {
+				method: 'GET',
+				headers:{
+					"Client-Id": oauth["client-id"],
+					"Authorization": " Bearer "+appToken,
+					"Content-Type": "application/json"
+				}
+			})
+			.then(response => response.json())
+			.then(data => {
+				
+				if(data != null){
+					res(data.data);
+				}
+			});
+			
+		})
 	}
 
 	async validateBroadcaster(){
@@ -1299,7 +1492,7 @@ class STwitch{
                 }
             })
             .then((response)=>{
-                username = response.data.login;
+                botUsername = response.data.login;
                 twitchLog("Validated Chatbot: "+response.data.login+"!");
                 res({status:"OK"});
             }).catch(error=>{

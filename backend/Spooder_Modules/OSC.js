@@ -9,7 +9,6 @@ var oscLog = (...content) => {
 class SOSC {
     osc = null;
     oscTCP = null;
-    obs = null;
     udpClients = sconfig.network.udp_clients
     monitorLogs = {
         logs:[],
@@ -46,6 +45,9 @@ class SOSC {
 
     sendToTCP = (address, oscValue, log) => {
         if(log==null){log=true;}
+        if(typeof oscValue == "object"){
+            oscValue = JSON.stringify(oscValue);
+        }
         let newMessage = null;
         if(oscValue instanceof Array == false){
             newMessage = new OSC.Message(address, oscValue);
@@ -124,15 +126,21 @@ class SOSC {
             if(o=="sectionname"){continue;}
             if(osctunnels[o]["handlerFrom"] == "tcp"){
                 oscTCP.on(osctunnels[o]["addressFrom"], message => {
+                    let address = null;
+                    if(osctunnels[o]["addressFrom"].endsWith("*")){
+                        address = message.address.replace(osctunnels[o]["addressFrom"].replace("*",""), osctunnels[o]["addressTo"].replace("*",""))
+                    }else{
+                        address = osctunnels[o]["addressTo"];
+                    }
                     switch(osctunnels[o]["handlerTo"]){
                         case "tcp":
-                            sendToTCP(osctunnels[o]["addressTo"], message.args[0]);
+                            sendToTCP(address, message.args[0]);
                         break;
                         case "udp":
-                            sendToUDP(-2,osctunnels[o]["addressTo"], message.args.join(","));
+                            sendToUDP(-2,address, message.args.join(","));
                         break;
                         default:
-                            sendToUDP(osctunnels[o]["handlerTo"], osctunnels[o]["addressTo"], message.args.join(","));
+                            sendToUDP(osctunnels[o]["handlerTo"], address, message.args.join(","));
                     }
                 });
             }else{
@@ -230,7 +238,7 @@ class SOSC {
 
                 //Only the plugin with its name in the beginning of the address
                 //will call its onOSC
-                if(address[1] == p){
+                if(p.startsWith(address[1])){
                     if(activePlugins[p].onOSC != null){
                         activePlugins[p].onOSC(message);
                     }
@@ -326,8 +334,8 @@ class SOSC {
             }
 
             if(message.address.startsWith("/obs")){
-                if(this.obs != null){
-                    this.obs.onOSC(message);
+                if(obs != null){
+                    obs.onOSC(message);
                 }
                 return;
             }
@@ -337,9 +345,6 @@ class SOSC {
         oscTCP.open();
 
         this.updateOSCListeners();
-
-        this.obs = new OBSOSC();
-        this.obs.autoLogin();
     }
 }
 

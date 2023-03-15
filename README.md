@@ -9,6 +9,7 @@
 <a href="#the-mod-ui">The Mod UI</a><br>
 <a href="#authenticating-mods">Authenticating Mods</a><br>
 <a href="#creatingmanaging-plugins">Creating/Managing Plugins</a><br>
+<a href="#sharing-pluginscommands">Sharing Plugins/Commands</a><br>
 <a href="#osc-tunnels">OSC Tunnels</a><br>
 <a href="#accessing-externally">Accessing Externally</a><br>
 <a href="#eventsubs">EventSubs</a><br>
@@ -76,8 +77,12 @@ If you've set up both external tunnels in the Config, you can share the web tunn
 Don't worry, it's not that easy for just anyone to use the Mod UI. First the broadcaster must trust their users using '!mod trust username' which will store the username in mod.json with trust level "m" for Mod. Then mods log into the Mod UI using their Twitch username and any password they want. They are matching their username with what you have on file and creating a password to log into your Spooder. Finally, mods verify their identity by calling '!mod verify' in the broadcaster's chat to save their password and they can then access the Mod UI with their new credentials. Passwords are encrypted and stored in mod.json. This way your Ngrok link can change and all mods need to do is login with their credentials.
 
 # Creating/Managing Plugins
-Plugins take in the same data Spooder's events do and how they work is entirely up to you. Check out the sample plugin repository to get started with making plugins. The Plugins tab in Spooder's Web UI can install plugins by uploading the plugin as a zip file. Once installed, you can configure the plugin's settings, upload assets to the plugin, and export the plugin. Note: Exported plugins will not include its assets folder.
+Plugins take in the same data Spooder's events do and how they work is entirely up to you. Check out the sample plugin repository to get started with making plugins. The Plugins tab in Spooder's Web UI can install plugins by uploading the plugin as a zip file. Once installed, you can configure the plugin's settings, upload assets to the plugin, and export the plugin. Note: Exported plugins will not include its assets folder. 
+You can now create a plugin within the Web UI which will clone the sample plugin repository and install the folders for you. Go wild with it!
 Sample Plugin: https://github.com/GreySole/Spooder-Sample-Plugin
+
+# Sharing Plugins/Commands
+Now you can easily share certain plugins and commands without Spooder leaving your channel! Go to the Sharing tab in the Web UI. Add a Twitch username to create a share. You'll get the display name and profile picture if valid. Click set on either plugins or commands to turn any of them on or off for that user. Finally, click the play button to begin the share. You can set a join and leave message or leave them blank. You don't have to save your shares to use the messages currently set. You can also change plugins and commands and save while sharing. Turn on Live Auto Share to create an eventsub to that Twitch channel. Your Spooder will automatically join their channel and say the join message on file.
 
 # OSC Tunnels
 These tunnels simply listen for OSC from overlays or software and repeat them to another address. So that software like TouchOSC can control other devices or overlays.

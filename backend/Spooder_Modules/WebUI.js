@@ -53,6 +53,8 @@ class WebUI {
         let webDir = path.join(backendDir, "web");
         let overlayDir = path.join(backendDir, "web", "overlay");
         let utilityDir = path.join(backendDir, "web", "utility");
+        let assetDir = path.join(backendDir, "web", "assets");
+        let iconDir = path.join(backendDir, "web", "icons");
         
         if(!fs.existsSync(pluginsDir)){
             fs.mkdirSync(pluginsDir);
@@ -70,10 +72,18 @@ class WebUI {
             fs.mkdirSync(utilityDir);
         }
 
+        if(!fs.existsSync(assetDir)){
+            fs.mkdirSync(assetDir);
+        }
+
+        if(!fs.existsSync(iconDir)){
+            fs.mkdirSync(iconDir);
+        }
+
         var app = new express();
         var router = express.Router();
 
-        channel = "#"+sconfig.broadcaster.username;
+        homeChannel = sconfig.broadcaster.username;
         expressPort = devMode===false?sconfig.network.host_port:3001;
         app.use("/",router);
         if(devMode === false){
@@ -84,6 +94,7 @@ class WebUI {
         router.use("/overlay", express.static(backendDir+'/web/overlay'));
         router.use("/utility", express.static(backendDir+'/web/utility'));
         router.use("/settings", express.static(backendDir+'/web/settings'));
+        router.use("/assets", express.static(backendDir+'/web/assets'));
         router.use("/icons", express.static(backendDir+'/web/icons'));
 
         router.use(bodyParser.urlencoded({extended:true}));
@@ -96,10 +107,10 @@ class WebUI {
 
         app.use((req, res, next) => {
             
-            res.status(404).send("<h1>Page not found on the server</h1>")
+            res.status(404).send("<h1>Page not found on the server</h1>");
         });
 
-        router.get("/overlay/get", async(req, res) => {
+        router.get("/plugin/get", async(req, res) => {
 
             let isExternal = req.query.external;
             
@@ -110,7 +121,7 @@ class WebUI {
                 var thisPlugin = fs.readFileSync(backendDir+"/plugins/"+pluginName+"/settings.json", {encoding:'utf8'});
                 pluginSettings = JSON.parse(thisPlugin);
             }catch(e){
-                webLog("Plugin has no settings");
+                webLog(pluginName+" has no settings");
             }
             
             let oscInfo = null;
@@ -118,12 +129,14 @@ class WebUI {
             if(isExternal == "true"){
                 oscInfo = {
                     host: sconfig.network.external_tcp_url,
+                    name:pluginName,
                     port: null,
                     settings: pluginSettings
                 };
             }else{
                 oscInfo = {
                     host: sconfig.network.host,
+                    name:pluginName,
                     port: sconfig.network.osc_tcp_port,
                     settings: pluginSettings
                 };
@@ -134,7 +147,7 @@ class WebUI {
 
         router.get('/command_table', async (req, res) => {
             let obs = {};
-            if(sosc.obs.connected){
+            if(obs.connected){
                 let obsInputs = await callOBS("GetInputList");
                 let obsScenes = await callOBS("GetSceneList");
                 obs.inputs = obsInputs.inputs;
@@ -171,11 +184,9 @@ class WebUI {
                     destchannel:""
                 }
             }
-            if(discord.loggedIn){
-                discordData.guilds = discord.guilds;
-            }
+            
             //console.log({config:sconfig, discord:discordData, backups:backups});
-            res.send({config:sconfig, discord:discordData, backups:backups});
+            res.send({config:sconfig, backups:backups});
         });
 
         router.get('/udp_hosts', (req, res) => {
@@ -187,7 +198,7 @@ class WebUI {
                 host:sconfig.network.host,
                 port:sconfig.network.osc_tcp_port,
                 udp_clients:sconfig.network["udp_clients"],
-                plugins:Object.keys(activePlugins),
+                plugins:Object.keys(activePlugins)
             }
 
             var hostReturn = {
@@ -195,11 +206,14 @@ class WebUI {
             }
             
             res.send({
-                "user":username,
+                "user":botUsername,
+                "homeChannel":homeChannel,
                 "clientID": oauth["client-id"],
                 "osc":oscReturn,
                 "host":hostReturn,
-                "themes":themes
+                "themes":themes,
+                "activeShares":twitch.getChannels(),
+                "shares":Object.keys(shares)
             });
         });
 
@@ -224,7 +238,7 @@ class WebUI {
                 statusMsg += " (Ngrok started)";
             }
 
-            if(sconfig.network.externalhandle != req.body.network.externalhandle || sconfig.network.external_http_url != req.body.external_http_url){
+            if(sconfig.network.externalhandle != req.body.network.externalhandle){
                 sconfig.network.externalhandle = req.body.network.externalhandle;
                 sconfig.network.external_http_url = req.body.network.external_http_url;
                 sconfig.network.ngrokauthtoken = sconfig.network.ngrokauthtoken;
@@ -232,11 +246,10 @@ class WebUI {
                 statusMsg += " (Refreshing EventSubs)";
             }
             
-            
             fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 
                 sconfig = req.body;
-                res.send({status:statusMsg});
+                res.send({status:"CONFIG SAVED "+statusMsg});
                 webLog("SAVED THE CONFIG");
             });
         });
@@ -248,7 +261,11 @@ class WebUI {
                 res.send({status:statusMsg});
                 webLog("SAVED THE SPOODER");
             });
-        })
+        });
+
+        router.get("/osc_tunnels", async(req, res) => {
+            res.send(JSON.stringify(osctunnels));
+        });
 
         router.post("/saveOSCTunnels", async(req, res) => {
             fs.writeFile(backendDir+"/settings/osc-tunnels.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
@@ -259,7 +276,105 @@ class WebUI {
             });
         });
 
-        
+        router.get("/shares", (req,res) => {
+            let chatCommands = {};
+            let activeShares = twitch.getChannels();
+            for(let e in events){
+                if(events[e].triggers.chat.enabled){
+                    chatCommands[e] = events[e].triggers.chat.command;
+                }
+            }
+            let plugins = {};
+            for(let p in activePlugins){
+                plugins[p] = activePlugins[p].name;
+            }
+            
+            res.send({
+                shareData:shares,
+                activeShares:activeShares,
+                commandData:chatCommands,
+                activePlugins:plugins
+            });
+        });
+
+        router.get("/verifyShareTarget", async (req, res)=>{
+            let shareUser = req.query.shareuser;
+            let userInfo = await twitch.getUserInfo(shareUser);
+
+            if(userInfo != null){
+                res.send({
+                    status:"ok",
+                    info:userInfo
+                });
+            }else{
+                res.send({
+                    status:"notfound"
+                });
+            }
+        })
+
+        router.post("/saveShares", async(req, res)=>{
+            let newShares = req.body;
+            fs.writeFile(backendDir+"/settings/shares.json", JSON.stringify(newShares), "utf-8", (err, data)=>{
+                let statusMsg = "ok"
+                shares = newShares;
+                res.send({status:statusMsg});
+                webLog("SAVED THE SHARES");
+            });
+        });
+
+        router.post("/setShare", (req,res) => {
+            let shareUser = req.body.shareuser;
+            let isEnabled = req.body.enabled;
+            let message = req.body.message;
+            
+            this.setShare(shareUser, isEnabled, message);
+            
+            res.send({status:"ok"});
+        });
+
+        router.post('/create_plugin', async(req, res)=>{
+            
+            let pluginName = req.body.pluginName;
+            let options = {
+                createInfo:{
+                    name:pluginName,
+                    author:req.body.author,
+                    description:req.body.description
+                },
+                overlay:true,
+                utility:true
+            };
+            let pluginDirName = req.body.internalName;
+            
+            let pluginPath = path.join(backendDir, "tmp", pluginDirName);
+
+            if(!fs.existsSync(pluginPath)){
+                fs.mkdirSync(pluginPath, {recursive:true});
+            }else{
+                fs.rmSync(pluginPath, {recursive:true});
+            }
+            
+            const childProcess = require("child_process");
+            childProcess.exec("git clone https://github.com/GreySole/Spooder-Sample-Plugin "+pluginPath,{
+                cwd: './'
+              }, async (error, out, err)=>{
+                if(error){
+                    console.log(err);
+                    res.send({
+                        status:"error",
+                        error:err
+                    });
+                }else{
+                    res.send({
+                        status:"OK",
+                        pluginName:pluginName
+                    });
+                    
+                    await this.installPluginFromTemp(pluginDirName, options);
+                }
+            })
+        });
 
         router.post('/install_plugin', async (req, res) => {
             try{
@@ -271,164 +386,85 @@ class WebUI {
                     })
                 }else{
                     let pluginZip = req.files.file;
-                    let pluginDirName = pluginZip.name.split(".")[0];
-                    let renameCount = 1;
-                    while(fs.existsSync(path.join(backendDir, "plugins", pluginDirName))){
-                        if(!fs.existsSync(path.join(backendDir, "plugins", pluginDirName+renameCount))){
-                            pluginDirName += renameCount;
-                            break;
-                        }else{
-                            renameCount++;
-                        }
-                    }
+                    let pluginDirName = req.body.internalName;
+                    
 
-                    //Make /tmp
-                    if(!fs.existsSync(backendDir+"/tmp")){
-                        fs.mkdirSync(backendDir+"/tmp");
-                    }
-
-                    let tempFile = path.join(backendDir,"tmp", pluginZip.name);
                     let tempDir = path.join(backendDir, "tmp", pluginDirName);
-                    let pluginDir = path.join(backendDir,"plugins", pluginDirName);
-                    let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
-                    let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
-                    let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
-                    let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
+                    if(fs.existsSync(tempDir)){
+                        await fs.rm(tempDir, {recursive:true});
+                    }
+                    
+                    fs.mkdirSync(tempDir, {recursive:true});
+                    
+                    let tempFile = path.join(backendDir,"tmp", pluginDirName, pluginZip.name);
                     //Cleanup before install
                     if(fs.existsSync(tempFile)){
                         await fs.rm(tempFile);
                     }
-                    if(fs.existsSync(tempDir)){
-                        await fs.rm(tempDir, {recursive:true});
-                    }
-
+                    
+                    sendToTCP("/frontend/plugin/install/progress",{
+                        pluginName:pluginDirName,
+                        status:"progress",
+                        message:"Extracting..."
+                    });
                     //Start installing
                     await pluginZip.mv(tempFile);
                     webLog("EXTRACT ZIP");
-                    let zip = new AdmZip(tempFile);
-                    zip.extractAllTo(tempDir);
-
-                    if(!fs.existsSync(tempDir+"/command")){
-                        res.send({
-                            status: false,
-                            message: 'No command folder'
-                        })
-                    }
-
-                    if(fs.existsSync(tempDir+"/command")){
-                        await fs.move(tempDir+"/command", pluginDir, {overwrite:true});
-
-                        chmodr(pluginDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-                    
-                    if(fs.existsSync(tempDir+"/overlay")){
-                        await fs.move(tempDir+"/overlay", overlayDir, {overwrite:true});
-
-                        chmodr(overlayDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-
-                    if(fs.existsSync(tempDir+"/utility")){
-                        await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
-
-                        chmodr(utilityDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-
-                    if(fs.existsSync(tempDir+"/settings")){
-                        await fs.move(tempDir+"/settings", settingsDir, {overwrite:true});
-
-                        chmodr(settingsDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-
-                    if(fs.existsSync(tempDir+"/icon.png")){
-                        await fs.move(tempDir+"/icon.png", iconDir, {overwrite:true});
-
-                        chmodr(iconDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-                    
-                    webLog("COMPLETE!");
-                    fs.rm(tempFile);
-                    fs.rm(tempDir, {recursive:true});
-                    this.getPlugins();
                     res.send({
                         status:true,
                         message: "File Upload Success",
                         plugin:pluginDirName
                     });
+                    let zip = new AdmZip(tempFile);
+                    zip.extractAllTo(tempDir);
+                    fs.rm(tempFile);
+                    await this.installPluginFromTemp(pluginDirName);
+                   
+                    
                 }
             }catch(e){
                 console.error(e);
             }
         });
 
+        router.get("/reinstall_plugin", async (req, res) => {
+            let pluginName = req.query.pluginname;
+            await this.installPluginDependencies(pluginName, path.join(backendDir, "plugins", pluginName));
+            this.getPlugins();
+            res.send({status:"ok"});
+        })
+
         router.get("/export_plugin/*", async(req, res) => {
             
             let pluginName = req.params['0'];
             
-            //let tempFile = path.join(backendDir,"tmp", pluginZip.name);
             let tempDir = path.join(backendDir, "tmp", pluginName);
             let pluginDir = path.join(backendDir,"plugins", pluginName);
             let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
             let utilityDir = path.join(backendDir, "web", "utility", pluginName);
             let settingsDir = path.join(backendDir, "web", "settings", pluginName);
             let iconFile = path.join(backendDir, "web", "icons", pluginName+".png");
-            if(fs.existsSync(pluginDir)){
-                fs.copySync(pluginDir, tempDir+"/command");
-            }
-            
-            if(fs.existsSync(overlayDir)){
-                fs.copySync(overlayDir, tempDir+"/overlay");
-                if(fs.existsSync(tempDir+"/overlay/assets")){
-                    await fs.rm(tempDir+"/overlay/assets", {recursive:true});
-                }
-            }
-
-            if(fs.existsSync(utilityDir)){
-                fs.copySync(utilityDir, tempDir+"/utility");
-            }
-
-            if(fs.existsSync(settingsDir)){
-                fs.copySync(settingsDir, tempDir+"/settings");
-            }
-
-            if(fs.existsSync(iconFile)){
-                fs.copyFileSync(iconFile, tempDir+"/icon.png");
-            }
 
             let zip = new AdmZip();
 
-            if(fs.existsSync(tempDir+"/command")){
-                zip.addLocalFolder(tempDir+"/command", "/command");
+            if(fs.existsSync(pluginDir)){
+                zip.addLocalFolder(pluginDir, "/command", (filename)=>{return !filename.includes("node_modules")&&!filename.includes("settings.json")});
             }
 
-            if(fs.existsSync(tempDir+"/overlay")){
-                zip.addLocalFolder(tempDir+"/overlay", "/overlay");
+            if(fs.existsSync(overlayDir)){
+                zip.addLocalFolder(overlayDir, "/overlay");
             }
 
-            if(fs.existsSync(tempDir+"/utility")){
-                zip.addLocalFolder(tempDir+"/utility", "/utility");
+            if(fs.existsSync(utilityDir)){
+                zip.addLocalFolder(utilityDir, "/utility");
             }
 
-            if(fs.existsSync(tempDir+"/settings")){
-                zip.addLocalFolder(tempDir+"/settings", "/settings");
+            if(fs.existsSync(settingsDir)){
+                zip.addLocalFolder(settingsDir, "/settings");
             }
 
-            if(fs.existsSync(tempDir+"/icon.png")){
-                zip.addLocalFile(tempDir+"/icon.png");
+            if(fs.existsSync(iconFile)){
+                zip.addLocalFile(iconFile, null, "icon.png");
             }
             
             zip.writeZip(tempDir+"/"+pluginName+".zip");
@@ -527,9 +563,11 @@ class WebUI {
         });
 
         router.post("/backup_plugins", async(req, res)=>{
+
             let zip = new AdmZip();
 
-            zip.addLocalFolder(backendDir+"/plugins", "/plugins");
+            zip.addLocalFolder(backendDir+"/plugins", "/plugins", (filename)=>{return !filename.includes("node_modules")});
+            
             zip.addLocalFolder(backendDir+"/web", "/web");
 
             if(!fs.existsSync(backendDir+"/backup")){
@@ -544,8 +582,9 @@ class WebUI {
                 backupName = req.body.backupName;
             }else{
                 let date = new Date();
-                backupName = date.getFullYear()+"-"+date.getMonth()+"-"+date.getDate()+"-"+date.getHours()+"-"+date.getMinutes()+"-"+date.getSeconds();
+                backupName = sconfig.bot.bot_name+"-"+date.getFullYear()+"-"+date.getMonth()+"-"+date.getDate()+"-"+date.getHours()+"-"+date.getMinutes()+"-"+date.getSeconds();
             }
+            
             webLog("Writing backup. This can take a while depending on how many plugins you have. I wish I could show you progress...");
             
             zip.writeZip(backendDir+"/backup/plugins/"+backupName+".zip", (e)=>{
@@ -618,18 +657,23 @@ class WebUI {
 
             let zip = new AdmZip(path.join(backendDir, "tmp", fileName));
             zip.extractAllTo(fileDir);
-            
-            for(let s in selections){
-                webLog("CHECKING", s+".json");
-                if(selections[s] == true){
-                    if(fs.existsSync(path.join(fileDir, s+".json"))){
-                        webLog("OVERWRITE "+s+".json");
-                        fs.copySync(path.join(fileDir, s+".json"), path.join(backendDir, "settings", s+".json"), {overwrite:true});
-                    }else{
-                        webLog(path.join(fileDir, s+".json"),"NOT FOUND");
+            if(selections["everything"] == true){
+                fs.copySync(path.join(fileDir), path.join(backendDir, "settings"), {overwrite:true});
+            }else{
+                for(let s in selections){
+                    if(s=="everything"){continue;}
+                    webLog("CHECKING", s+".json");
+                    if(selections[s] == true){
+                        if(fs.existsSync(path.join(fileDir, s+".json"))){
+                            webLog("OVERWRITE "+s+".json");
+                            fs.copySync(path.join(fileDir, s+".json"), path.join(backendDir, "settings", s+".json"), {overwrite:true});
+                        }else{
+                            webLog(path.join(fileDir, s+".json"),"NOT FOUND");
+                        }
                     }
                 }
             }
+            
 
             if(fs.existsSync(fileDir)){
                 await fs.rm(fileDir, {recursive:true});
@@ -688,6 +732,23 @@ class WebUI {
                 fs.copySync(path.join(fileDir, "plugins", pluginList[p]), path.join(backendDir, "plugins", pluginList[p]));
             }
 
+            webLog("Checking for dependencies...");
+            for(let p in pluginList){
+                if(fs.existsSync(path.join(backendDir, "plugins", pluginList[p], "node_modules"))){
+                    webLog("Clearing node_modules for "+pluginList[p]);
+                    fs.rmSync(path.join(backendDir, "plugins", pluginList[p], "node_modules"), {recursive:true});
+                }
+                if(fs.existsSync(path.join(backendDir, "plugins", pluginList[p],"package.json"))){
+                    let packagejson = JSON.parse(fs.readFileSync(path.join(backendDir, "plugins", pluginList[p],"package.json"),{encoding:"utf-8"}));
+                    let hasDependencies = packagejson.dependencies != null;
+                    if(hasDependencies){
+                        await this.installPluginDependencies(pluginList[p], path.join(backendDir, "plugins", pluginList[p]));
+                    }else{
+                        webLog("No dependencies for "+pluginList[p]);
+                    }
+                }
+            }
+
             let webfolders = fs.readdirSync(path.join(backendDir, "web"));
             webLog("Deleting Web Folders...");
             for(let w in webfolders){
@@ -720,7 +781,7 @@ class WebUI {
             res.send({status:"SUCCESS",newbackups:newPluginBackups});
         });
 
-        router.post("/refresh_plugins", async (req, res) => {
+        router.get("/refresh_plugins", async (req, res) => {
             this.getPlugins();
             res.send({"status":"Refresh Success!"});
         });
@@ -728,23 +789,79 @@ class WebUI {
         router.post('/delete_plugin_asset', async(req, res) =>{
 
             let pluginName = req.body.pluginName;
-            let assetName = req.body.assetName;
+            let assetPath = req.body.assetName;
             let fileStatus = "SUCCESS";
 
-            let assetDir = path.join(backendDir,"web", "overlay", pluginName, "assets");
-            let assetFile = path.join(backendDir,"web", "overlay", pluginName, "assets", assetName);
-            await fs.rm(assetFile, (err) => {
-                if(err) throw err;
+            let assetDir = path.join(backendDir,"web", "assets", pluginName, assetPath, "..");
+            let assetFile = path.join(backendDir,"web", "assets", pluginName, assetPath);
+            fs.rmSync(assetFile, {recursive:true});
+            let thisPluginAssets = fs.existsSync(assetDir)==true?fs.readdirSync(assetDir):null;
 
-                let thisPluginAssets = fs.existsSync(assetDir)==true ?
-                                    fs.readdirSync(assetDir):null;
-
-                res.send({
-                    status:fileStatus,
-                    newAssets:thisPluginAssets
-                });
+            res.send({
+                status:fileStatus,
+                newAssets:thisPluginAssets
             });
         });
+
+        router.post('/get_plugin_assets', async(req, res) => {
+            let pluginName = req.body.pluginname;
+            let mainDir = path.join(backendDir, "web", "assets", pluginName);
+            var results = {};
+            let walk = function(dir, done) {
+                
+                fs.readdir(dir, function(err, list) {
+                  if (err) return done(err);
+                  var pending = list.length;
+                  let foldername = dir.substring(mainDir.length+1);
+                    if(foldername == ""){foldername="root";}
+                  if (!pending) return done(null, results);
+                  list.forEach(function(file) {
+                    file = path.resolve(dir, file);
+                    fs.stat(file, function(err, stat) {
+                        let filename = file.substring(mainDir.length+1);
+                      if (stat && stat.isDirectory()) {
+                        
+                        walk(file, function(err, res) {
+                            
+                            //results[filename] = res;
+                          //results = results.concat(res);
+                          if (!--pending) done(null, results);
+                        });
+                      } else {
+                        
+                        //console.log(filename);
+                        if(results[foldername] == null){results[foldername] = []}
+                        results[foldername].push(filename);
+                        if (!--pending) done(null, results);
+                      }
+                    });
+                  });
+                });
+              };
+            walk(path.join(backendDir, "web", "assets", pluginName), (err, results)=>{
+                
+                res.send({status:"OK", dirs:results});
+            })
+        })
+
+        router.post('/browse_plugin_assets', async(req, res) => {
+            let currentPath = req.body.folder;
+            let pluginName = req.body.pluginname;
+
+            if(!fs.existsSync(path.join(backendDir, "web", "assets", pluginName))){
+                fs.mkdirSync(path.join(backendDir, "web", "assets", pluginName));
+            }
+            
+            if(!fs.existsSync(path.join(backendDir, "web", "assets", pluginName, currentPath))){
+                res.send({status:"EMPTY", dirs:[]});
+                return;
+            }
+            
+            let dirs = fs.existsSync(path.join(backendDir, "web", "assets", pluginName, currentPath))==true ? 
+            fs.readdirSync(path.join(backendDir, "web", "assets",pluginName, currentPath)):null;
+            
+            res.send({status:"ok", dirs:dirs});
+        })
 
         router.post('/upload_plugin_asset/*', async(req, res) => {
             try{
@@ -756,10 +873,10 @@ class WebUI {
                     })
                 }else{
                     let pluginAsset = req.files.file;
-                    let pluginName = req.params['0'];
+                    let assetPath = req.params['0'];
 
-                    let assetDir = path.join(backendDir,"web", "overlay", pluginName, "assets");
-                    let assetFile = path.join(backendDir,"web", "overlay", pluginName, "assets", pluginAsset.name);
+                    let assetDir = path.join(backendDir,"web", "assets", assetPath);
+                    let assetFile = path.join(assetDir, pluginAsset.name);
                     
                     if(!fs.existsSync(assetDir)){
                         fs.mkdirSync(assetDir);
@@ -797,8 +914,11 @@ class WebUI {
             let overlayDir = path.join(backendDir,"web", "overlay", pluginName);
             let utilityDir = path.join(backendDir,"web", "utility", pluginName);
             let settingsDir = path.join(backendDir,"web", "settings", pluginName);
+            let assetsDir = path.join(backendDir,"web", "assets", pluginName);
             let iconFile = path.join(backendDir,"web", "icons", pluginName+".png");
-            await fs.rm(pluginDir, {recursive:true});
+            if(fs.existsSync(pluginDir)){
+                await fs.rm(pluginDir, {recursive:true});
+            }
             if(fs.existsSync(overlayDir)){
                 await fs.rm(overlayDir, {recursive:true});
             }
@@ -807,6 +927,9 @@ class WebUI {
             }
             if(fs.existsSync(settingsDir)){
                 await fs.rm(settingsDir, {recursive:true});
+            }
+            if(fs.existsSync(assetsDir)){
+                await fs.rm(assetsDir, {recursive:true});
             }
             if(fs.existsSync(iconFile)){
                 await fs.rm(iconFile);
@@ -821,6 +944,7 @@ class WebUI {
             webLog("SAVING", settingsFile ,newSettings);
             fs.writeFile(settingsFile, JSON.stringify(newSettings.settings), "utf-8", (err, data)=>{
                 res.send({saveStatus:"SAVE SUCCESS"});
+                fs.chmod(settingsFile, 0o777);
                 webLog(""+newSettings.pluginName+" Settings Saved!");
             });
 
@@ -832,16 +956,16 @@ class WebUI {
             let pluginPacks = {};
             for(let a in activePlugins){
                 
-                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
+                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
 
-                let settingsForm = path.join(backendDir, "plugins", a, "settings-form.html");
+                let settingsForm = path.join(backendDir, "plugins", a, "settings-form.json");
                 let thisPluginForm = fs.existsSync(settingsForm)==true ?
-                                fs.readFileSync(settingsForm, {encoding:'utf8'}):null;
+                                JSON.parse(fs.readFileSync(settingsForm, {encoding:'utf8'})):null;
 
-                let assetDir = path.join(backendDir, "web", "overlay", a, "assets");
+                let assetDir = path.join(backendDir, "web", "assets", a);
                 
                 let thisPluginAssets = fs.existsSync(assetDir)==true ?
                                     fs.readdirSync(assetDir):null;
@@ -850,25 +974,25 @@ class WebUI {
                 let utilityDir = path.join(backendDir, "web", "utility", a);
                 let settingsDir = path.join(backendDir, "web", "settings", a);
                 pluginPacks[a] = {
-                    "name":activePlugins[a]._name==null?a:activePlugins[a]._name,
-                    "version":activePlugins[a]._version==null?"Unknown Version":activePlugins[a]._version,
-                    "author":activePlugins[a]._author==null?"Unknown Author":activePlugins[a]._author,
-                    "description":activePlugins[a]._description==null?"":activePlugins[a]._description,
+                    "name":activePlugins[a].name==null?a:activePlugins[a].name,
+                    "version":activePlugins[a].version==null?"Unknown Version":activePlugins[a].version,
+                    "author":activePlugins[a].author==null?"Unknown Author":activePlugins[a].author,
+                    "description":activePlugins[a].description==null?"":activePlugins[a].description,
+                    "dependencies":activePlugins[a].dependencies==null?{}:activePlugins[a].dependencies,
                     "settings":thisPlugin,
                     "settings-form":thisPluginForm,
-                    "assets":thisPluginAssets,
-                    "path":thisPluginPath,
+                    "assetBrowserPath":"/",
+                    "assetPath":path.join("assets", a),
                     "hasOverlay": fs.existsSync(overlayDir),
                     "hasUtility": fs.existsSync(utilityDir),
                     "hasExternalSettingsPage":fs.existsSync(settingsDir)
                 };
+                if(activePlugins[a].status != null && activePlugins[a].status != "ok"){
+                    pluginPacks[a].status = activePlugins[a].status;
+                }
             }
             
             res.send(JSON.stringify(pluginPacks));
-        });
-
-        router.get("/osc_tunnels", async(req, res) => {
-            res.send(JSON.stringify(osctunnels));
         });
 
         router.get("/get_plugin/*", async(req,res) => {
@@ -894,7 +1018,7 @@ class WebUI {
         });
 
         router.post("/mod/authentication", async(req, res) => {
-            let modlist = await chat.mods(channel);
+            //let modlist = await chat.mods(channel);
             let isLocal = false;
             if(req.headers.referer != null){
                 if(req.headers.referer.startsWith("http:")){
@@ -903,15 +1027,15 @@ class WebUI {
             }
 
             if(isLocal){
-                activeMods[username] = "active";
-                res.send({status:"active", localUser:username});
+                activeMods[botUsername] = "active";
+                res.send({status:"active", localUser:botUsername});
                 return;
             }
 
             let moduser = req.body.moduser;
             let modcode = req.body.code;
             
-            if(modlist.includes(moduser) && modData["trusted_users"][moduser]?.includes("m")){
+            if(modData["trusted_users"][moduser]?.includes("m")){
                 if(modData["trusted_users_pw"][moduser] == null){
                     let newSalt = crypto.randomBytes(16).toString('hex');
                     let newHash = crypto.pbkdf2Sync(modcode, newSalt, 1000, 64, `sha512`).toString('hex');
@@ -993,6 +1117,11 @@ class WebUI {
             }
         });
 
+        router.post("/webhooks/caption", (req, res)=>{
+            console.log("I HEAR VOICE", req.body);
+            res.status(200).end();
+        })
+
         
 
         app.listen(expressPort);
@@ -1006,30 +1135,49 @@ class WebUI {
     async getPlugins(){
         try {
           const dir = await fsPromises.opendir(backendDir+'/plugins');
+          for(let p in activePlugins){
+            if(activePlugins[p].onClose != null){
+                activePlugins[p].onClose();
+            }
+          }
           activePlugins = {};
           for await (const dirent of dir){
             delete require.cache[require.resolve(backendDir+'/plugins/'+dirent.name)];
             try{
                 activePlugins[dirent.name] = new (require(backendDir+'/plugins/'+dirent.name))();
             }catch(e){
+                let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
+                activePlugins[dirent.name] = {};
+                activePlugins[dirent.name].name = dirent.name;
+                activePlugins[dirent.name].status = "failed";
+                activePlugins[dirent.name].description = e.code+" - "+e.message;
+                activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
                 console.log("PLUGIN FAILED TO LOAD", e);
                 continue;
             }
             
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/package.json")){
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
-                activePlugins[dirent.name]._name = pluginMeta.name;
-                activePlugins[dirent.name]._author = pluginMeta.author;
-                activePlugins[dirent.name]._version = pluginMeta.version;
-                activePlugins[dirent.name]._description = pluginMeta.description;
+                activePlugins[dirent.name].name = pluginMeta.name;
+                activePlugins[dirent.name].author = pluginMeta.author;
+                activePlugins[dirent.name].version = pluginMeta.version;
+                activePlugins[dirent.name].description = pluginMeta.description;
+                activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
+                let overlayDir = path.join(backendDir, "web", "overlay", dirent.name);
+                let utilityDir = path.join(backendDir, "web", "utility", dirent.name);
+                activePlugins[dirent.name].hasOverlay = fs.existsSync(overlayDir);
+                activePlugins[dirent.name].hasUtility = fs.existsSync(utilityDir);
+                //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
+                activePlugins[dirent.name].status = "ok";
             }
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/settings.json")){
                 activePlugins[dirent.name].settings = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/settings.json",{encoding:'utf8'}));
+                
                 if(activePlugins[dirent.name].onSettings != null){
                     activePlugins[dirent.name].onSettings(activePlugins[dirent.name].settings);
                 }
             }
-          }
+        }
           webLog("Plugins Refreshed!");
         } catch (err) {
           console.error(err);
@@ -1037,8 +1185,154 @@ class WebUI {
         
     }
 
+    async installPluginFromTemp(pluginDirName, options){
+        if(options == null){options = {
+            createInfo:null,
+            overlay:true,
+            utility:true
+        }}
+        sendToTCP("/frontend/plugin/install/progress", {
+            pluginName:pluginDirName,
+            status:"progress",
+            message:"Copying folders..."
+        });
+        let tempDir = path.join(backendDir, "tmp", pluginDirName);
+        let pluginDir = path.join(backendDir,"plugins", pluginDirName);
+        let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
+        let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
+        let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
+        let assetsDir = path.join(backendDir, "web", "assets", pluginDirName);
+        let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
+
+        if(!fs.existsSync(tempDir+"/command")){
+            return{
+                status: false,
+                message: 'No command folder'
+            };
+        }else{
+
+            if(options.createInfo != null){
+                if(fs.existsSync(tempDir+"/command/package.json")){
+                    try{
+                        let thisPackage = JSON.parse(fs.readFileSync(tempDir+"/command/package.json", {encoding:"utf-8"}));
+                        thisPackage.name = options.createInfo.name;
+                        thisPackage.author = options.createInfo.author;
+                        thisPackage.description = options.createInfo.description;
+                        fs.writeFileSync(tempDir+"/command/package.json", JSON.stringify(thisPackage));
+                    }catch(e){
+                        webLog("Something went wrong with applying create info to the plugin's package.json", e);
+                    }
+                }
+            }
+
+            if(fs.existsSync(path.join(tempDir+"/command", "node_modules"))){
+                fs.rmSync(path.join(tempDir+"/command", "node_modules"), {recursive:true});
+            }
+
+            await fs.move(tempDir+"/command", pluginDir, {overwrite:true});
+
+            chmodr(pluginDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+        
+        if(fs.existsSync(tempDir+"/overlay") && options.overlay == true){
+            await fs.move(tempDir+"/overlay", overlayDir, {overwrite:true});
+
+            chmodr(overlayDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/utility") && options.utility == true){
+            await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
+
+            chmodr(utilityDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/settings")){
+            await fs.move(tempDir+"/settings", settingsDir, {overwrite:true});
+
+            chmodr(settingsDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/assets")){
+            await fs.move(tempDir+"/assets", assetsDir, {overwrite:true});
+
+            chmodr(assetsDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }else{
+            fs.mkdirSync(assetsDir, {recursive:true});
+        }
+
+        if(fs.existsSync(tempDir+"/icon.png")){
+            await fs.move(tempDir+"/icon.png", iconDir, {overwrite:true});
+
+            chmodr(iconDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+        
+        webLog("Plugin added successfully!");
+        fs.rm(tempDir, {recursive:true});
+        await this.installPluginDependencies(pluginDirName, pluginDir);
+        this.getPlugins();
+        sendToTCP("/frontend/plugin/install/complete", {
+            pluginName:pluginDirName,
+            status:"complete",
+            message:"Complete!"
+        });
+        return {
+            status:"OK",
+            message:""
+        };
+    }
+
+    installPluginDependencies(pluginDirName, pluginPath, packagename=""){
+        if(packagename != ""){packagename = " "+packagename}
+        else if(fs.existsSync(path.join(pluginPath, "node_modules"))){
+            fs.rmSync(path.join(pluginPath, "node_modules"), {recursive:true});
+        }
+        const childProcess = require("child_process");
+        webLog("Installing dependencies on "+pluginPath);
+        sendToTCP("/frontend/plugin/install/progress", {
+            pluginName:pluginDirName,
+            status:"progress",
+            message:"Installing dependencies..."
+        });
+        return new Promise((res, rej)=>{
+            childProcess.exec("npm install"+packagename,{
+            cwd: pluginPath
+            }, (error, out, err)=>{
+            if(error){
+                rej(error);
+                return;
+            }
+            res("OK");
+            })
+        }).catch(error=>{
+            console.log("INSTALL DEPS FAILED");
+            sendToTCP("/frontend/plugin/install/complete", {
+                pluginName:pluginDirName,
+                status:"failed",
+                message:error.message
+            });
+        })
+    }
+
     async startNgrok(){
-        if(maintainenceMode == true){
+        if(maintainenceMode == true || devMode == true){
             return;
         }
         
@@ -1093,6 +1387,44 @@ class WebUI {
     }
 
     onNgrokStart = null;
+
+    setShare(shareUser, isEnabled, message){
+        if(message == null){
+            if(isEnabled){
+                message = shares[shareUser].joinMessage;
+            }else{
+                message = shares[shareUser].leaveMessage;
+            }
+        }
+        
+        //shares[shareUser].enabled = isEnabled;
+        if(isEnabled){
+            joinChannel(shareUser, message);
+            sendToTCP("/share/activate", shareUser);
+            if(shares[shareUser].discordId != null){
+                
+                let sharedPlugins = shares[shareUser].plugins;
+                let sharedPluginMessage = [];
+                for(let p in sharedPlugins){
+                    if(activePlugins[sharedPlugins[p]].hasOverlay){
+                        sharedPluginMessage.push(
+                            activePlugins[sharedPlugins[p]].name+": "+path.join(sconfig.network.external_http_url, "overlay", sharedPlugins[p])
+                        );
+                    }
+                }
+                if(sharedPluginMessage.length>0){
+                    discord.findUser(shares[shareUser].discordId)
+                    .then(user=>{
+                        user.send(homeChannel+" shared a plugin with you! "+sharedPluginMessage.join("\n"));
+                    })
+                }
+                
+            }
+        }else{
+            leaveChannel(shareUser, message);
+            sendToTCP("/share/deactivate", shareUser);
+        }
+    }
 
     
 }
