@@ -18,6 +18,24 @@ class OBSOSC{
             fs.writeFileSync(backendDir+"/settings/obs.json", JSON.stringify(this.settings), "utf-8");
             
             res.send({status:"ok"});
+        });
+
+        router.get("/obs/get_scenes", async (req, res) => {
+            if(!this.connected){
+                res.send({"status":"notconnected"});
+            }else{
+                let obsReturn = {};
+                let obsScenes = await this.call("GetSceneList");
+                obsReturn.scenes = obsScenes.scenes;
+                obsReturn.sceneItems = {};
+                
+                for(let s in obsReturn.scenes){
+                    obsReturn.sceneItems[obsReturn.scenes[s].sceneIndex] = await this.call("GetSceneItemList", {sceneName:obsReturn.scenes[s].sceneName}).then(data=>data.sceneItems);
+                }
+
+                obsReturn.status = "ok";
+                res.send(obsReturn);
+            }
         })
 
         

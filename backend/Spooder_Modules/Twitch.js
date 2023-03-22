@@ -446,12 +446,16 @@ function processMessage(channel, tags, txt, self){
     
     for(p in activePlugins){
         if(modlocks.plugins[p] != 1){
-            if(message.channel != sconfig.broadcaster.username){
-                if(shares[message.channel]?.plugins.includes(p)){
+            try{
+                if(message.channel != sconfig.broadcaster.username){
+                    if(shares[message.channel]?.plugins.includes(p)){
+                        activePlugins[p].onChat(message);
+                    }
+                }else{
                     activePlugins[p].onChat(message);
                 }
-            }else{
-                activePlugins[p].onChat(message);
+            }catch(e){
+                twitchLog(e);
             }
         }
     }
@@ -495,7 +499,7 @@ function checkForSpamming(viewername){
 }
 
 function processCheer(channel, userstate, message){
-    twitchLog("CHEER: This won't do anything yet", userstate);
+    twitchLog("CHEER", userstate);
 }
 
 const runChat = async(startCase) => {
@@ -1000,11 +1004,12 @@ class STwitch{
                     if(eventsubs.events[type].plugin.enabled){
                         let plugin = eventsubs.events[type].plugin;
                         if(activePlugins[plugin.pluginname] != null){
-                            if(typeof activePlugins[plugin.pluginname].onPreEvent){
-                                twitchLog("NO ONEVENT FUNCTION FOUND ON "+plugin.pluginname);
-                                activePlugins[plugin.pluginname].onPreEvent(plugin.eventname, event);
-                            }else if(typeof activePlugins[plugin.pluginname].onEvent){
-                                activePlugins[plugin.pluginname].onEvent(plugin.eventname, event);
+                            if(typeof activePlugins[plugin.pluginname].onEvent != null){
+                                try{
+                                    activePlugins[plugin.pluginname].onEvent(plugin.eventname, event);
+                                }catch(e){
+                                    twitchLog(e);
+                                }
                             }
                         }
                     }

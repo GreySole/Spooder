@@ -1408,14 +1408,14 @@ class WebUI {
                 for(let p in sharedPlugins){
                     if(activePlugins[sharedPlugins[p]].hasOverlay){
                         sharedPluginMessage.push(
-                            activePlugins[sharedPlugins[p]].name+": "+path.join(sconfig.network.external_http_url, "overlay", sharedPlugins[p])
+                            activePlugins[sharedPlugins[p]].name+": "+sconfig.network.external_http_url+"/"+path.join("overlay", sharedPlugins[p])+"?channel="+shareUser
                         );
                     }
                 }
                 if(sharedPluginMessage.length>0){
                     discord.findUser(shares[shareUser].discordId)
                     .then(user=>{
-                        user.send(homeChannel+" shared a plugin with you! "+sharedPluginMessage.join("\n"));
+                        user.send(homeChannel+" shared a plugin with you! \n"+sharedPluginMessage.join("\n"));
                     })
                 }
                 
