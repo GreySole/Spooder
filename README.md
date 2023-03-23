@@ -31,7 +31,7 @@ Finally use `npm run start` to start Spooder's web and OSC services.
 
 Open Spooder's Web UI in your browser either by localhost:3000 or your local network address at port 3000.
 
-Setup Walkthrough: https://www.youtube.com/watch?v=qSu1XhV0848
+Quick Start Setup: https://www.youtube.com/watch?v=v0kl7hLYAtc
 
 # User Authentication
 Authentication will only work on localhost, the machine Spooder is running.
@@ -48,7 +48,7 @@ Events have three triggers. A chat command, channel point reward, and OSC. Make 
 
 Commands:
 
-Response - Write a script to build your bot's response to the trigger and return a string. Use the Verify Script button to ensure the script works. The chat message going through will be "Test Message" unless you put something in the input field. The resulting response will appear with a green border indicating it works. If not, the error will appear with a red border. Think of response commands as micro plugins. They can call any global function within Spooder (list in the Sample Plugin Repository). Responses also work asynchronously, so you can make API calls using fetch() to build your response.
+Response - Write a script to build your bot's response to the trigger and return a string. Use the Verify Script button to ensure the script works. The chat message going through will be "Test Message" unless you put something in the input field. The resulting response will appear with a green border indicating it works. If not, the error will appear with a red border. Think of response commands as micro plugins. They can call any global function within Spooder (list in the Sample Plugin Repository). Responses also work asynchronously, so you can make API calls using fetch() to build your response. As of v0.4, you can access the eventstorage object to store values in response commands and save by calling saveEventStorage() within the response script.
 
 Response Search and Match (WIP) - Trigger the response with each space separated word as the command. You can use wildcard * to match with any word and use OR | between words without a space between them. So a command like "* my *" will first match any word, then "my", and then any word in sequence. Then the matched words go into the response script as extra[]. So with this command you could say "boop my nose" and the response could be "I shall boop thy nose!" You could also make a command that matches pronouns like "boop him|her|them".
 
