@@ -276,6 +276,19 @@ class WebUI {
             });
         });
 
+        router.post("/verifyResponseScript", async(req, res) => {
+            let check = checkResponseTrigger(req.body.event, req.body.message);
+            if(check != null){
+                let response = await verifyResponseScript(check.message, check.extra, req.body.script);
+                res.send(response);
+            }else{
+                res.send({
+                    status:"error",
+                    response:"The input text did not trigger the response."
+                });
+            }
+        })
+
         router.get("/shares", (req,res) => {
             let chatCommands = {};
             let activeShares = twitch.getChannels();

@@ -45,14 +45,14 @@ class SOSC {
 
     sendToTCP = (address, oscValue, log) => {
         if(log==null){log=true;}
-        if(typeof oscValue == "object"){
+        if(typeof oscValue == "object" && !Array.isArray(oscValue)){
             oscValue = JSON.stringify(oscValue);
         }
         let newMessage = null;
         if(oscValue instanceof Array == false){
             newMessage = new OSC.Message(address, oscValue);
         }else{
-            newMessage = new OSC.Message(address, oscValue[0], oscValue[1]);
+            newMessage = new OSC.Message(address, ...oscValue);
         }
     
         if(log == true){
@@ -65,7 +65,7 @@ class SOSC {
     sendToUDP = (dest, address, oscValue) => {
         var udpClients = this.udpClients;
         
-        let valueType = "int";
+        let valueType = "i";
         if(!isNaN(oscValue)){
             if(typeof oscValue == "string"){
                 if(oscValue.includes(".")){
@@ -80,7 +80,7 @@ class SOSC {
         else if(!isNaN(oscValue.split(",")[0])){valueType = "ii"}
         else{valueType = "s"}
         
-        if(valueType == "ii"){
+        if(valueType.length > 1){
             oscValue = oscValue.split(",");
             for(let o in oscValue){
                 if(!isNaN(oscValue[o])){
@@ -90,15 +90,14 @@ class SOSC {
                         oscValue[o] = parseInt(oscValue[o]);
                     }
                 }
-                
             }
         }
         this.sendToMonitor("udp", "send", {dest:dest, types:valueType, address:address, data:oscValue});
         if(dest == -1){return;}
         else if(dest == -2){
             let allMessage = null;
-            if(valueType == "ii"){
-                allMessage = new OSC.Message(address, oscValue[0], oscValue[1]);
+            if(valueType.length > 1){
+                allMessage = new OSC.Message(address, ...oscValue);
             }else{
                 allMessage = new OSC.Message(address, oscValue);
             }
@@ -107,8 +106,8 @@ class SOSC {
             }
         }else{
             let message = null;
-            if(valueType == "ii"){
-                message = new OSC.Message(address, oscValue[0], oscValue[1]);
+            if(valueType.length > 1){
+                message = new OSC.Message(address, ...oscValue);
             }else{
                 message = new OSC.Message(address, oscValue);
             }
@@ -134,7 +133,7 @@ class SOSC {
                     }
                     switch(osctunnels[o]["handlerTo"]){
                         case "tcp":
-                            sendToTCP(address, message.args[0]);
+                            sendToTCP(address, ...message.args);
                         break;
                         case "udp":
                             sendToUDP(-2,address, message.args.join(","));
@@ -149,7 +148,7 @@ class SOSC {
                     
                     switch(osctunnels[o]["handlerTo"]){
                         case "tcp":
-                            sendToTCP(osctunnels[o]["addressTo"], message.args[0]);
+                            sendToTCP(osctunnels[o]["addressTo"], ...message.args);
                         break;
                         case "udp":
                             sendToUDP(-2,osctunnels[o]["addressTo"], message.args.join(","));

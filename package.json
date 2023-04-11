@@ -1,6 +1,6 @@
 {
   "name": "spooder",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.js",
   "scripts": {
@@ -13,7 +13,7 @@
   "author": "Grey Sole",
   "license": "GPL-3.0",
   "dependencies": {
-    "@discordjs/voice": "^0.14.0",
+    "@discordjs/voice": "^0.15.0",
     "adm-zip": "^0.5.9",
     "axios": "^1.2.1",
     "body-parser": "^1.20.0",

@@ -180,6 +180,10 @@ class OBSOSC{
     }
 
     async call(name, data){
+        if(obsClient.socket == null || obsClient.socket?.readyState==0){
+            console.log("OBS Not connected for ", name);
+            return;
+        }
         return new Promise((res, rej) => {
             if(data){
                 obsClient.call(name, data).then(obsData=>{res(obsData)}).catch(e=>rej(e));

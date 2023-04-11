@@ -144,14 +144,8 @@ class SDiscord{
                         //console.log(timeCode);
                         await interaction.reply(timeCode);
                     }
-                };
-                this.commands.set(defaultCommand.data.name, defaultCommand);
-                let commands = [defaultCommand.data.toJSON()];
-                console.log(`Started refreshing ${commands.length} application (/) commands.`);
-                const rest = new REST({version:"10"}).setToken(discordInfo.token);
-                const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:commands});
-
-                discordLog(`Successfully reloaded ${data.length} application (/) commands.`);*/
+                };*/
+                
             }
             if(discordInfo.token != "" && discordInfo.token != null){
                 discordLog("STARTING DISCORD CLIENT");
@@ -212,12 +206,12 @@ class SDiscord{
                 }else{
                     discordLog("Discord", this.getGuild(message.guildId).name, message.author.username, message.content);
                     
-                    if(message.content.toLowerCase() == "join" || message.content.toLowerCase() == "come here"){
+                    if(message.content.toLowerCase() == "!join"){
                         discordLog(message.guildId, message.channelId);
                         this.joinVoiceChannel(message.guildId, message.channelId);
                         return;
                     }
-                    if(message.content.toLowerCase() == "leave"){
+                    if(message.content.toLowerCase() == "!leave"){
                         this.leaveVoiceChannel();
                         return;
                     }
@@ -243,22 +237,15 @@ class SDiscord{
 
     joinVoiceChannel(guildId, channelId){
         voice = require('@discordjs/voice');
+        const {VoiceConnectionStatus, entersState} = require('@discordjs/voice');
         let targetServer = this.client.guilds.cache.get(guildId);
         this.voiceChannel = voice.joinVoiceChannel({
             channelId: channelId, //the id of the channel to join (we're using the author voice channel)
             guildId: guildId, //guild id (using the guild where the message has been sent)
             adapterCreator: targetServer.voiceAdapterCreator //voice adapter creator
         });
-
-        let members = this.getChannel(channelId, guildId).members;
-        let speakers = {};
-        for(let m in members){
-            speakers[m] = members[m].user;
-        }
-
-        this.callPlugins("voice", {event:"join", members:members});
-
-        discordLog("VOICE CHANNEL MEMBERS", this.getChannel(channelId, guildId).members);
+        
+        this.callPlugins("voice", {event:"join", members:this.getChannel(channelId, guildId).members});
 
         this.voiceChannel.receiver.speaking.on('start', (userId) => {
             //actions here
@@ -272,7 +259,33 @@ class SDiscord{
             //discordLog("Stopped", userId);
         });
 
+        this.voiceChannel.on("stateChange", (oldstate, newstate) => {
+            discordLog('join', 'Connection state change from', oldstate.status, 'to', newstate.status)
+            if (oldstate.status === voice.VoiceConnectionStatus.Ready && newstate.status === voice.VoiceConnectionStatus.Connecting) {
+                this.voiceChannel.configureNetworking();
+            }
+        });
+
+        this.voiceChannel.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
+            
+            try {
+                await Promise.race([
+                    entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+                    entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+                ]);
+                // Seems to be reconnecting to a new channel - ignore disconnect
+            } catch (error) {
+                // Seems to be a real disconnect which SHOULDN'T be recovered from
+                connection.destroy();
+            }
+        });
+
+        this.voiceChannel.on("error", (e)=>{
+            console.log(e);
+        })
+
         this.client.on('voiceStateUpdate', (oldstate, newstate)=>{
+            //console.log(this.voiceChannel, this.voiceChannel.receiver);
             this.callPlugins("voice", {event:"state-update", oldstate:oldstate, newstate:newstate});
         });
 
@@ -303,6 +316,8 @@ class SDiscord{
             discordLog('the bot isn\'t in a voice channel');
             return;
         }
+        this.callPlugins("voice", {event:"leave"});
+        this.client.removeAllListeners("voiceStateUpdate");
         //leave
         this.audioPlayer.stop();
         this.audioPlayer = null;

@@ -392,53 +392,10 @@ function processMessage(channel, tags, txt, self){
         
         if(modlocks.events[e] == 1){continue;}
         if(events[e].triggers.chat.enabled && self == false){
-            if(events[e].triggers.chat.search){
-                let commandSplit = events[e].triggers.chat.command.split(" ");
-                let commandMatch = new Array(commandSplit.length).fill(false);
-                let messageSplit = message.message.split(" ");
-                let matchIndex = 0;
-                for(let m in messageSplit){
-                    if(commandSplit[matchIndex] == "*"){commandMatch[matchIndex] = messageSplit[m];}
-                    if(commandSplit[matchIndex].includes("|")){
-                        let cSplitOR = commandSplit[matchIndex].split("|");
-                        for(let c in cSplitOR){
-                            if(cSplitOR[c].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m]; break;}
-                        }
-                    }else if(commandSplit[matchIndex].startsWith(">")){
-                        
-                        if(messageSplit[m].startsWith(commandSplit[matchIndex].replace(">", ""))){
-                            commandMatch[matchIndex] = messageSplit[m];
-                        }
-                    }else if(commandSplit[matchIndex].startsWith("<")){
-                        if(messageSplit[m].endsWith(commandSplit[matchIndex].replace("<", ""))){
-                            commandMatch[matchIndex] = messageSplit[m];
-                        }
-                    }else if(commandSplit[matchIndex].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m];}
-                    
-                    if(commandMatch[matchIndex] != false){
-                        matchIndex++;
-                        if(matchIndex == commandMatch.length){
-                            twitchLog(commandMatch);
-                            break;
-                        }
-                    }else{
-                        matchIndex = 0;
-                        commandMatch = new Array(commandSplit.length).fill(false);
-                    }
-                    
-                }
-                
-                if(matchIndex == commandMatch.length){
-                    if(runCommands(message, e, commandMatch) == "alreadyon"){
-                        sayAlreadyOn(e);
-                    }
-                }
-            }else{
-                if(message.message.toLowerCase().startsWith(events[e].triggers.chat.command)){
-                    if(runCommands(message, e) == "alreadyon"){
-                        sayAlreadyOn(e);
-                    }
-
+            let check = checkResponseTrigger(events[e], message);
+            if(check != null){
+                if(runCommands(check.message, e, check.extra) == "alreadyon"){
+                    sayAlreadyOn(e);
                 }
             }
         }
@@ -929,7 +886,7 @@ class STwitch{
                 event
             );
 
-            if(event.broadcaster_user_id != broadcasterUserID){
+            if(event.broadcaster_user_id != broadcasterUserID && type != "channel.raid"){
                 if(type == "stream.online"){
                     webUI.setShare(event.broadcaster_user_login, true);
                 }else if(type == "stream.offline"){
@@ -1275,13 +1232,13 @@ class STwitch{
         }
 
         global.joinChannel = async (channelname, joinmsg)=>{
-            await chat.join(channelname);
+            await chat.join(channelname).catch(e=>{console.log(e)});
             sayInChat(joinmsg, channelname);
         }
 
         global.leaveChannel = async (channelname, partmsg)=>{
             sayInChat(partmsg, channelname);
-            await chat.part(channelname);
+            await chat.part(channelname).catch(e=>{console.log(e)})
         }
     
         global.restartChat = async (message) => {
@@ -1407,7 +1364,6 @@ class STwitch{
             })
             .then((response)=>{
                 if(response.data.data[0] != null){
-                    
                     res(response.data.data);
                 }else{
                     res(false);

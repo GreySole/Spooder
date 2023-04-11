@@ -61,7 +61,6 @@ global.themes = {
 	},
 	modui:{}
 };
-
 global.eventstorage = {};
 global.shares = {};
 
@@ -411,8 +410,78 @@ if(initMode){
 		return timeAmount+" "+timeTerm;
 	}
 
+	global.checkResponseTrigger = (eventData, message) => {
+		if(eventData.triggers.chat.search){
+			let commandSplit = eventData.triggers.chat.command.split(" ");
+			let commandMatch = new Array(commandSplit.length).fill(false);
+			let messageSplit = message.message.split(" ");
+			let matchIndex = 0;
+			for(let m in messageSplit){
+				if(commandSplit[matchIndex] == "*"){commandMatch[matchIndex] = messageSplit[m];}
+				if(commandSplit[matchIndex].includes("|")){
+					let cSplitOR = commandSplit[matchIndex].split("|");
+					for(let c in cSplitOR){
+						if(cSplitOR[c].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m]; break;}
+					}
+				}else if(commandSplit[matchIndex].startsWith(">")){
+					
+					if(messageSplit[m].startsWith(commandSplit[matchIndex].replace(">", ""))){
+						commandMatch[matchIndex] = messageSplit[m];
+					}
+				}else if(commandSplit[matchIndex].startsWith("<")){
+					if(messageSplit[m].endsWith(commandSplit[matchIndex].replace("<", ""))){
+						commandMatch[matchIndex] = messageSplit[m];
+					}
+				}else if(commandSplit[matchIndex].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m];}
+				
+				if(commandMatch[matchIndex] != false){
+					matchIndex++;
+					if(matchIndex == commandMatch.length){
+						console.log(commandMatch);
+						break;
+					}
+				}else{
+					matchIndex = 0;
+					commandMatch = new Array(commandSplit.length).fill(false);
+				}
+				
+			}
+			
+			if(matchIndex == commandMatch.length){
+				return {
+					message:message,
+					extra:commandMatch
+				};
+			}
+		}else{
+			if(message.message.toLowerCase().startsWith(eventData.triggers.chat.command)){
+				return {
+					message:message,
+					extra:null
+				};
+			}
+		}
+	}
+
+	global.verifyResponseScript = async (message, extra, script) => {
+		try{
+			let responseFunct = await eval("async () => { let event = "+JSON.stringify(message)+"; let extra = "+JSON.stringify(extra)+"; "
+															+"let eventstorage = "+JSON.stringify(eventstorage)+"; "
+															+script.replace(/\n/g, "")+"}");
+			let response = await responseFunct();
+			return {
+				status:"ok",
+				response:response
+			};
+		}catch(e){
+			return {
+				status:"error",
+				response:e
+			}
+		}
+	}
+
 	global.runCommands = (eventData, eventName, extra) => {
-		
 		let isChat = eventData.message!=null;
 		let isReward = eventData.user_name!=null;
 		let isOSC = eventData.address!=null;
@@ -463,7 +532,7 @@ if(initMode){
 		}
 		
 		if(isChat && event.chatnotification == true){
-			sayInChat(eventData.username+" has activated "+event.name+"!", eventData.channel);
+			sayInChat(eventData.displayName+" has activated "+event.name+"!", eventData.channel);
 			sendToTCP("/events/start/"+eventName, eventData.username+" has activated "+event.name+"!");
 			createTimeout(eventName, null, "event", function(){
 				sayInChat(event.name+" has been deactivated!");
@@ -478,22 +547,34 @@ if(initMode){
 			let eCommand = event.commands[c];
 			let commandDuration = parseFloat(eCommand.duration);
 			
+			let thisCommand = null;
 			switch(eCommand.type){
 				case 'response':
-					
-					setTimeout(async () =>{
+					thisCommand = async () =>{
 						try{
-							let responseFunct = await eval("async () => { let event = "+JSON.stringify(eventData)+"; let extra = "+JSON.stringify(extra)+"; "+eCommand.message.replace(/\n/g, "")+"}");
+							if(eventstorage.eventName == null){
+								eventstorage.eventName = {};
+							}
+							
+							let responseFunct = await eval("async () => { let event = "+JSON.stringify(eventData)+"; let extra = "+JSON.stringify(extra)+"; "
+														+eCommand.message.replace(/\n/g, "")+"}");
 							let response = await responseFunct();
 							sayInChat(response, eventData.channel);
+							
 						}catch(e){
 							spooderLog("Failed to run response script. Check the event settings to verify it.", e)
 						}
 						
-					}, eCommand.delay);
+					}
+					if(eCommand.delay == 0){
+						thisCommand();
+					}else{
+						setTimeout(thisCommand, eCommand.delay);
+					}
+					
 				break;
 				case 'plugin':
-					setTimeout(() => {
+					thisCommand = () => {
 						if(activePlugins[eCommand.pluginname] != null){
 							if(typeof activePlugins[eCommand.pluginname].onEvent == "undefined"){
 								spooderLog(activePlugins[eCommand.pluginname], "onEvent() NOT FOUND");
@@ -507,11 +588,18 @@ if(initMode){
 							activePlugins[eCommand.pluginname].onEvent(eCommand.eventname, eventData);
 						}
 						
-					}, eCommand.delay);
+					};
+
+					if(eCommand.delay == 0){
+						thisCommand();
+					}else{
+						setTimeout(thisCommand, eCommand.delay);
+					}
 					
 				break;
 				case 'software':
-					setTimeout(() => {
+					
+					thisCommand = () => {
 						if(eCommand.etype == "timed"){
 							
 							let commandArgs = null;
@@ -550,6 +638,7 @@ if(initMode){
 									}
 								}
 							}
+							
 							if(!commandUsed){
 								sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
 							}
@@ -590,7 +679,13 @@ if(initMode){
 						}else if(eCommand.etype == "oneshot"){
 							sendToUDP(eCommand.dest_udp, eCommand.address, eCommand.valueOn);
 						}
-					}, eCommand.delay);
+					};
+
+					if(eCommand.delay == 0){
+						thisCommand();
+					}else{
+						setTimeout(thisCommand, eCommand.delay);
+					}
 					
 				break;
 				case "obs":
@@ -598,7 +693,8 @@ if(initMode){
 						spooderLog("OBS NOT CONNECTED");
 						break;
 					}
-					setTimeout(()=>{
+					
+					thisCommand = ()=>{
 						if(eCommand.function == "setinputmute"){
 							if(eCommand.etype == "timed"){
 								
@@ -631,10 +727,16 @@ if(initMode){
 								callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOn==1});
 							}
 						}
-					}, eCommand.delay);
+					};
+
+					if(eCommand.delay == 0){
+						thisCommand();
+					}else{
+						setTimeout(thisCommand, eCommand.delay);
+					}
 				break;
 				case "mod":
-					setTimeout(()=>{
+					thisCommand = ()=>{
 						if(eCommand.function == "lock"){
 							if(eCommand.targettype == "all"){
 								
@@ -688,7 +790,12 @@ if(initMode){
 							}
 							
 						}
-					}, eCommand.delay);
+					};
+					if(eCommand.delay == 0){
+						thisCommand();
+					}else{
+						setTimeout(thisCommand, eCommand.delay);
+					}
 				break;
 			}
 		}
