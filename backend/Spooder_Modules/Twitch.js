@@ -392,6 +392,27 @@ function processMessage(channel, tags, txt, self){
         
         if(modlocks.events[e] == 1){continue;}
         if(events[e].triggers.chat.enabled && self == false){
+            if(events[e].triggers.chat.broadcaster == true ||
+                events[e].triggers.chat.mod == true ||
+                events[e].triggers.chat.sub == true ||
+                events[e].triggers.chat.vip == true){
+                let pass = false;
+                if(events[e].triggers.chat.broadcaster == true && chatIsBroadcaster(message)){
+                    pass = true;
+                }
+                if(events[e].triggers.chat.mod == true && chatIsMod(message)){
+                    pass = true;
+                }
+                if(events[e].triggers.chat.sub == true && chatIsSubscriber(message)){
+                    pass = true;
+                }
+                if(events[e].triggers.chat.vip == true && chatIsVIP(message)){
+                    pass = true;
+                }
+                if(pass == false){
+                    continue;
+                }
+            }
             let check = checkResponseTrigger(events[e], message);
             if(check != null){
                 if(runCommands(check.message, e, check.extra) == "alreadyon"){
@@ -1265,6 +1286,10 @@ class STwitch{
     
         global.chatIsBroadcaster = (message) => {
             return message.tags.badges?.broadcaster == true;
+        }
+
+        global.chatIsVIP = (message) => {
+            return message.tags.badges?.vip == true;
         }
     
         global.getChatters = async (type) => {

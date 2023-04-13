@@ -1242,7 +1242,12 @@ class WebUI {
                 fs.rmSync(path.join(tempDir+"/command", "node_modules"), {recursive:true});
             }
 
-            await fs.move(tempDir+"/command", pluginDir, {overwrite:true});
+            if(fs.existsSync(pluginDir)){
+                mergeDirectories(tempDir+"/command", pluginDir);
+            }else{
+                await fs.move(tempDir+"/command", pluginDir, {overwrite:true});
+            }
+            
 
             chmodr(pluginDir,0o777, (err) => {
                 if(err) throw err;
@@ -1278,7 +1283,11 @@ class WebUI {
         }
 
         if(fs.existsSync(tempDir+"/assets")){
-            await fs.move(tempDir+"/assets", assetsDir, {overwrite:true});
+            if(fs.existsSync(assetsDir)){
+                mergeDirectories(tempDir+"/assets", assetsDir);
+            }else{
+                await fs.move(tempDir+"/assets", assetsDir, {overwrite:true});
+            }
 
             chmodr(assetsDir,0o777, (err) => {
                 if(err) throw err;
@@ -1441,5 +1450,27 @@ class WebUI {
 
     
 }
+
+//Contribution by ChatGPT :3
+function mergeDirectories(sourceDir, destDir) {
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir);
+    }
+  
+    const files = fs.readdirSync(sourceDir);
+  
+    files.forEach((file) => {
+      const srcPath = path.join(sourceDir, file);
+      const destPath = path.join(destDir, file);
+  
+      const stats = fs.statSync(srcPath);
+  
+      if (stats.isDirectory()) {
+        mergeDirectories(srcPath, destPath);
+      } else {
+        fs.moveSync(srcPath, destPath, { overwrite: true });
+      }
+    });
+  }
 
 module.exports = WebUI;
