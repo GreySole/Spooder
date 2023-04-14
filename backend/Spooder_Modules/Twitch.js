@@ -1307,6 +1307,63 @@ class STwitch{
         }
     }
 
+    callBotAPI(url){
+        return new Promise((res, rej)=>{
+            Axios({
+                url: url,
+                method: 'GET',
+                headers:{
+                    "Client-Id":oauth["client-id"],
+                    "Authorization":"Bearer "+token,
+                    "Content-Type":"application/json"
+                }
+            })
+            .then(data => res(data))
+            .catch(error=>{
+                console.error(error);
+                rej(error);
+            });
+        })
+    }
+
+    callAppAPI(url){
+        return new Promise((res, rej)=>{
+            Axios({
+                url: url,
+                method: 'GET',
+                headers:{
+                    "Client-Id":oauth["client-id"],
+                    "Authorization":"Bearer "+appToken,
+                    "Content-Type":"application/json"
+                }
+            })
+            .then(data => res(data))
+            .catch(error=>{
+                console.error(error);
+                rej(error);
+            });
+        })
+    }
+
+    callBroadcasterAPI(url){
+        return new Promise((res, rej)=>{
+            Axios({
+                url: url,
+                method: 'GET',
+                headers:{
+                    "Client-Id":oauth["client-id"],
+                    "Authorization":"Bearer "+oauth.broadcaster_token,
+                    "Content-Type":"application/json"
+                }
+            })
+            .then(data => res(data))
+            .catch(error=>{
+                console.error(error);
+                rej(error);
+            });
+        })
+    }
+
     twitchSigningSecret = process.env.TWITCH_SIGNING_SECRET;
 
     verifyTwitchSignature = (req, res, buf, encoding) => {

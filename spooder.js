@@ -412,9 +412,9 @@ if(initMode){
 
 	global.checkResponseTrigger = (eventData, message) => {
 		if(eventData.triggers.chat.search){
-			let commandSplit = eventData.triggers.chat.command.split(" ");
+			let commandSplit = eventData.triggers.chat.command.toLowerCase().split(" ");
 			let commandMatch = new Array(commandSplit.length).fill(false);
-			let messageSplit = message.message.split(" ");
+			let messageSplit = message.message.toLowerCase().split(" ");
 			let matchIndex = 0;
 			for(let m in messageSplit){
 				if(commandSplit[matchIndex] == "*"){commandMatch[matchIndex] = messageSplit[m];}
