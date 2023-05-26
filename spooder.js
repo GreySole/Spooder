@@ -12,6 +12,7 @@ var spooderLog = (...content) => {
 
 global.maintainenceMode = process.argv.length>2?process.argv[2] == "-e":false;
 
+global.rootDir = __dirname;
 global.backendDir = __dirname+"/backend";
 global.frontendDir = __dirname+"/webui";
 
@@ -229,10 +230,10 @@ if(initMode){
 
 	global.webUI = new WebUI();
 	
-	let webRouter = webUI.startServer(devMode);
-	global.twitch = new Twitch(webRouter);
-	global.discord = new Discord(webRouter);
-	global.obs = new OBS(webRouter);
+	webUI.startServer(devMode);
+	global.twitch = new Twitch(webUI.router, webUI.publicRouter);
+	global.discord = new Discord(webUI.router);
+	global.obs = new OBS(webUI.router);
 	webUI.onNgrokStart = function(){
 		twitch.refreshEventSubs();
 		
@@ -410,37 +411,90 @@ if(initMode){
 		return timeAmount+" "+timeTerm;
 	}
 
+	function matchConditions(a, b){
+				
+		if(a.includes("|")){
+			let cSplitOR = a.split("|");
+			//console.log(cSplitOR);
+			for(let c in cSplitOR){
+				if(cSplitOR[c].startsWith(">")){
+			
+					if(b.startsWith(cSplitOR[c].replace(">", ""))){
+						return b;
+					}
+				}else if(cSplitOR[c].startsWith("<")){
+					if(b.endsWith(cSplitOR[c].replace("<", ""))){
+						return b;
+					}
+				}else if(cSplitOR[c].toLowerCase() == b.toLowerCase()){
+					return b;
+				}
+			}
+			return false;
+		}else if(a.startsWith(">")){
+			
+			if(b.startsWith(a.replace(">", ""))){
+				return b;
+			}else{
+				return false;
+			}
+		}else if(a.startsWith("<")){
+			if(b.endsWith(a.replace("<", ""))){
+				return b;
+			}else{
+				return false;
+			}
+		}else if(a.toLowerCase() == b.toLowerCase()){return b;}
+		else{
+			return false;
+		}
+	}
+
 	global.checkResponseTrigger = (eventData, message) => {
-		if(eventData.triggers.chat.search){
-			let commandSplit = eventData.triggers.chat.command.toLowerCase().split(" ");
+		let searchMode = eventData.triggers.chat.search?true:eventData.triggers.osc.handletype=="search"?true:false;
+		let command = null;
+			if(message.eventType == "osc"){
+				command = eventData.triggers.osc.value.toLowerCase();
+			}else{
+				command = eventData.triggers.chat.command.toLowerCase();
+			}
+		if(searchMode == true){
+			
+			let commandSplit = command.split(" ");
 			let commandMatch = new Array(commandSplit.length).fill(false);
-			let messageSplit = message.message.toLowerCase().split(" ");
+			let messageSplit = message.message.toLowerCase().replaceAll(/[\p{P}\p{S}]/gu, "").split(" ");
 			let matchIndex = 0;
-			for(let m in messageSplit){
+			let startInd = 0;
+			for(let m=0; m<messageSplit.length; m++){
 				if(commandSplit[matchIndex] == "*"){commandMatch[matchIndex] = messageSplit[m];}
-				if(commandSplit[matchIndex].includes("|")){
-					let cSplitOR = commandSplit[matchIndex].split("|");
-					for(let c in cSplitOR){
-						if(cSplitOR[c].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m]; break;}
-					}
-				}else if(commandSplit[matchIndex].startsWith(">")){
+				else if(commandSplit[matchIndex].startsWith("*")){
 					
-					if(messageSplit[m].startsWith(commandSplit[matchIndex].replace(">", ""))){
-						commandMatch[matchIndex] = messageSplit[m];
+					for(let n=m; n<messageSplit.length; n++){
+						if(matchConditions(commandSplit[matchIndex].substr(1), messageSplit[n]) != false){
+							commandMatch[matchIndex] = messageSplit[n];
+							
+							m = n;
+							break;
+						}
 					}
-				}else if(commandSplit[matchIndex].startsWith("<")){
-					if(messageSplit[m].endsWith(commandSplit[matchIndex].replace("<", ""))){
-						commandMatch[matchIndex] = messageSplit[m];
-					}
-				}else if(commandSplit[matchIndex].toLowerCase() == messageSplit[m].toLowerCase()){commandMatch[matchIndex] = messageSplit[m];}
+				}else{
+					commandMatch[matchIndex] = matchConditions(commandSplit[matchIndex], messageSplit[m]);
+				}
 				
 				if(commandMatch[matchIndex] != false){
+					if(matchIndex == 0){startInd = m;}
 					matchIndex++;
+					
 					if(matchIndex == commandMatch.length){
-						console.log(commandMatch);
+						console.log("FINISH",commandMatch);
 						break;
 					}
 				}else{
+					//console.log(commandMatch, m, startInd);
+					if(matchIndex > 0){
+						m = startInd;
+					}
+					
 					matchIndex = 0;
 					commandMatch = new Array(commandSplit.length).fill(false);
 				}
@@ -454,13 +508,14 @@ if(initMode){
 				};
 			}
 		}else{
-			if(message.message.toLowerCase().startsWith(eventData.triggers.chat.command)){
+			if(message.message.toLowerCase().startsWith(command)){
 				return {
 					message:message,
 					extra:null
 				};
 			}
 		}
+		return null;
 	}
 
 	global.verifyResponseScript = async (message, extra, script) => {
@@ -482,9 +537,10 @@ if(initMode){
 	}
 
 	global.runCommands = (eventData, eventName, extra) => {
-		let isChat = eventData.message!=null;
-		let isReward = eventData.user_name!=null;
-		let isOSC = eventData.address!=null;
+		//console.log("RUNNING COMMANDS", eventData);
+		let isChat = eventData.eventType.includes("chat");
+		let isReward = eventData.eventType.includes("redeem");
+		let isOSC = eventData.eventType.includes("osc");
 		if(isReward){
 			eventData.username = eventData.user_name.toLowerCase();
 			eventData.displayName = eventData.user_name;
@@ -538,9 +594,11 @@ if(initMode){
 				sayInChat(event.name+" has been deactivated!");
 				sendToTCP("/events/end/"+eventName, event.name+" has been deactivated!");
 			}, event.cooldown);
-		}else if(isChat){
-			createTimeout(eventName, null, "event", function(){
-			}, event.cooldown);
+		}else if(isChat || isOSC){
+			if(event.cooldown != 0){
+				createTimeout(eventName, null, "event", function(){
+				}, event.cooldown);
+			}
 		}
 
 		for(let c in event.commands){
@@ -582,12 +640,9 @@ if(initMode){
 							}
 						}
 						eventData.eventInfo = event;
-						if(activePlugins[eCommand.pluginname].onPreEvent){
-							activePlugins[eCommand.pluginname].onPreEvent(eCommand.eventname, eventData);
-						}else{
+						if(activePlugins[eCommand.pluginname]?.onEvent != null){
 							activePlugins[eCommand.pluginname].onEvent(eCommand.eventname, eventData);
 						}
-						
 					};
 
 					if(eCommand.delay == 0){

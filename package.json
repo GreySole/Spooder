@@ -1,6 +1,6 @@
 {
   "name": "spooder",
-  "version": "0.4.2",
+  "version": "0.4.5",
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.js",
   "scripts": {

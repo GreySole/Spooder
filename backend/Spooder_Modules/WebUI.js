@@ -39,11 +39,26 @@ var webLog = (...content) => {
     console.log(logEffects("Bright"),logEffects("FgBlue"), ...content, logEffects("Reset"));
 }
 
+function isLocal(req){
+    const remoteAddressRaw = req.socket.remoteAddress.split(":");
+    const remoteAddress = remoteAddressRaw[remoteAddressRaw.length-1];
+    const isLocal = remoteAddress.startsWith('192.168.') ||
+                    remoteAddress.startsWith('10.') ||
+                    (remoteAddress == 1 && devMode == true) ||
+                    req.headers.host.startsWith("localhost")
+    return isLocal;
+}
+
 class WebUI {
 
     constructor(props){
 
     }
+
+    router = null;
+    publicRouter = null;
+
+    
 
     startServer(devMode){
 
@@ -82,13 +97,14 @@ class WebUI {
 
         var app = new express();
         var router = express.Router();
+        var publicRouter = express.Router();
+        this.router = router;
+        this.publicRouter = publicRouter;
 
         homeChannel = sconfig.broadcaster.username;
-        expressPort = devMode===false?sconfig.network.host_port:3001;
-        app.use("/",router);
-        if(devMode === false){
-            router.use("/", express.static(frontendDir+'/main/build'));
-        }
+        expressPort = sconfig.network.host_port;
+
+        router.use("/", express.static(frontendDir+'/main/build'));
         router.use("/mod", express.static(frontendDir+'/mod/build'));
 
         router.use("/overlay", express.static(backendDir+'/web/overlay'));
@@ -105,12 +121,36 @@ class WebUI {
         router.use("/checkin_plugins", fileUpload());
         router.use(express.json({verify: this.verifyTwitchSignature}));
 
+        //publicRouter.use("/", express.static(frontendDir+'/public/build'));
+        publicRouter.use("/mod", express.static(frontendDir+'/mod/build'));
+
+        publicRouter.use("/overlay", express.static(backendDir+'/web/overlay'));
+        publicRouter.use("/utility", express.static(backendDir+'/web/utility'));
+        publicRouter.use("/settings", express.static(backendDir+'/web/settings'));
+        publicRouter.use("/assets", express.static(backendDir+'/web/assets'));
+        publicRouter.use("/icons", express.static(backendDir+'/web/icons'));
+
+        publicRouter.use(bodyParser.urlencoded({extended:true}));
+        publicRouter.use(bodyParser.json());
+        publicRouter.use(express.json({verify: this.verifyTwitchSignature}));
+
+        app.use('/', (req, res, next) => {
+            
+            
+            if (isLocal(req)) {
+                router(req, res, next);
+              } else {
+                //console.log("PUBLIC CLIENT");
+                publicRouter(req, res, next);
+              }
+          });
+
         app.use((req, res, next) => {
             
             res.status(404).send("<h1>Page not found on the server</h1>");
         });
 
-        router.get("/plugin/get", async(req, res) => {
+        async function pluginGet(req, res){
 
             let isExternal = req.query.external;
             
@@ -143,21 +183,12 @@ class WebUI {
             }
 
             res.send({express: JSON.stringify(oscInfo)});
-        });
+        }
+
+        router.get("/plugin/get", pluginGet);
+        publicRouter.get("/plugin/get", pluginGet);
 
         router.get('/command_table', async (req, res) => {
-            let obs = {};
-            if(obs.connected){
-                let obsInputs = await callOBS("GetInputList");
-                let obsScenes = await callOBS("GetSceneList");
-                obs.inputs = obsInputs.inputs;
-                obs.scenes = obsScenes.scenes;
-                obs.sceneItems = {};
-                
-                for(let s in obs.scenes){
-                    obs.sceneItems[obs.scenes[s].sceneName] = await callOBS("GetSceneItemList", {sceneName:obs.scenes[s].sceneName});
-                }
-            }
             
             let props = {
                 "events":events,
@@ -228,6 +259,7 @@ class WebUI {
         });
 
         router.post("/saveConfig", async (req, res) => {
+            
             let statusMsg = "";
             if(sconfig.network.externalhandle == "ngrok" && req.body.network.externalhandle != "ngrok"){
                 this.stopNgrok();
@@ -955,11 +987,10 @@ class WebUI {
             let newSettings = req.body;
             let settingsFile = path.join(backendDir, "plugins", newSettings.pluginName, "settings.json");
             webLog("SAVING", settingsFile ,newSettings);
-            fs.writeFile(settingsFile, JSON.stringify(newSettings.settings), "utf-8", (err, data)=>{
-                res.send({saveStatus:"SAVE SUCCESS"});
+            fs.writeFileSync(settingsFile, JSON.stringify(newSettings.settings), "utf-8");
+            res.send({saveStatus:"SAVE SUCCESS"});
                 fs.chmod(settingsFile, 0o777);
                 webLog(""+newSettings.pluginName+" Settings Saved!");
-            });
 
             this.getPlugins();
         });
@@ -1030,16 +1061,11 @@ class WebUI {
             res.send(plugin);
         });
 
-        router.post("/mod/authentication", async(req, res) => {
+        async function modAuth(req,res){
             //let modlist = await chat.mods(channel);
-            let isLocal = false;
-            if(req.headers.referer != null){
-                if(req.headers.referer.startsWith("http:")){
-                    isLocal = true;
-                }
-            }
+            
 
-            if(isLocal){
+            if(isLocal(req)){
                 activeMods[botUsername] = "active";
                 res.send({status:"active", localUser:botUsername});
                 return;
@@ -1075,10 +1101,14 @@ class WebUI {
             }else{
                 res.send({status:"untrusted"});
             }
-        });
+        }
 
-        router.get("/mod/utilities", async(req, res) => {
-            if(activeMods[req.query.moduser] == "active" || req.headers.referer.startsWith("http:")){
+        router.post("/mod/authentication", modAuth);
+        publicRouter.post("/mod/authentication", modAuth);
+
+        async function modUtil(req, res){
+            let isLocalHost = isLocal(req);
+            if(activeMods[req.query.moduser] == "active" || isLocalHost){
                 let modevents = {};
                 for(let e in events){
                     if(events[e].triggers.chat.enabled){
@@ -1104,7 +1134,7 @@ class WebUI {
                 }
                 let oscURL = null;
                 let oscPort = null;
-                if(req.headers.referer.startsWith("http:")){
+                if(isLocalHost){
                     oscURL = sconfig.network.host;
                     oscPort = sconfig.network.osc_tcp_port;
                     
@@ -1128,9 +1158,12 @@ class WebUI {
                     status:"notmod",
                 }));
             }
-        });
+        }
 
-        router.post("/webhooks/caption", (req, res)=>{
+        router.get("/mod/utilities", modUtil);
+        publicRouter.get("/mod/utilities", modUtil);
+
+        publicRouter.post("/webhooks/caption", (req, res)=>{
             console.log("I HEAR VOICE", req.body);
             res.status(200).end();
         })
@@ -1352,6 +1385,7 @@ class WebUI {
             });
         })
     }
+
 
     async startNgrok(){
         if(maintainenceMode == true || devMode == true){

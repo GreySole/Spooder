@@ -5,6 +5,7 @@ const clientId = oauth['client-id'];
 const clientSecret = oauth['client-secret'];
 
 global.botUsername = "";
+global.botUserID = 0;
 global.homeChannel = sconfig.broadcaster.username;
 global.broadcasterUserID = 0;
 
@@ -50,6 +51,28 @@ async function getBroadcasterID(){
         })
         .then((response)=>{
             broadcasterUserID = response.data.data[0].id;
+        }).catch(error=>{
+            console.error(error);
+            if(error.response?.status == 401){
+                onAuthenticationFailure();
+            }
+            return;
+        });
+    }
+}
+
+async function getBotID(){
+    if(broadcasterUserID==0){
+        await Axios({
+            url: 'https://api.twitch.tv/helix/users?login='+botUsername,
+            method: 'get',
+            headers:{
+                "Authorization": "Bearer "+token,
+                "Client-Id":clientId
+            }
+        })
+        .then((response)=>{
+            botUserID = response.data.data[0].id;
         }).catch(error=>{
             console.error(error);
             if(error.response?.status == 401){
@@ -160,7 +183,8 @@ function twitchjsify(channel, tags, txt){
         username:tags.username,
         displayName:tags["display-name"],
         tags:tags,
-        message:txt
+        message:txt,
+        eventType:"twitch-chat"
     };
 
     let emotes = tags.emotes;
@@ -413,8 +437,10 @@ function processMessage(channel, tags, txt, self){
                     continue;
                 }
             }
+            
             let check = checkResponseTrigger(events[e], message);
             if(check != null){
+                
                 if(runCommands(check.message, e, check.extra) == "alreadyon"){
                     sayAlreadyOn(e);
                 }
@@ -427,10 +453,14 @@ function processMessage(channel, tags, txt, self){
             try{
                 if(message.channel != sconfig.broadcaster.username){
                     if(shares[message.channel]?.plugins.includes(p)){
-                        activePlugins[p].onChat(message);
+                        if(activePlugins[p].onChat != null){
+                            activePlugins[p].onChat(message);
+                        }
                     }
                 }else{
-                    activePlugins[p].onChat(message);
+                    if(activePlugins[p].onChat != null){
+                        activePlugins[p].onChat(message);
+                    }
                 }
             }catch(e){
                 twitchLog(e);
@@ -527,7 +557,7 @@ function getChatCommands(shareChannel){
     
     for(let e in events){
        //console.log("CHECKING ", e);
-        if(shareChannel != null && shareChannel != sconfig.broadcaster.username && shares[shareChannel]?.enabled == true){
+        if(shareChannel != null && shareChannel != homeChannel){
             if(!shares[shareChannel].commands.includes(e)){
                 //console.log("Command skipped", e, shareChannel);
                 continue;
@@ -613,7 +643,7 @@ var streamChatInterval = null;
 var reoccuringMessageCount = Math.round(Math.random()*10);
 
 class STwitch{
-    constructor(router){
+    constructor(router, publicRouter){
         let expressPort = sconfig.network.host_port;
         router.get('/twitch/authorize', async (req,res)=>{
             twitchLog("Got code");
@@ -892,7 +922,7 @@ class STwitch{
         });
 
         //HTTPS ROUTER
-        router.post("/webhooks/eventsub", async (req, res) => {
+        publicRouter.post("/webhooks/eventsub", async (req, res) => {
             const messageType = req.header("Twitch-Eventsub-Message-Type");
             if (messageType === "webhook_callback_verification") {
                 twitchLog("Verifying Webhook", req.body.subscription.type);
@@ -910,6 +940,14 @@ class STwitch{
             if(event.broadcaster_user_id != broadcasterUserID && type != "channel.raid"){
                 if(type == "stream.online"){
                     webUI.setShare(event.broadcaster_user_login, true);
+                    if(discord.loggedIn == true){
+                        discord.findUser(discord.config.master)
+                        .then(user => {
+                            let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+event.broadcaster_user_login)
+                            user.send({content:event.broadcaster_user_name+" is live. I'm going in!", components:[watchButton]});
+                        })
+                    }
+                    
                 }else if(type == "stream.offline"){
                     webUI.setShare(event.broadcaster_user_login, false);
                 }
@@ -926,8 +964,20 @@ class STwitch{
                 }
             }
 
+            
+
             if(type == "stream.online"){
                 startReoccuringMessage();
+                if(eventsubs.events[type].discord?.enabled == true){
+                    if(discord.loggedIn == true){
+                        let channelInfo = await this.getChannelInfo(broadcasterUserID);
+                        let onlineMessage = channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
+                        let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+homeChannel)
+                        discord.sendToChannel(eventsubs.events[type].discord.guild, eventsubs.events[type].discord.channel, 
+                            {content:onlineMessage, components:[watchButton]})
+                    }
+                    
+                }
             }
 
             if(type == "stream.offline"){
@@ -996,6 +1046,7 @@ class STwitch{
                 if(eventsubs.events[type].spooderevent != null){
                     if(eventsubs.events[type].spooderevent.enabled){
                         if(events[eventsubs.events[type].spooderevent.eventname] != null){
+                            event.eventType = "twitch-eventsub";
                             runCommands(event, eventsubs.events[type].spooderevent.eventname);
                         }
                     }
@@ -1009,6 +1060,7 @@ class STwitch{
                         && events[e].triggers.redemption.id == event.reward.id){
                             if(event.status == "fulfilled" || events[e].triggers.redemption.override == true){
                                 if(modlocks.events[e] != 1){
+                                    event.eventType = "twitch-redeem";
                                     runCommands(event, e);
                                 }else{
                                     //rejectChannelPointReward(event.reward.id, event.id);
@@ -1029,6 +1081,7 @@ class STwitch{
                     && events[e].triggers.redemption.override == false){
                         if(event.status == "fulfilled"){
                             if(modlocks.events[e] != 1){
+                                event.eventType = "twitch-redeem";
                                 runCommands(event, e);
                             }else{
                                 //rejectChannelPointReward(event.reward.id, event.id);
@@ -1076,7 +1129,7 @@ class STwitch{
         }
 
         function startReoccuringMessage(){
-            if(eventsubs.events["stream.online"].chat.enabled && eventsubs.events["stream.online"].chat.reoccuringmessage != "" ){
+            if(eventsubs.events["stream.online"]?.chat.enabled && eventsubs.events["stream.online"]?.chat.reoccuringmessage != "" ){
                 let reoccuringInterval = async function(){
                     try{
                         let responseFunct = eval("() => {let count = "+JSON.stringify(reoccuringMessageCount)+"; "+eventsubs.events["stream.online"].chat.reoccuringmessage.replace(/\n/g, "")+"}");
@@ -1084,7 +1137,7 @@ class STwitch{
                         sayInChat(response);
                         reoccuringMessageCount++;
                     }catch(e){
-                        sayInChat("Grey, the reoccuring message failed to send :( Check my logs to see what went wrong!");
+                        sayInChat("The reoccuring message failed to send :( Check my logs to see what went wrong!");
                         clearInterval(streamChatInterval);
                     }
                     
@@ -1220,10 +1273,10 @@ class STwitch{
                 for(let stringpos=0; stringpos<message.length; stringpos+=limit){
                     
                     if(stringpos+limit > message.length){
-                        await chat.say(homeChannel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
+                        await chat.say(chatChannel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
                     }else{
                         //twitchLog(stringpos, stringpos.limit);
-                        await chat.say(homeChannel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+                        await chat.say(chatChannel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
                     }
                 }
             }else{
@@ -1425,6 +1478,7 @@ class STwitch{
                 }
             }
 
+            await getBotID();
             await getBroadcasterID();
             await getAppToken();
     

@@ -21,17 +21,33 @@ class OBSOSC{
         });
 
         router.get("/obs/get_scenes", async (req, res) => {
-            if(!this.connected){
+            if(this.connected == false){
                 res.send({"status":"notconnected"});
             }else{
                 let obsReturn = {};
                 let obsScenes = await this.call("GetSceneList");
-                obsReturn.scenes = obsScenes.scenes;
+                if(obsScenes == null){
+                    res.send({});
+                    return;
+                }
+                obsReturn.scenes = {};
+                for(let s in obsScenes.scenes){
+                    obsReturn.scenes[obsScenes.scenes[s].sceneIndex] = obsScenes.scenes[s];
+                }
                 obsReturn.sceneItems = {};
                 
                 for(let s in obsReturn.scenes){
-                    obsReturn.sceneItems[obsReturn.scenes[s].sceneIndex] = await this.call("GetSceneItemList", {sceneName:obsReturn.scenes[s].sceneName}).then(data=>data.sceneItems);
+                    let sceneItems = await this.call("GetSceneItemList", {sceneName:obsReturn.scenes[s].sceneName}).then(data=>data.sceneItems);
+                    obsReturn.sceneItems[s] = {};
+                    for(let si in sceneItems){
+                        obsReturn.sceneItems[s][sceneItems[si].sceneItemId] = sceneItems[si];
+                    }
                 }
+
+                let obsInputs = await this.call("GetInputList");
+                
+                obsReturn.inputs = obsInputs.inputs;
+                
 
                 obsReturn.status = "ok";
                 res.send(obsReturn);

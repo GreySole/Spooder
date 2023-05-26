@@ -15,6 +15,7 @@
 <a href="#eventsubs">EventSubs</a><br>
 <a href="#connecting-to-obs">Connecting to OBS</a><br>
 <a href="#connecting-to-discord-wip">Connecting to Discord</a><br>
+<a href="#discord-master-and-trusted-handlers">Discord Master and Trusted Handlers</a><br>
 <a href="#developing-web-ui-and-mod-ui">Developing Web UI and Mod UI</a><br>
 <a href="#have-questions">Have Questions?</a><br>
 
@@ -50,7 +51,14 @@ Commands:
 
 Response - Write a script to build your bot's response to the trigger and return a string. Use the Verify Script button to ensure the script works. The chat message going through will be "Test Message" unless you put something in the input field. The resulting response will appear with a green border indicating it works. If not, the error will appear with a red border. Think of response commands as micro plugins. They can call any global function within Spooder (list in the Sample Plugin Repository). Responses also work asynchronously, so you can make API calls using fetch() to build your response. As of v0.4, you can access the eventstorage object to store values in response commands and save by calling saveEventStorage() within the response script.
 
-Response Search and Match (WIP) - Trigger the response with each space separated word as the command. You can use wildcard * to match with any word and use OR | between words without a space between them. So a command like "* my *" will first match any word, then "my", and then any word in sequence. Then the matched words go into the response script as extra[]. So with this command you could say "boop my nose" and the response could be "I shall boop thy nose!" You could also make a command that matches pronouns like "boop him|her|them".
+Response Search and Match (WIP) - Trigger the response with each space separated word as the command. You can use wildcard * to match with any word and use OR | between words without a space between them. So a command like "* my *" will first match any word, then "my", and then any word in sequence. Then the matched words go into the response script as extra[]. So with this command you could say "boop my nose" and the response could be "I shall boop thy nose!" You could also make a command that matches pronouns like "boop him|her|them". Search and Match code works sequentially. Meaning it will find the words in the order you put them. Special characters prefixed on words help make a range of ways to trigger the response.
+
+Search and Match codes are:
+`*` - Free space. It'll take any word.
+`*word` - Find this word and continue matching from there
+`>` - Word starts with these characters
+`<` - Word ends with these characters
+`|` - OR words. So you can set multiple words to match. You can also use `>` and `<` in OR words.
 
 Plugin - Choose a plugin and event name to send the event data to. This will go through the plugin's onEvent function.
 
@@ -86,6 +94,8 @@ Now you can easily share certain plugins and commands without Spooder leaving yo
 
 # OSC Tunnels
 These tunnels simply listen for OSC from overlays or software and repeat them to another address. So that software like TouchOSC can control other devices or overlays.
+To tunnel a range of addresses, put * at the end. Whereever you put * at the end of the Address To will have that part of the address from Address From appended to Address To.
+You can also tunnel addresses straight to plugins.
 
 # Accessing Externally
 Some of Spooder's features require an https url to access through the internet. EventSubs, Channel Point Rewards, and the Mod UI need this. One way to do this is to set up a free ngrok.io account. Ngrok is integrated within Spooder. So just paste your auth key in the Config tab and the tunnels are all set.
@@ -102,7 +112,20 @@ channel.channel_points_custom_reward_redemption.add and update are needed to lin
 Check out Deck Mode in the Web UI and you'll find the OBS Remote. Enter your OBS machine's info to connect. Spooder connects to OBS on the backend with a custom OSC front to control it. The OBS Remote has all the essentials to run your stream. Stream/Record buttons, source toggles, scene switcher with studio mode support, and volume control. Groups are supported for both source and volume controls. Volume meters are grouped in a unified meter and have a group mute button. Changing volume also allows you to confirm your change or revert back to its previous level.
 
 # Connecting to Discord (WIP)
-There isn't event/eventsub support yet, but you can now make plugins for a Discord bot! It currently receives any message in your server(s) and sends them to plugins with the onDiscord(type, data) function. Add your bot token in the Config tab under Discord Settings. You can also automatically send your mod link from Ngrok to a private channel so your mods get the new link instantly when Spooder starts. (You'll need to save and restart Spooder after adding the token to get your channels)
+You can now make plugins for a Discord bot! It currently receives any message in your server(s) and sends them to plugins with the onDiscord(type, data) function. Add your bot token in the Config tab under Discord Settings. You can also automatically send your mod link from Ngrok to a private channel so your mods get the new link instantly when Spooder starts. (You'll need to save and restart Spooder after adding the token to get your channels).
+
+Discord event data comes straight from the docs of Discord.js and event types are:
+
+message - Your average Discord message. If GuildID is null, that means its a DM.
+voice - Call !join on a voice channel to call your bot in and subscribe to voice events.
+interaction - Usually data from slash commands (UI for building slash commands is in the works)
+
+# Discord Master and Trusted Handlers
+From the config tab in the WebUI, you can assign your own UserID as the Spooder's Discord Master. You'll want to enable dev mode on your Discord app (Settings -> Advanced -> Developer Mode) to be able to copy UserIDs through the right-click context menu. That's for your own ID and whatever plugins that need a UserID.
+
+Trusted Handlers aren't just mods for a server. They are hand picked by the master to handle commands and plugins just like those who gain access to the Mod UI. To trust a user, you the master must send a message to your bot or a server where your bot is like so: "@Spooder trust @user". If all is good, your message will get a 👍 react and the user you trusted will get a DM from the bot notifying they are trusted.
+
+For plugin developers that want only the master and handlers to use a command, all you need is an if statement with `discord.isHandler(message.author.id)` and you're good to go!
 
 # Developing Web UI and Mod UI
 Use `npm run dev` to run Spooder in development mode. This sets the web UI's hosting port to 3001. In another shell, use `npm run start-front` to run the web UI's development server which will run your configured port like usual. Use `npm run build-front` to create an optimized build for the web UI. When built, Spooder can be started up normally with your changes to the web UI. You could also just set the proxy on either UI's package.json file to be your configured port. Then the dev server will run on a different port.

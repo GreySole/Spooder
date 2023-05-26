@@ -55,6 +55,7 @@ class SDiscord{
         return new Promise(async (res, rej) => {
 
             let discordInfo = this.config;
+            
             if(discordInfo == null){
                 discordLog("No Discord token. You can set this in the Config tab.");
                 rej("notoken");
@@ -62,91 +63,19 @@ class SDiscord{
             }
         
             if(discordInfo.commands){
+                discordLog("FOUND COMMANDS");
                 let dCommands = discordInfo.commands;
                 for(let d in dCommands){
-                    this.commands.set(dCommands[d].data.name, dCommands[d]);
+                    this.commands.set(dCommands[d].name, dCommands[d]);
                 }
-                console.log(`Started refreshing ${commands.length} application (/) commands.`);
+
+                console.log(`Started refreshing ${this.commands.length} application (/) commands.`);
                 const rest = new REST({version:"10"}).setToken(discordInfo.token);
-                const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:commands});
+                const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:this.commands});
 
                 discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
-            }else{
-                
-
-                /*let defaultCommand = {
-                    data:new SlashCommandBuilder()
-                            .setName("time")
-                            .setDescription("Replies with provided time for each user's locale")
-                            .addStringOption(option=>option.setName("inputtime")
-                                .setDescription("The time in your locale to make dynamic")
-                                .setRequired(true))
-                            .addStringOption(option=>option.setName("inputdate")
-                                .setDescription("The date to make dynamic"))
-                            .addBooleanOption(option=>option.setName("relative")
-                                .setDescription("Tell how long ago or in the future the time will be"))
-                            .addBooleanOption(option=>option.setName("code")
-                                .setDescription("Get the raw code to append to your message")),
-                    async execute(interaction){
-                        let time = new Date();
-                        
-                        let inputTime = interaction.options.get("inputtime").value.toLowerCase();
-                        let inputDate = interaction.options.get("inputdate")?.value;
-                        let isRelative = interaction.options.get("relative")?.value;
-                        let isCode = interaction.options.get("code")?.value;
-                        let pmOffset = inputTime.toLowerCase().includes("pm")?12:0;
-                        inputTime.replace("pm","");
-                        inputTime.replace("am","");
-                        let splitTime = inputTime.split(":");
-                        for(let s in splitTime){splitTime[s] = parseInt(splitTime[s])}
-                        //console.log(splitTime, pmOffset);
-                        let dynamicCode = "t";
-                        if(splitTime.length == 1){
-                            time.setHours(splitTime[0]+pmOffset);
-                            time.setMinutes(0);
-                        }
-                        if(splitTime.length == 2){
-                            time.setHours(splitTime[0]+pmOffset);
-                            time.setMinutes(splitTime[1]);
-                            time.setSeconds(0);
-                            dynamicCode = "t";
-                        }else if(splitTime.length == 3){
-                            time.setHours(splitTime[0]+pmOffset);
-                            time.setMinutes(splitTime[1]);
-                            time.setSeconds(splitTime[2]);
-                            dynamicCode = "T";
-                        }
-
-                        if(inputDate != null){
-                            console.log("Date",inputDate);
-                            dynamicCode = "f";
-                            let dateSeperator = "/";
-                            if(inputDate.includes("/")){
-                                dateSeperator = "/"
-                            }else if(inputDate.includes("-")){
-                                dateSeperator = "-";
-                            }
-
-                            let splitDate = inputDate.split(dateSeperator);
-
-                            if(splitDate.length == 2){
-                                time.setDate(splitDate[0]);
-                                time.setMonth(splitDate[1]);
-                            }else if(splitDate.length == 3){
-                                let year = splitDate[2].length==2?"20"+splitDate[2]:splitDate[2];
-                                time.setFullYear(year);
-                            }
-                        }
-                        //console.log(time.getDate(), time.getMonth(), time.getFullYear());
-                        if(isRelative == true){dynamicCode="R";}
-                        let timeCode = "<t:"+Math.floor(time.getTime()/1000)+":"+dynamicCode+">";
-                        if(isCode == true){timeCode = "```"+timeCode+"```";}
-                        //console.log(timeCode);
-                        await interaction.reply(timeCode);
-                    }
-                };*/
-                
             }
+            
             if(discordInfo.token != "" && discordInfo.token != null){
                 discordLog("STARTING DISCORD CLIENT");
                 await this.startClient(discordInfo.token).catch(e=>{rej(e)});
@@ -157,7 +86,8 @@ class SDiscord{
     }
 
     startClient(token){
-        const {Client, Events, GatewayIntentBits, Partials} = require("discord.js");
+        const {Client, Events, GatewayIntentBits, Partials, ChannelType} = require("discord.js");
+        
         return new Promise((res, rej) => {
             this.client = new Client({
                 intents: [GatewayIntentBits.Guilds,
@@ -178,7 +108,7 @@ class SDiscord{
                 res("success");
             });
             client.on(Events.InteractionCreate, async interaction => {
-                discordLog("DISCORD INTERACTION", interaction);
+                //discordLog("DISCORD INTERACTION", interaction);
                 if(!interaction.isChatInputCommand()){return;}
     
                 let command = this.commands.get(interaction.commandName);
@@ -189,7 +119,7 @@ class SDiscord{
                 }
     
                 try{
-                    await command.execute(interaction);
+                    this.callPlugins("interaction", interaction);
                 }catch(error){
                     console.error(error);
                     await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
@@ -197,25 +127,46 @@ class SDiscord{
             });
             client.on(Events.MessageCreate, async message=>{
                 if(message.author.id == client.user.id){return;}
-    
-                this.callPlugins("message", message);
                 
                 if(message.guildId == null){
                     discordLog("Discord PM", message.author.username, message.content, message.attachments);
-                    
                 }else{
                     discordLog("Discord", this.getGuild(message.guildId).name, message.author.username, message.content);
-                    
-                    if(message.content.toLowerCase() == "!join"){
-                        discordLog(message.guildId, message.channelId);
-                        this.joinVoiceChannel(message.guildId, message.channelId);
-                        return;
+
+                    if(message.mentions.users.first()?.id == this.client.user.id || message.mentions.roles.first()?.tags?.botId == this.client.user.id){
+                        let command = message.content.toLowerCase().split(" ");
+                        if(command.length >= 2){
+                            if(command[1] == "trust"){
+                                if(message.author.id == this.config.master){
+                                    console.log(message.mentions.users.at(1));
+                                    let trustUser = message.mentions.users.at(1);
+                                    if(this.config.handlers == null){this.config.handlers = {}}
+                                    this.config.handlers[trustUser.id] = {id:trustUser.id};
+                                    fs.writeFileSync(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8");
+                                    message.react("👍");
+                                    this.sendDM(trustUser.id, "My master has entrusted you to handle me. That means you can use my moderation commands in any server I'm in!");
+                                }else{
+                                    let masterUser = await this.findUser(this.config.master);
+                                    message.reply("Only my master "+masterUser.username+" can assign trusted handlers");
+                                }
+                            }
+                        }
                     }
+
+                    if(message.content.toLowerCase() == "!join"){
+                        if(message.channel.type == ChannelType.GuildVoice){
+                            this.joinVoiceChannel(message.guildId, message.channelId);
+                            return;
+                        }
+                    }
+
                     if(message.content.toLowerCase() == "!leave"){
                         this.leaveVoiceChannel();
                         return;
                     }
                 }
+
+                this.callPlugins("message", message);
             })
             client.login(token);
         })
@@ -233,6 +184,19 @@ class SDiscord{
                 
             }
         }
+    }
+
+    isHandler(userid){
+        console.log(userid, this.config.master, this.config.handlers);
+        if(this.config.master == userid){
+            return true;
+        }
+        if(this.config.handlers != null){
+            if(this.config.handlers[userid] != null){
+                return true;
+            }
+        }
+        return false;
     }
 
     joinVoiceChannel(guildId, channelId){
@@ -260,7 +224,7 @@ class SDiscord{
         });
 
         this.voiceChannel.on("stateChange", (oldstate, newstate) => {
-            discordLog('join', 'Connection state change from', oldstate.status, 'to', newstate.status)
+            //discordLog('join', 'Connection state change from', oldstate.status, 'to', newstate.status)
             if (oldstate.status === voice.VoiceConnectionStatus.Ready && newstate.status === voice.VoiceConnectionStatus.Connecting) {
                 this.voiceChannel.configureNetworking();
             }
@@ -285,7 +249,6 @@ class SDiscord{
         })
 
         this.client.on('voiceStateUpdate', (oldstate, newstate)=>{
-            //console.log(this.voiceChannel, this.voiceChannel.receiver);
             this.callPlugins("voice", {event:"state-update", oldstate:oldstate, newstate:newstate});
         });
 
@@ -371,6 +334,14 @@ class SDiscord{
         return this.client.users.fetch(userId);
     }
 
+    sendDM(userId, message){
+        if(!this.loggedIn){return null;}
+        this.findUser(userId)
+        .then(user => {
+            user.send(message);
+        })
+    }
+
     getUserName(userId){
         if(!this.loggedIn){return null;}
         return this.client.users.cache.get(userId).username;
@@ -410,6 +381,10 @@ class SDiscord{
         return this.client.guilds.cache.get(guildId);
     }
 
+    getChannels(guildId){
+        return this.client.guilds.cache.get(guildId).channels.cache;
+    }
+
     getChannel(channelId, guildId){
         return this.client.guilds.cache.get(guildId).channels.cache.get(channelId);
     }
@@ -423,6 +398,17 @@ class SDiscord{
         let targetServer = client.guilds.cache.get(server);
         let targetChannel = targetServer.channels.cache.get(channel);
         targetChannel.send(message);
+    }
+
+    makeLinkButton(label, url){
+        const {ButtonStyle, ButtonBuilder, ActionRowBuilder} = require("discord.js");
+        const button = new ButtonBuilder()
+        .setLabel(label)
+        .setURL(url)
+        .setStyle(ButtonStyle.Link);
+        const row = new ActionRowBuilder()
+			.addComponents(button);
+        return row;
     }
 }
 
