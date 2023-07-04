@@ -1,3 +1,11 @@
+#Spooder user folders
+backend/settings
+backend/web
+backend/temp
+backend/log
+backend/plugins
+backend/backup
+
 # Logs
 logs
 *.log

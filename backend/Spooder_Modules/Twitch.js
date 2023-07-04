@@ -1223,6 +1223,12 @@ class STwitch{
 
             if(!eventType.startsWith("channel.raid")){
                 condition = {"broadcaster_user_id":bid};
+                if(eventType == ("channel.follow") 
+                || eventType.startsWith("channel.guest_star") 
+                || eventType.startsWith("channel.shield_mode") 
+                || eventType.startsWith("channel.shoutout")){
+                    condition.moderator_user_id = botUserID;
+                }
             }else{
                 if(eventType.split("-")[1] == "receive"){
                     condition = {"to_broadcaster_user_id":bid};
@@ -1230,6 +1236,15 @@ class STwitch{
                     condition = {"from_broadcaster_user_id":bid};
                 }
                 eventType = eventType.split("-")[0];
+            }
+    
+            let version = "1";
+            if(eventType == "channel.update"){
+                version = "beta";
+            }else if(eventType == "channel.follow"){
+                version = "2";
+            }else if(eventType.startsWith("channel.guest_star")){
+                version = "beta";
             }
 
             return new Promise((res, rej)=>{
@@ -1243,7 +1258,7 @@ class STwitch{
                     },
                     data:{
                         "type":eventType,
-                        "version": "1",
+                        "version": version,
                         "condition":condition,
                         "transport":{
                             "method": "webhook",
