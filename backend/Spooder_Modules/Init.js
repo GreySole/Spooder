@@ -1,4 +1,8 @@
 const fs = require("fs");
+const WebUI = require("./WebUI");
+const Twitch = require("./Twitch");
+const Discord = require("./Discord");
+const YouTube = require("./YouTube");
 
 const { networkInterfaces } = require('os');
 
@@ -23,269 +27,98 @@ for (const name of Object.keys(nets)) {
     }
 }
 
-/*const express = require('express');
-const bodyParser = require("body-parser");
-const AdmZip = require('adm-zip');
-const fileUpload = require('express-fileupload');*/
-
 class Initializer{
 
     constructor(){
-        this.beginInit();
 
-        /*var app = new express();
-        var router = express.Router();
-        expressPort = 3000;
-        app.use("/",router);
-        if(devMode === false){
-            router.use("/", express.static(frontendDir+'/init/build'));
-        }
-        router.use(bodyParser.urlencoded({extended:true}));
-        router.use(bodyParser.json());
-        router.use("/upload_settings", fileUpload());
-        router.use("/upload_plugins", fileUpload());
+        this.webUI = new WebUI();
 
-        router.get("/save_auth_to_broadcaster", async(req, res) => {
-            oauth["broadcaster_token"] = token;
-            oauth["broadcaster_refreshToken"] = refreshToken;
-            fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-                console.log("oauth saved!");
-                res.send({status:"SUCCESS"});
-            });
-        });
+        sconfig.network = {host_port:3000};
 
-        router.get('/handle', async (req,res)=>{
-            console.log("Got code");
-            token = req.query.code;
-            var twitchParams = "?client_id="+clientId+
-                "&client_secret="+clientSecret+
-                "&grant_type=authorization_code"+
-                "&code="+token+
-                "&redirect_uri=http://localhost:"+expressPort+"/handle"+
-                "&response_type=code";
-                
-                
-            await Axios.post('https://id.twitch.tv/oauth2/token'+twitchParams)
-                    .then((response)=>{
-                        
-                        if(typeof response.data.access_token != "undefined"){
-                            token = response.data.access_token;
-                            refreshToken = response.data.refresh_token;
-                            oauth.token = token;
-                            oauth.refreshToken = refreshToken;
-                            fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-                                console.log("oauth saved!");
-                            });
+        this.webUI.startServer(true);
 
-                        }
-                    }).catch(error=>{
-                        console.error(error);
-                        return;
-                    });
-            console.log("Got token");
-            
-            await Axios({
-                url: 'https://id.twitch.tv/oauth2/validate',
-                method: 'get',
-                headers:{
-                    "Authorization": "Bearer "+token
+        this.twitch = new Twitch(this.webUI.router, this.webUI.publicRouter);
+        this.youtube = new YouTube(this.webUI.router, this.webUI.publicRouter);
+        this.discord = new Discord(this.webUI.router);
+
+        this.webUI.router.get("/init", async (req, res) => {
+            sconfig = fs.existsSync(backendDir+"/settings/config.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/config.json")):null;
+            themes = fs.existsSync(backendDir+"/settings/themes.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/themes.json")):null;
+            let twitchBotUser = null;
+            let twitchBroadcasterUser = null;
+            let discordUser = null;
+            if(this.twitch.oauth?.["token"] != null){
+                if(this.twitch.loggedIn == false){
+                    await this.twitch.autoLogin();
                 }
+            }
+            if(this.twitch.loggedIn == true){
+                twitchBotUser = await this.twitch.getUserInfo(this.twitch.botUsername);
+                twitchBroadcasterUser = await this.twitch.getUserInfo(this.twitch.homeChannel);
+            }
+
+            /*if(this.youtube.oauth?.["token"] != null){
+                if(this.youtube.loggedIn == false){
+                    await this.youtube.autoLogin();
+                }
+            }
+
+            if(this.youtube.loggedIn == true){
+
+            }*/
+
+            if(this.discord.config?.["token"] != null){
+                if(this.discord.loggedIn == false){
+                    await this.discord.autoLogin();
+                }
+            }
+            if(this.discord.loggedIn == true){
+                let masterUser = await this.discord.findUser(this.discord.config.master);
+                discordUser = {
+                    botUser:{username:this.discord.client.user.username, profilepic:this.discord.client.user.displayAvatarURL()},
+                    master:{username:masterUser.username, profilepic:masterUser.displayAvatarURL()}
+                }
+            }
+            
+            res.send({
+                config:sconfig,
+                nets:results,
+                twitch:this.twitch.oauth ?? {},
+                twitch_user:{botUser:twitchBotUser, broadcasterUser:twitchBroadcasterUser},
+                discord:this.discord.config ?? {},
+                discord_user:discordUser,
+                themes:themes
             })
-            .then((response)=>{
-                
-                username = response.data.login;
-            }).catch(error=>{
-                console.error(error);
-                return;
-            });
-            this.onLogin();
-            res.redirect("http://localhost:"+(devMode==true?3000:expressPort));
-        });
+        })
 
-        router.post("/restore_settings", async(req, res) => {
-            let fileName = null;
-            let selections = req.body.selections;
-            if(!fs.existsSync(backendDir+"/tmp")){
-                fs.mkdirSync(backendDir+"/tmp");
-            }
+        this.webUI.router.post("/save_twitch", async(req, res) => {
+            let newTwitch = req.body;
+            console.log("OAUTH",req.body);
+            this.twitch.oauth = newTwitch;
+            fs.writeFileSync(backendDir+"/settings/twitch.json", JSON.stringify(newTwitch));
+            res.send({status:"ok"});
+        })
 
-            if(req.files){
-                fileName = req.files.file.name;
-                if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
-                    await fs.rm(path.join(backendDir, "tmp", fileName));
-                }
-                await req.files.file.mv(path.join(backendDir, "tmp", fileName));
-
-            }else if(req.body.backupName){
-                fileName = req.body.backupName;
-                if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
-                    await fs.rm(path.join(backendDir, "tmp", fileName));
-                }
-                fs.copySync(path.join(backendDir, "backup", "settings", fileName), path.join(backendDir, "tmp", fileName), {overwrite:true});
-            }
-
-            let fileDir = path.join(backendDir, "tmp", fileName.split(".")[0]);
-
-            if(fs.existsSync(fileDir)){
-                await fs.rm(fileDir, {recursive:true});
-            }
-
-            let zip = new AdmZip(path.join(backendDir, "tmp", fileName));
-            zip.extractAllTo(fileDir);
-            
-            for(let s in selections){
-                console.log("CHECKING", s+".json");
-                if(selections[s] == true){
-                    if(fs.existsSync(path.join(fileDir, s+".json"))){
-                        console.log("OVERWRITE "+s+".json");
-                        fs.copySync(path.join(fileDir, s+".json"), path.join(backendDir, "settings", s+".json"), {overwrite:true});
-                    }else{
-                        console.log(path.join(fileDir, s+".json"),"NOT FOUND");
-                    }
-                }
-            }
-
-            if(fs.existsSync(fileDir)){
-                await fs.rm(fileDir, {recursive:true});
-            }
-
-            if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
-                await fs.rm(path.join(backendDir, "tmp", fileName));
-            }
-
-            let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
-            console.log("COMPLETE");
-            refreshFiles();
-            res.send({status:"SUCCESS",name:sconfig.bot.bot_name});
-        });
-
-        router.post("/restore_plugins", async(req, res) => {
-            let fileName = null;
-            let selections = req.body.selections;
-            if(!fs.existsSync(backendDir+"/tmp")){
-                fs.mkdirSync(backendDir+"/tmp");
-            }
-
-            if(req.files){
-                fileName = req.files.file.name;
-                if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
-                    await fs.rm(path.join(backendDir, "tmp", fileName));
-                }
-                await req.files.file.mv(path.join(backendDir, "tmp", fileName));
-
-            }else if(req.body.backupName){
-                fileName = req.body.backupName;
-                if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
-                    await fs.rm(path.join(backendDir, "tmp", fileName));
-                }
-                fs.copySync(path.join(backendDir, "backup", "plugins", fileName), path.join(backendDir, "tmp", fileName), {overwrite:true});
-            }
-
-            let fileDir = path.join(backendDir, "tmp", fileName.split(".")[0]);
-
-            console.log("GET BACKUP", fileName, fileDir);
-
-            if(fs.existsSync(fileDir)){
-                await fs.rm(fileDir, {recursive:true});
-            }
-
-            let zip = new AdmZip(path.join(backendDir, "tmp", fileName));
-            zip.extractAllTo(fileDir);
-
-            let pluginList = fs.readdirSync(path.join(fileDir, "plugins"));
-            console.log("Deleting Plugins...");
-            fs.rmSync(path.join(backendDir, "plugins"),{recursive:true});
-            fs.mkdirSync(path.join(backendDir, "plugins"));
-
-            console.log("Copying Plugins...");
-            for(let p in pluginList){
-                console.log(pluginList[p]);
-                fs.copySync(path.join(fileDir, "plugins", pluginList[p]), path.join(backendDir, "plugins", pluginList[p]));
-            }
-
-            let webfolders = fs.readdirSync(path.join(backendDir, "web"));
-            console.log("Deleting Web Folders...");
-            for(let w in webfolders){
-                if(webfolders[w] != "mod"){
-                    
-                    fs.rmSync(path.join(backendDir, "web", webfolders[w]), {recursive:true});
-                }
-            }
-
-            let newWebFolders = fs.readdirSync(path.join(fileDir, "web"));
-            console.log("Copying Web Folders...");
-            for(let w in newWebFolders){
-                if(newWebFolders[w] != "mod"){
-                    console.log(newWebFolders[w])
-                    fs.copySync(path.join(fileDir, "web", newWebFolders[w]),
-                    path.join(backendDir, "web", newWebFolders[w]));
-                }
-            }
-            console.log("Cleaning up...")
-            if(fs.existsSync(fileDir)){
-                await fs.rm(fileDir, {recursive:true});
-            }
-
-            if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
-                await fs.rm(path.join(backendDir, "tmp", fileName));
-            }
-            getPlugins();
-            let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
-            console.log("COMPLETE");
-            res.send({status:"SUCCESS",newbackups:newPluginBackups});
-        });
-
-        router.post("/save_all", async (req, res) => {
-            let newSettings = req.body;
+        this.webUI.router.post("/save_config", async (req, res) => {
+            let newSettings = req.body.config;
             var newMod = {
                 "trusted_users": {},
                 "trusted_users_pw": {}
             }
 
-            var newThemes = {
-                webui:{},
-                "spooderpet": {
-                    "bigeyeleft": "o",
-                    "bigeyeright": "o",
-                    "littleeyeleft": "\u00ba",
-                    "littleeyeright": "\u00ba",
-                    "fangleft": " ",
-                    "fangright": " ",
-                    "mouth": "\u03c9",
-                    "colors": {
-                        "bigeyeleft": "white",
-                        "bigeyeright": "white",
-                        "littleeyeleft": "white",
-                        "littleeyeright": "white",
-                        "fangleft": "white",
-                        "fangright": "white",
-                        "mouth": "white"
-                    }
-                },
-                modui:{}
-            }
-            fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(newSettings.oauth), "utf-8", (err, data)=>{
-                fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(newSettings.config), "utf-8", (err, data)=>{
-                    fs.writeFile(backendDir+"/settings/osc-tunnels.json", "{}", "utf-8", (err, data)=>{
-                        fs.writeFile(backendDir+"/settings/mod-blacklist.json", "{}", "utf-8", (err, data)=>{
-                            fs.writeFile(backendDir+"/settings/eventsub.json", "{}", "utf-8", (err, data)=>{
-                                fs.writeFile(backendDir+"/settings/commands.json", "{}", "utf-8", (err, data)=>{
-                                    fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(newMod), "utf-8", (err, data)=>{
-                                        fs.writeFile(backendDir+"/settings/themes.json", JSON.stringify(newThemes), "utf-8", (err, data)=>{
-                                    
-                                        });
-                                    });
-                                });
-                            });
-                        });
-                    });
-                });
-            });
-        })
+            var newThemes = req.body.themes;
+            global.sconfig = newSettings;
+            fs.writeFileSync(backendDir+"/settings/config.json", JSON.stringify(newSettings))
+            fs.writeFileSync(backendDir+"/settings/osc-tunnels.json", "{}", "utf-8")
+            fs.writeFileSync(backendDir+"/settings/mod-blacklist.json", "{}", "utf-8")
+            fs.writeFileSync(backendDir+"/settings/eventsub.json", "{}", "utf-8")
+            fs.writeFileSync(backendDir+"/settings/commands.json", "{}", "utf-8")
+            fs.writeFileSync(backendDir+"/settings/mod.json", JSON.stringify(newMod), "utf-8")
+            fs.writeFileSync(backendDir+"/settings/themes.json", JSON.stringify(newThemes), "utf-8");
+            res.send({status:"ok"});
+        });
 
-        app.listen(expressPort);
-
-        console.log("Open your browser and go to", "http://localhost:"+expressPort);*/
+        console.log("Init UI ready! Open your browser and go to", "http://localhost:"+sconfig.network.host_port);
     }
 
     beginInit(){

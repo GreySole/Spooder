@@ -1,5 +1,6 @@
 {
   "files": {
+<<<<<<< Updated upstream
     "main.css": "/static/css/main.1de110ae.css",
     "main.js": "/static/js/main.e12a7515.js",
     "index.html": "/index.html",
@@ -9,5 +10,18 @@
   "entrypoints": [
     "static/css/main.1de110ae.css",
     "static/js/main.e12a7515.js"
+=======
+    "main.css": "/static/css/main.c220f2f5.css",
+    "main.js": "/static/js/main.04f3b9e0.js",
+    "static/media/obs.svg": "/static/media/obs.582f6040ae75af733c7822fc06fa9670.svg",
+    "static/media/discord.svg": "/static/media/discord.d1d464bd6481a21fcde599e0d8699273.svg",
+    "index.html": "/index.html",
+    "main.c220f2f5.css.map": "/static/css/main.c220f2f5.css.map",
+    "main.04f3b9e0.js.map": "/static/js/main.04f3b9e0.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.c220f2f5.css",
+    "static/js/main.04f3b9e0.js"
+>>>>>>> Stashed changes
   ]
 }

@@ -198,13 +198,21 @@ class OBSOSC{
                                     if(objects[o] == "stream"){
                                         finalStatusObj[objects[o]] = await obs.call("GetStreamStatus");
                                         if(finalStatusObj[objects[o]].outputReconnecting == true && this.streamReconnecting == false){
+<<<<<<< Updated upstream
                                             restartChat("disconnected");
+=======
+                                            twitch.restartChat(this.settings.disconnectAlert?"disconnected":null);
+>>>>>>> Stashed changes
                                             this.streamReconnecting = true;
                                             this.streamBleeding = false;
                                             this.skippedFrames = 0;
                                         }else if(finalStatusObj[objects[o]].outputReconnecting == false && this.streamReconnecting == true){
                                             this.streamReconnecting = false;
+<<<<<<< Updated upstream
                                             restartChat("reconnect");
+=======
+                                            twitch.restartChat(this.settings.disconnectAlert?"reconnect":null);
+>>>>>>> Stashed changes
                                         }
 
                                         if(this.streamReconnecting == false){

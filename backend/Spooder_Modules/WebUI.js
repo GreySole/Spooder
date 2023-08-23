@@ -30,6 +30,7 @@ const ngrok = require("ngrok");
 
 const express = require('express');
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
 const AdmZip = require('adm-zip');
 const fileUpload = require('express-fileupload');
 const path = require("path");
@@ -39,6 +40,20 @@ var webLog = (...content) => {
     console.log(logEffects("Bright"),logEffects("FgBlue"), ...content, logEffects("Reset"));
 }
 
+<<<<<<< Updated upstream
+=======
+function isLocal(req){
+    const remoteAddressRaw = req.socket.remoteAddress.split(":");
+    const remoteAddress = remoteAddressRaw[remoteAddressRaw.length-1];
+    const isLocal = remoteAddress.startsWith('192.168.') ||
+                    remoteAddress.startsWith('10.') ||
+                    (remoteAddress == 1 && devMode == true) ||
+                    req.headers.host.startsWith("localhost")
+    //console.log("IS LOCAL", isLocal, remoteAddress, (remoteAddress == 1 && devMode == true), req.headers.host);
+    return isLocal;
+}
+
+>>>>>>> Stashed changes
 class WebUI {
 
     constructor(props){
@@ -73,6 +88,7 @@ class WebUI {
         var app = new express();
         var router = express.Router();
 
+<<<<<<< Updated upstream
         channel = "#"+sconfig.broadcaster.username;
         expressPort = devMode===false?sconfig.network.host_port:3001;
         app.use("/",router);
@@ -85,15 +101,64 @@ class WebUI {
         router.use("/utility", express.static(backendDir+'/web/utility'));
         router.use("/settings", express.static(backendDir+'/web/settings'));
         router.use("/icons", express.static(backendDir+'/web/icons'));
+=======
+        expressPort = sconfig.network.host_port;
+        if(initMode == true){
+            router.use("/", express.static(frontendDir+'/init/build'));
+            router.use(bodyParser.urlencoded({extended:true}));
+            router.use(bodyParser.json());
+            router.use("/restore_settings", fileUpload());
+            router.use("/restore_plugins", fileUpload());
+        }else{
+            router.use("/", express.static(frontendDir+'/main/build'));
+            router.use("/mod", express.static(frontendDir+'/mod/build'));
+            router.use("/public", express.static(frontendDir+'/public/build'));
 
-        router.use(bodyParser.urlencoded({extended:true}));
-        router.use(bodyParser.json());
-        router.use("/install_plugin",fileUpload());
-        router.use("/upload_plugin_asset/*",fileUpload());
-        router.use("/checkin_settings", fileUpload());
-        router.use("/checkin_plugins", fileUpload());
-        router.use(express.json({verify: this.verifyTwitchSignature}));
+            router.use("/overlay", express.static(backendDir+'/web/overlay'));
+            router.use("/utility", express.static(backendDir+'/web/utility'));
+            router.use("/settings", express.static(backendDir+'/web/settings'));
+            router.use("/assets", express.static(backendDir+'/web/assets'));
+            router.use("/icons", express.static(backendDir+'/web/icons'));
 
+            router.use(bodyParser.urlencoded({extended:true}));
+            router.use(bodyParser.json());
+            router.use("/install_plugin",fileUpload());
+            router.use("/upload_plugin_asset/*",fileUpload());
+            router.use("/checkin_settings", fileUpload());
+            router.use("/checkin_plugins", fileUpload());
+            router.use(express.json({verify: this.verifyTwitchSignature}));
+            router.use(cookieParser());
+            
+            publicRouter.use("/", express.static(frontendDir+'/public/build'));
+            publicRouter.use("/login", express.static(frontendDir+'/login/build'));
+            publicRouter.use("/mod", express.static(frontendDir+'/mod/build'));
+>>>>>>> Stashed changes
+
+            publicRouter.use("/overlay", express.static(backendDir+'/web/overlay'));
+            publicRouter.use("/utility", express.static(backendDir+'/web/utility'));
+            publicRouter.use("/settings", express.static(backendDir+'/web/settings'));
+            publicRouter.use("/assets", express.static(backendDir+'/web/assets'));
+            publicRouter.use("/icons", express.static(backendDir+'/web/icons'));
+
+<<<<<<< Updated upstream
+=======
+            publicRouter.use(bodyParser.urlencoded({extended:true}));
+            publicRouter.use(bodyParser.json());
+            publicRouter.use(cookieParser());
+            publicRouter.use(express.json({verify: this.verifyTwitchSignature}));
+        }
+        
+
+        app.use('/', (req, res, next) => {
+            if (isLocal(req)) {
+                router(req, res, next);
+              } else {
+                //console.log("PUBLIC CLIENT");
+                publicRouter(req, res, next);
+              }
+          });
+
+>>>>>>> Stashed changes
         app.use((req, res, next) => {
             
             res.status(404).send("<h1>Page not found on the server</h1>")
@@ -101,8 +166,7 @@ class WebUI {
 
         router.get("/overlay/get", async(req, res) => {
 
-            let isExternal = req.query.external;
-            
+            let isExternal = isLocal(req);
             var pluginName = req.query.plugin;
             var pluginSettings = null;
 
@@ -115,7 +179,7 @@ class WebUI {
             
             let oscInfo = null;
 
-            if(isExternal == "true"){
+            if(isExternal == false){
                 oscInfo = {
                     host: sconfig.network.external_tcp_url,
                     port: null,
@@ -130,6 +194,26 @@ class WebUI {
             }
 
             res.send({express: JSON.stringify(oscInfo)});
+        });
+
+        publicRouter.get("/plugin/public", (req, res) => {
+            let publicPlugins = [];
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins.push(p);
+                }
+            }
+            res.send({data:publicPlugins});
+        });
+
+        router.get("/plugin/public", (req, res) => {
+            let publicPlugins = [];
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins.push(p);
+                }
+            }
+            res.send({data:publicPlugins});
         });
 
         router.get('/command_table', async (req, res) => {
@@ -149,20 +233,47 @@ class WebUI {
             let props = {
                 "events":events,
                 "groups":eventGroups,
-                "plugins":Object.keys(activePlugins),
-                "obs":obs
+                "plugins":Object.keys(activePlugins)
             };
             res.send({express: JSON.stringify(props)});
+        });
+        router.get("/public/data", (req, res) => {
+            let publicPlugins = {};
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins[p] = activePlugins[p].name;
+                }
+            }
+            res.send({
+                botName:twitch.botUsername,
+                homeChannel:twitch.homeChannel,
+                theme:themes.public,
+                plugins:publicPlugins
+            });
+        });
+        publicRouter.get("/public/data", (req, res) => {
+            let publicPlugins = {};
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins[p] = activePlugins[p].name;
+                }
+            }
+            res.send({
+                botName:twitch.botUsername,
+                homeChannel:twitch.homeChannel,
+                theme:themes.public,
+                plugins:publicPlugins
+            });
         });
 
         router.get('/server_config', (req, res) => {
             let backupSettingsDir = path.join(backendDir, "backup", "settings");
             let backupPluginsDir = path.join(backendDir, "backup", "plugins");
-            let discordSettingsDir = path.join(backendDir, "settings", "discord.json");
             let backups = {
                 settings:fs.existsSync(backupSettingsDir)?fs.readdirSync(backupSettingsDir):{},
                 plugins:fs.existsSync(backupPluginsDir)?fs.readdirSync(backupPluginsDir):{}
             }
+<<<<<<< Updated upstream
             let discordData = fs.existsSync(discordSettingsDir)?JSON.parse(fs.readFileSync(discordSettingsDir, {encoding:"utf-8"})):{
                 token:"",
                 autosendngrok:{
@@ -176,6 +287,9 @@ class WebUI {
             }
             //console.log({config:sconfig, discord:discordData, backups:backups});
             res.send({config:sconfig, discord:discordData, backups:backups});
+=======
+            res.send({config:sconfig, backups:backups});
+>>>>>>> Stashed changes
         });
 
         router.get('/udp_hosts', (req, res) => {
@@ -183,6 +297,7 @@ class WebUI {
         });
 
         router.get('/server_state', async (req, res) => {
+
             var oscReturn = {
                 host:sconfig.network.host,
                 port:sconfig.network.osc_tcp_port,
@@ -193,13 +308,24 @@ class WebUI {
             var hostReturn = {
                 port:expressPort
             }
-            
+            let activeShares = await twitch.getChannels();
             res.send({
+<<<<<<< Updated upstream
                 "user":username,
                 "clientID": oauth["client-id"],
                 "osc":oscReturn,
                 "host":hostReturn,
                 "themes":themes
+=======
+                "user":twitch.botUsername,
+                "homeChannel":twitch.homeChannel,
+                "clientID": twitch.oauth["client-id"],
+                "osc":oscReturn,
+                "host":hostReturn,
+                "themes":themes,
+                "activeShares":activeShares,
+                "shares":Object.keys(shares)
+>>>>>>> Stashed changes
             });
         });
 
@@ -259,7 +385,123 @@ class WebUI {
             });
         });
 
+<<<<<<< Updated upstream
         
+=======
+        router.post("/verifyResponseScript", async(req, res) => {
+            let check = checkResponseTrigger(req.body.event, req.body.message);
+            if(check != null){
+                let response = await verifyResponseScript(req.body.eventName, check.message, check.extra, req.body.script);
+                res.send(response);
+            }else{
+                res.send({
+                    status:"error",
+                    response:"The input text did not trigger the response."
+                });
+            }
+        })
+
+        router.get("/shares", async (req,res) => {
+            let chatCommands = {};
+            let activeShares = await twitch.getChannels();
+            
+            for(let e in events){
+                if(events[e].triggers.chat.enabled){
+                    chatCommands[e] = events[e].triggers.chat.command;
+                }
+            }
+            let plugins = {};
+            for(let p in activePlugins){
+                plugins[p] = activePlugins[p].name;
+            }
+            
+            res.send({
+                shareData:shares,
+                activeShares:activeShares,
+                commandData:chatCommands,
+                activePlugins:plugins
+            });
+        });
+
+        router.get("/verifyShareTarget", async (req, res)=>{
+            let shareUser = req.query.shareuser;
+            let userInfo = await twitch.getUserInfo(shareUser);
+
+            if(userInfo != null){
+                res.send({
+                    status:"ok",
+                    info:userInfo
+                });
+            }else{
+                res.send({
+                    status:"notfound"
+                });
+            }
+        })
+
+        router.post("/saveShares", async(req, res)=>{
+            let newShares = req.body;
+            fs.writeFile(backendDir+"/settings/shares.json", JSON.stringify(newShares), "utf-8", (err, data)=>{
+                let statusMsg = "ok"
+                shares = newShares;
+                res.send({status:statusMsg});
+                webLog("SAVED THE SHARES");
+            });
+        });
+
+        router.post("/setShare", (req,res) => {
+            let shareUser = req.body.shareuser;
+            let isEnabled = req.body.enabled;
+            let message = req.body.message;
+            
+            this.setShare(shareUser, isEnabled, message);
+            
+            res.send({status:"ok"});
+        });
+
+        router.post('/create_plugin', async(req, res)=>{
+            
+            let pluginName = req.body.pluginName;
+            let options = {
+                createInfo:{
+                    name:pluginName,
+                    author:req.body.author,
+                    description:req.body.description
+                },
+                overlay:true,
+                utility:true
+            };
+            let pluginDirName = req.body.internalName;
+            
+            let pluginPath = path.join(backendDir, "tmp", pluginDirName);
+
+            if(!fs.existsSync(pluginPath)){
+                fs.mkdirSync(pluginPath, {recursive:true});
+            }else{
+                fs.rmSync(pluginPath, {recursive:true});
+            }
+            
+            const childProcess = require("child_process");
+            childProcess.exec("git clone https://github.com/GreySole/Spooder-Sample-Plugin "+pluginPath,{
+                cwd: './'
+              }, async (error, out, err)=>{
+                if(error){
+                    console.log(err);
+                    res.send({
+                        status:"error",
+                        error:err
+                    });
+                }else{
+                    res.send({
+                        status:"OK",
+                        pluginName:pluginName
+                    });
+                    
+                    await this.installPluginFromTemp(pluginDirName, options);
+                }
+            })
+        });
+>>>>>>> Stashed changes
 
         router.post('/install_plugin', async (req, res) => {
             try{
@@ -590,12 +832,14 @@ class WebUI {
 
         router.post("/restore_settings", async(req, res) => {
             let fileName = null;
-            let selections = req.body.selections;
+            let selections = req.body.selections ?? {everything:true};
+            
             if(!fs.existsSync(backendDir+"/tmp")){
                 fs.mkdirSync(backendDir+"/tmp");
             }
 
             if(req.files){
+                console.log("FILE FOUND", req.files);
                 fileName = req.files.file.name;
                 if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
                     await fs.rm(path.join(backendDir, "tmp", fileName));
@@ -639,9 +883,9 @@ class WebUI {
                 await fs.rm(path.join(backendDir, "tmp", fileName));
             }
 
-            let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
+            //let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
             webLog("COMPLETE");
-            res.send({status:"SUCCESS",newbackups:newPluginBackups});
+            res.send({status:"SUCCESS"});
         });
 
         router.post("/restore_plugins", async(req, res) => {
@@ -715,15 +959,25 @@ class WebUI {
                 await fs.rm(path.join(backendDir, "tmp", fileName));
             }
             this.getPlugins();
-            let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
+            //let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
             webLog("COMPLETE");
-            res.send({status:"SUCCESS",newbackups:newPluginBackups});
+            res.send({status:"SUCCESS"});
         });
 
+<<<<<<< Updated upstream
         router.post("/refresh_plugins", async (req, res) => {
             this.getPlugins();
+=======
+        router.get("/refresh_plugins", async (req, res) => {
+            await this.getPlugins();
+>>>>>>> Stashed changes
             res.send({"status":"Refresh Success!"});
         });
+
+        router.get("/refresh_plugin", async(req, res) => {
+            await this.refreshPlugin(req.body.pluginname);
+            res.send({"status":"success"});
+        })
 
         router.post('/delete_plugin_asset', async(req, res) =>{
 
@@ -746,6 +1000,70 @@ class WebUI {
             });
         });
 
+<<<<<<< Updated upstream
+=======
+        router.post('/get_plugin_assets', async(req, res) => {
+            let pluginName = req.body.pluginname;
+            let mainDir = path.join(backendDir, "web", "assets", pluginName);
+            var results = {};
+            let walk = function(dir, done) {
+                
+                fs.readdir(dir, function(err, list) {
+                  if (err) return done(err);
+                  var pending = list.length;
+                  let foldername = dir.substring(mainDir.length+1);
+                    if(foldername == ""){foldername="root";}
+                  if (!pending) return done(null, results);
+                  list.forEach(function(file) {
+                    //file = path.resolve(dir, file); <-- Makes double backslash paths on Windows >.<
+                    file = dir+"/"+file;
+                    fs.stat(file, function(err, stat) {
+                        let filename = file.substring(mainDir.length+1);
+                      if (stat && stat.isDirectory()) {
+                        
+                        walk(file, function(err, res) {
+                            
+                            //results[filename] = res;
+                          //results = results.concat(res);
+                          if (!--pending) done(null, results);
+                        });
+                      } else {
+                        
+                        //console.log(filename);
+                        if(results[foldername] == null){results[foldername] = []}
+                        results[foldername].push(filename);
+                        if (!--pending) done(null, results);
+                      }
+                    });
+                  });
+                });
+              };
+            walk(path.join(backendDir, "web", "assets", pluginName), (err, results)=>{
+                
+                res.send({status:"OK", dirs:results});
+            })
+        })
+
+        router.post('/browse_plugin_assets', async(req, res) => {
+            let currentPath = req.body.folder;
+            let pluginName = req.body.pluginname;
+
+            if(!fs.existsSync(path.join(backendDir, "web", "assets", pluginName))){
+                fs.mkdirSync(path.join(backendDir, "web", "assets", pluginName));
+            }
+            
+            if(!fs.existsSync(path.join(backendDir, "web", "assets", pluginName, currentPath))){
+                res.send({status:"EMPTY", dirs:[]});
+                return;
+            }
+            
+            let dirs = fs.existsSync(path.join(backendDir, "web", "assets", pluginName, currentPath))==true ? 
+            fs.readdirSync(path.join(backendDir, "web", "assets",pluginName, currentPath)):null;
+            
+            res.send({status:"ok", dirs:dirs});
+        })
+
+>>>>>>> Stashed changes
         router.post('/upload_plugin_asset/*', async(req, res) => {
             try{
                 if(!req.files){
@@ -832,7 +1150,10 @@ class WebUI {
             let pluginPacks = {};
             for(let a in activePlugins){
                 
+<<<<<<< Updated upstream
                 let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
+=======
+>>>>>>> Stashed changes
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
@@ -841,11 +1162,14 @@ class WebUI {
                 let thisPluginForm = fs.existsSync(settingsForm)==true ?
                                 fs.readFileSync(settingsForm, {encoding:'utf8'}):null;
 
+<<<<<<< Updated upstream
                 let assetDir = path.join(backendDir, "web", "overlay", a, "assets");
                 
                 let thisPluginAssets = fs.existsSync(assetDir)==true ?
                                     fs.readdirSync(assetDir):null;
 
+=======
+>>>>>>> Stashed changes
                 let overlayDir = path.join(backendDir, "web", "overlay", a);
                 let utilityDir = path.join(backendDir, "web", "utility", a);
                 let settingsDir = path.join(backendDir, "web", "settings", a);
@@ -893,6 +1217,7 @@ class WebUI {
             res.send(plugin);
         });
 
+<<<<<<< Updated upstream
         router.post("/mod/authentication", async(req, res) => {
             let modlist = await chat.mods(channel);
             let isLocal = false;
@@ -905,41 +1230,134 @@ class WebUI {
             if(isLocal){
                 activeMods[username] = "active";
                 res.send({status:"active", localUser:username});
+=======
+        async function userVerify(req, res){
+            let vType = req.body.vtype;
+            let username = req.body.username;
+
+            if(vType == "twitch"){
+                if(users["trusted_users"].twitch.includes(username)){
+                    res.send({status:"found"});
+                    activeUsers.pending[username.toLowerCase()] = {
+                        vtype:vType,
+                        verified:false
+                    };
+                    sayInChat(username+" it looks like you're trying to set a login for me. If this is you, please call '!verify'", "twitch");
+                }else{
+                    res.send({status:"notfound"});
+                }
+            }else if(vType == "discord"){
+                if(users["trusted_users"].discord[username] != null){
+                    res.send({status:"found"});
+                    activeUsers.pending[username.toLowerCase()] = {
+                        vtype:vType,
+                        verified:false
+                    };
+                    
+                    let response = await discord.sendDM(users["trusted_users"].discord[username], {
+                        content:"Hi, it looks like you're creating a login for me. If this is you, click confirm.",
+                        components:[discord.makeConfirmCancelButtons("Yes :D", "No D:")]
+                    });
+
+                    const collectorFilter = i => i.user.id === users["trusted_users"].discord[username];
+
+                    try {
+                        const confirmation = await response.awaitMessageComponent({ filter: collectorFilter, time: 60000 });
+                        if (confirmation.customId === 'confirm') {
+                            activeUsers.pending[username].verified = true;
+                            await confirmation.update({ content: 'Verified!', components: [] });
+                        } else if (confirmation.customId === 'cancel') {
+                            delete activeUsers.pending[username];
+                            await confirmation.update({ content: 'Declined!', components: [] });
+                        }
+                    } catch (e) {
+                        delete activeUsers.pending[username];
+                    }
+                }else{
+                    res.send({status:"notfound"});
+                }
+            }
+        }
+        router.post("/user/verify", userVerify);
+        publicRouter.post("/user/verify", userVerify);
+
+        function verifyCheck(req, res) {
+            console.log(req.query);
+            if(activeUsers.pending[req.query.username] == null){
+                console.log("NULL PENDING");
+                res.send("verify-cancelled");
+>>>>>>> Stashed changes
                 return;
             }
+            if(activeUsers.pending[req.query.username].verified == true){
+                res.send("verify-complete");
+            }else{
+                res.send("verify-waiting");
+            }
+        }
+        router.get("/user/verifycheck", verifyCheck)
+        publicRouter.get("/user/verifycheck", verifyCheck)
 
+<<<<<<< Updated upstream
             let moduser = req.body.moduser;
             let modcode = req.body.code;
             
             if(modlist.includes(moduser) && modData["trusted_users"][moduser]?.includes("m")){
                 if(modData["trusted_users_pw"][moduser] == null){
+=======
+        async function userLogin(req,res){
+
+            let username = req.body.username.toLowerCase();
+            let password = req.body.password;
+            if(username == "local"){
+                res.send({status:"nolocal"});
+                return;
+            }
+            if(users["trusted_users_pw"][username] == null){
+                let vusername = req.body.vusername;
+                if(vusername == null){
+                    res.send({status:"nologin"});
+                    return;
+                }
+                if(activeUsers.pending[vusername].verified == true){
+                    delete activeUsers.pending[vusername];
+>>>>>>> Stashed changes
                     let newSalt = crypto.randomBytes(16).toString('hex');
-                    let newHash = crypto.pbkdf2Sync(modcode, newSalt, 1000, 64, `sha512`).toString('hex');
-                    activeMods[moduser] = "pending";
-                    modData["trusted_users_pw"][moduser] = {
+                    let newHash = crypto.pbkdf2Sync(password, newSalt, 1000, 64, `sha512`).toString('hex');
+                    
+                    users["trusted_users_pw"][username] = {
                         salt:newSalt,
                         hash:newHash
                     };
-                    sayInChat(moduser+" if you're trying to access the Mod UI, please call '!mod verify' to authenticate your device.");
-                    res.send({status:"new"});
-                }else{
-                    if(activeMods[moduser] != "pending"){
-                        if(crypto.pbkdf2Sync(modcode, modData["trusted_users_pw"][moduser].salt, 1000, 64, `sha512`).toString(`hex`) === modData["trusted_users_pw"][moduser].hash){
-                            webLog("Welcome back, "+moduser+"!");
-                            activeMods[moduser] = "active";
-                            res.send({status:"active"});
-                        }else{
-                            res.send({status:"badpassword"});
-                        }
-                    }else{
-                        res.send({status:"stillpending"});
-                    }
+                    let browserToken = crypto.randomBytes(48).toString('hex');
+                    activeUsers[browserToken] = username;
+                    fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+                    res.cookie('access', browserToken, {
+                        maxAge: 86400*1000,
+                        httpOnly:true,
+                        secure:true
+                    });
+                    res.send({status:"active"});
                 }
+                
             }else{
-                res.send({status:"untrusted"});
+                if(crypto.pbkdf2Sync(password, users["trusted_users_pw"][username].salt, 1000, 64, `sha512`).toString(`hex`) === users["trusted_users_pw"][username].hash){
+                    webLog("Welcome back, "+username+"!");
+                    let browserToken = crypto.randomBytes(48).toString('hex');
+                    activeUsers[browserToken] = username;
+                    res.cookie('access', browserToken, {
+                        maxAge: 86400*1000,
+                        httpOnly:true,
+                        secure:true
+                    });
+                    res.send({status:"active"});
+                }else{
+                    res.send({status:"badpassword"});
+                }
             }
         });
 
+<<<<<<< Updated upstream
         router.get("/mod/utilities", async(req, res) => {
             if(activeMods[req.query.moduser] == "active" || req.headers.referer.startsWith("http:")){
                 let modevents = {};
@@ -950,8 +1368,39 @@ class WebUI {
                             group:events[e].group,
                             description:events[e].description
                         }
+=======
+        router.post("/user/authentication", (req, res) => {
+            
+            let browserToken = crypto.randomBytes(48).toString('hex');
+            activeUsers[browserToken] = "local";
+            res.cookie('access', browserToken, {
+                maxAge: 86400*1000,
+                httpOnly:true,
+                secure:true
+            });
+            res.send({status:"active"});
+        });
+        publicRouter.post("/user/authentication", userLogin);
+
+        async function modUtil(req, res){
+            let isLocalHost = isLocal(req);
+            let accessCookie = req.cookies["access"];
+            //console.log("ACCESS COOKIE", req.cookies);
+            let moduser = null;
+            if(!isLocalHost){
+                if(activeUsers[accessCookie] == null){
+                    res.send({status:"notactive"});
+                    return;
+                }else{
+                    if(!users.trusted_users.permissions[activeUsers[accessCookie]].includes("m") &&
+                    !users.trusted_users.permissions[activeUsers[accessCookie]].includes("a") ){
+                        res.send({status:"nopermission"});
+                        return;
+>>>>>>> Stashed changes
                     }
+                    moduser = activeUsers[accessCookie];
                 }
+<<<<<<< Updated upstream
                 let modplugins = {};
                 for(let p in activePlugins){
                     let hasUtility = fs.existsSync(path.join(backendDir, "web", "utility", p));
@@ -970,28 +1419,85 @@ class WebUI {
                 if(req.headers.referer.startsWith("http:")){
                     oscURL = sconfig.network.host;
                     oscPort = sconfig.network.osc_tcp_port;
+=======
+                
+            }else{
+                if(activeUsers[accessCookie] == null){
+                    
+                    moduser = "local";
+                    let browserToken = crypto.randomBytes(48).toString('hex');
+                    activeUsers[browserToken] = moduser;
+                    res.cookie('access', browserToken, {
+                        maxAge: 86400*1000,
+                        httpOnly:true,
+                        secure:false
+                    });
+>>>>>>> Stashed changes
                     
                 }else{
-                    oscURL = sconfig.network.external_tcp_url;
+                    moduser = activeUsers[accessCookie];
                 }
-    
-                res.send(JSON.stringify({
-                    status:"ok",
-                    oscURL:oscURL,
-                    oscPort:oscPort,
-                    modmap:{
-                        events:modevents,
-                        plugins:modplugins,
-                        modlocks:modlocks,
-                    },
-                    theme:modTheme
-                }));
-            }else{
-                res.send(JSON.stringify({
-                    status:"notmod",
-                }));
             }
+<<<<<<< Updated upstream
         });
+=======
+            
+            let modevents = {};
+            for(let e in events){
+                if(events[e].triggers.chat.enabled){
+                    modevents[e] = {
+                        name:events[e].name,
+                        group:events[e].group,
+                        description:events[e].description
+                    }
+                }
+            }
+            let modplugins = {};
+            for(let p in activePlugins){
+                let hasUtility = fs.existsSync(path.join(backendDir, "web", "utility", p));
+                modplugins[p] = {
+                    name:p,
+                    modmap:activePlugins[p].modmap,
+                    utility:hasUtility
+                }
+            }
+            let modTheme = null;
+            if(themes.modui[req.query.moduser] != null){
+                modTheme = themes.modui[req.query.moduser];
+            }
+            let oscURL = null;
+            let oscPort = null;
+            if(isLocalHost){
+                oscURL = sconfig.network.host;
+                oscPort = sconfig.network.osc_tcp_port;
+                
+            }else{
+                oscURL = sconfig.network.external_tcp_url;
+            }
+
+            res.send(JSON.stringify({
+                status:"ok",
+                oscURL:oscURL,
+                oscPort:oscPort,
+                moduser:moduser,
+                token:req.cookies["access"],
+                modmap:{
+                    events:modevents,
+                    plugins:modplugins,
+                    modlocks:modlocks,
+                },
+                theme:modTheme
+            }));
+        }
+
+        router.get("/mod/utilities", modUtil);
+        publicRouter.get("/mod/utilities", modUtil);
+
+        publicRouter.post("/webhooks/caption", (req, res)=>{
+            console.log("I HEAR VOICE", req.body);
+            res.status(200).end();
+        })
+>>>>>>> Stashed changes
 
         
 
@@ -1003,9 +1509,61 @@ class WebUI {
         return router;
     }
 
+    async refreshPlugin(pluginName){
+        try{
+            if(activePlugins[pluginName].onClose != null){
+                await activePlugins[pluginName].onClose();
+            }
+
+            delete require.cache(require.resolve(backendDir+'/plugins/'+pluginName));
+            try{
+                activePlugins[pluginName] = new (require(backendDir+'/plugins/'+pluginName))();
+                if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/package.json")){
+                    let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/package.json",{encoding:'utf8'}));
+                    activePlugins[pluginName].name = pluginMeta.name;
+                    activePlugins[pluginName].author = pluginMeta.author;
+                    activePlugins[pluginName].version = pluginMeta.version;
+                    activePlugins[pluginName].description = pluginMeta.description;
+                    activePlugins[pluginName].dependencies = pluginMeta.dependencies;
+                    let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
+                    let utilityDir = path.join(backendDir, "web", "utility", pluginName);
+                    activePlugins[pluginName].hasOverlay = fs.existsSync(overlayDir);
+                    activePlugins[pluginName].hasUtility = fs.existsSync(utilityDir);
+                    //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
+                    activePlugins[pluginName].status = "ok";
+                }
+                if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/settings.json")){
+                    activePlugins[pluginName].settings = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/settings.json",{encoding:'utf8'}));
+                    
+                    if(activePlugins[pluginName].onSettings != null){
+                        activePlugins[pluginName].onSettings(activePlugins[pluginName].settings);
+                    }
+                }
+            }catch(e){
+                let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/package.json",{encoding:'utf8'}));
+                activePlugins[pluginName] = {};
+                activePlugins[pluginName].name = pluginName;
+                activePlugins[pluginName].status = "failed";
+                activePlugins[pluginName].description = e.code+" - "+e.message;
+                activePlugins[pluginName].dependencies = pluginMeta.dependencies;
+                console.log("Refresh Failed", e);
+            }
+        }catch(e){
+            console.error(e);
+        }
+    }
+
     async getPlugins(){
         try {
           const dir = await fsPromises.opendir(backendDir+'/plugins');
+<<<<<<< Updated upstream
+=======
+          for(let p in activePlugins){
+            if(activePlugins[p].onStop != null){
+                await activePlugins[p].onStop();
+            }
+          }
+>>>>>>> Stashed changes
           activePlugins = {};
           for await (const dirent of dir){
             delete require.cache[require.resolve(backendDir+'/plugins/'+dirent.name)];
@@ -1018,10 +1576,32 @@ class WebUI {
             
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/package.json")){
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
+<<<<<<< Updated upstream
                 activePlugins[dirent.name]._name = pluginMeta.name;
                 activePlugins[dirent.name]._author = pluginMeta.author;
                 activePlugins[dirent.name]._version = pluginMeta.version;
                 activePlugins[dirent.name]._description = pluginMeta.description;
+=======
+                activePlugins[dirent.name].name = pluginMeta.name;
+                activePlugins[dirent.name].author = pluginMeta.author;
+                activePlugins[dirent.name].version = pluginMeta.version;
+                activePlugins[dirent.name].description = pluginMeta.description;
+                activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
+                let overlayDir = path.join(backendDir, "web", "overlay", dirent.name);
+                let utilityDir = path.join(backendDir, "web", "utility", dirent.name);
+                let publicDir = path.join(backendDir, "web", "public", dirent.name);
+                activePlugins[dirent.name].hasOverlay = fs.existsSync(overlayDir);
+                activePlugins[dirent.name].hasUtility = fs.existsSync(utilityDir);
+                activePlugins[dirent.name].hasPublic = fs.existsSync(publicDir);
+                if(activePlugins[dirent.name].hasPublic == true){
+                    this.publicRouter.use("/plugin/"+dirent.name, express.static(publicDir));
+                    if(activePlugins[dirent.name].onPublic != null){
+                        activePlugins[dirent.name].onPublic(this.publicRouter);
+                    }
+                }
+                //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
+                activePlugins[dirent.name].status = "ok";
+>>>>>>> Stashed changes
             }
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/settings.json")){
                 activePlugins[dirent.name].settings = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/settings.json",{encoding:'utf8'}));
@@ -1031,12 +1611,173 @@ class WebUI {
             }
           }
           webLog("Plugins Refreshed!");
+          if(this.onPluginsLoaded != null){
+            this.onPluginsLoaded();
+          }
         } catch (err) {
           console.error(err);
         }
         
     }
 
+<<<<<<< Updated upstream
+=======
+    async installPluginFromTemp(pluginDirName, options){
+        if(options == null){options = {
+            createInfo:null,
+            overlay:true,
+            utility:true
+        }}
+        sendToTCP("/frontend/plugin/install/progress", {
+            pluginName:pluginDirName,
+            status:"progress",
+            message:"Copying folders..."
+        });
+        let tempDir = path.join(backendDir, "tmp", pluginDirName);
+        let pluginDir = path.join(backendDir,"plugins", pluginDirName);
+        let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
+        let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
+        let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
+        let assetsDir = path.join(backendDir, "web", "assets", pluginDirName);
+        let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
+
+        if(!fs.existsSync(tempDir+"/command")){
+            return{
+                status: false,
+                message: 'No command folder'
+            };
+        }else{
+
+            if(options.createInfo != null){
+                if(fs.existsSync(tempDir+"/command/package.json")){
+                    try{
+                        let thisPackage = JSON.parse(fs.readFileSync(tempDir+"/command/package.json", {encoding:"utf-8"}));
+                        thisPackage.name = options.createInfo.name;
+                        thisPackage.author = options.createInfo.author;
+                        thisPackage.description = options.createInfo.description;
+                        fs.writeFileSync(tempDir+"/command/package.json", JSON.stringify(thisPackage));
+                    }catch(e){
+                        webLog("Something went wrong with applying create info to the plugin's package.json", e);
+                    }
+                }
+            }
+
+            if(fs.existsSync(path.join(tempDir+"/command", "node_modules"))){
+                fs.rmSync(path.join(tempDir+"/command", "node_modules"), {recursive:true});
+            }
+
+            if(fs.existsSync(pluginDir)){
+                mergeDirectories(tempDir+"/command", pluginDir);
+            }else{
+                await fs.move(tempDir+"/command", pluginDir, {overwrite:true});
+            }
+            
+
+            chmodr(pluginDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+        
+        if(fs.existsSync(tempDir+"/overlay") && options.overlay == true){
+            await fs.move(tempDir+"/overlay", overlayDir, {overwrite:true});
+
+            chmodr(overlayDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/utility") && options.utility == true){
+            await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
+
+            chmodr(utilityDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/settings")){
+            await fs.move(tempDir+"/settings", settingsDir, {overwrite:true});
+
+            chmodr(settingsDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/assets")){
+            if(fs.existsSync(assetsDir)){
+                mergeDirectories(tempDir+"/assets", assetsDir);
+            }else{
+                await fs.move(tempDir+"/assets", assetsDir, {overwrite:true});
+            }
+
+            chmodr(assetsDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }else{
+            fs.mkdirSync(assetsDir, {recursive:true});
+        }
+
+        if(fs.existsSync(tempDir+"/icon.png")){
+            await fs.move(tempDir+"/icon.png", iconDir, {overwrite:true});
+
+            chmodr(iconDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+        
+        webLog("Plugin added successfully!");
+        fs.rm(tempDir, {recursive:true});
+        await this.installPluginDependencies(pluginDirName, pluginDir);
+        this.getPlugins();
+        sendToTCP("/frontend/plugin/install/complete", {
+            pluginName:pluginDirName,
+            status:"complete",
+            message:"Complete!"
+        });
+        return {
+            status:"OK",
+            message:""
+        };
+    }
+
+    installPluginDependencies(pluginDirName, pluginPath, packagename=""){
+        if(packagename != ""){packagename = " "+packagename}
+        else if(fs.existsSync(path.join(pluginPath, "node_modules"))){
+            fs.rmSync(path.join(pluginPath, "node_modules"), {recursive:true});
+        }
+        const childProcess = require("child_process");
+        webLog("Installing dependencies on "+pluginPath);
+        sendToTCP("/frontend/plugin/install/progress", {
+            pluginName:pluginDirName,
+            status:"progress",
+            message:"Installing dependencies..."
+        });
+        return new Promise((res, rej)=>{
+            childProcess.exec("npm install"+packagename,{
+            cwd: pluginPath
+            }, (error, out, err)=>{
+            if(error){
+                rej(error);
+                return;
+            }
+            res("OK");
+            })
+        }).catch(error=>{
+            console.log("INSTALL DEPS FAILED");
+            sendToTCP("/frontend/plugin/install/complete", {
+                pluginName:pluginDirName,
+                status:"failed",
+                message:error.message
+            });
+        })
+    }
+
+>>>>>>> Stashed changes
     async startNgrok(){
         if(maintainenceMode == true){
             return;
@@ -1094,7 +1835,47 @@ class WebUI {
 
     onNgrokStart = null;
 
+<<<<<<< Updated upstream
     
+=======
+    setShare(shareUser, isEnabled, message){
+        if(message == null){
+            if(isEnabled){
+                message = shares[shareUser].joinMessage;
+            }else{
+                message = shares[shareUser].leaveMessage;
+            }
+        }
+        
+        //shares[shareUser].enabled = isEnabled;
+        if(isEnabled){
+            twitch.joinChannel(shareUser, message);
+            sendToTCP("/share/activate", shareUser);
+            if(shares[shareUser].discordId != null){
+                
+                let sharedPlugins = shares[shareUser].plugins;
+                let sharedPluginMessage = [];
+                for(let p in sharedPlugins){
+                    if(activePlugins[sharedPlugins[p]].hasOverlay){
+                        sharedPluginMessage.push(
+                            activePlugins[sharedPlugins[p]].name+": "+sconfig.network.external_http_url+"/"+path.join("overlay", sharedPlugins[p])+"?channel="+shareUser
+                        );
+                    }
+                }
+                if(sharedPluginMessage.length>0){
+                    discord.findUser(shares[shareUser].discordId)
+                    .then(user=>{
+                        user.send(twitch.homeChannel+" shared a plugin with you! \n"+sharedPluginMessage.join("\n"));
+                    })
+                }
+                
+            }
+        }else{
+            twitch.leaveChannel(shareUser, message);
+            sendToTCP("/share/deactivate", shareUser);
+        }
+    }
+>>>>>>> Stashed changes
 }
 
 module.exports = WebUI;

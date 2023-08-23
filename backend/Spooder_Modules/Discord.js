@@ -30,10 +30,15 @@ class SDiscord{
     audioPlayer = null;
     audioReceiver = null;
     commands = null;
+    lastMessage = null;
 
     autoLogin(){
         
+<<<<<<< Updated upstream
         const {SlashCommandBuilder, Collection} = require("discord.js");
+=======
+        const {Collection} = require("discord.js");
+>>>>>>> Stashed changes
         this.commands = new Collection();
         return new Promise(async (res, rej) => {
 
@@ -43,6 +48,7 @@ class SDiscord{
                 rej("notoken");
                 return;
             }
+<<<<<<< Updated upstream
         
             if(discordInfo.commands){
                 let dCommands = discordInfo.commands;
@@ -61,13 +67,42 @@ class SDiscord{
                 this.commands.set(defaultCommand.data.name, defaultCommand);
                 discordLog("Default command set!", defaultCommand);
             }
+=======
+            
+>>>>>>> Stashed changes
             if(discordInfo.token != "" && discordInfo.token != null){
                 discordLog("STARTING DISCORD CLIENT");
                 await this.startClient(discordInfo.token).catch(e=>{rej(e)});
                 res("success");
             }
-        })
-        
+        });
+    }
+
+    async getCommands(){
+        const {REST, Routes} = require("discord.js");
+        let discordInfo = this.config;
+        if(discordInfo.commands){
+            discordLog("FOUND COMMANDS");
+            let dCommands = discordInfo.commands;
+            for(let d in dCommands){
+                this.commands.set(dCommands[d].name, dCommands[d]);
+            }   
+        }
+        for(let p in activePlugins){
+            if(activePlugins[p].dSlashCommands != null){
+                for(let d in activePlugins[p].dSlashCommands){
+                    console.log("FOUND COMMAND", activePlugins[p].dSlashCommands[d].name);
+                    this.commands.set(activePlugins[p].dSlashCommands[d].name, activePlugins[p].dSlashCommands[d]);
+                }
+            }
+        }
+        if(this.commands.size > 0){
+            console.log(`Started refreshing ${this.commands.length} application (/) commands.`);
+            const rest = new REST({version:"10"}).setToken(discordInfo.token);
+            const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:this.commands});
+
+            discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
+        }
     }
 
     startClient(token){
@@ -118,6 +153,7 @@ class SDiscord{
                 res("success");
                 //discordLog("GUILDS", this.guilds);
             });
+<<<<<<< Updated upstream
             client.on(Events.InteractionCreate, async interaction => {
                 discordLog("DISCORD INTERACTION", interaction);
                 if(!interaction.isChatInputCommand()){return;}
@@ -162,11 +198,167 @@ class SDiscord{
                     }
                 }
             })
+=======
+            if(initMode == false){
+                client.on(Events.InteractionCreate, async interaction => {
+                    //discordLog("DISCORD INTERACTION", interaction);
+                    if(!interaction.isChatInputCommand()){return;}
+        
+                    let command = this.commands.get(interaction.commandName);
+        
+                    if(!command){
+                        console.error("Not a valid command");
+                        return;
+                    }
+        
+                    try{
+                        this.callPlugins("interaction", interaction);
+                    }catch(error){
+                        console.error(error);
+                        await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+                    }
+                });
+                client.on(Events.MessageCreate, async message=>{
+                    if(message.author.id == client.user.id){return;}
+                    this.lastMessage = {
+                        author: {
+                            username: message.author.username,
+                            id:message.author.id,
+                            guild:message.guildId!=null?this.getGuild(message.guildId)?.name:"DM",
+                            channel:message.guildId!=null?this.getChannel(message.channelId, message.guildId)?.name:"DM"
+                        },
+                        content:message.content
+                    }
+
+                    if(message.guildId == null){
+                        discordLog("Discord PM", message.author.username, message.content, message.attachments);
+                        message.isMentioned = true;
+                        if(message.mentions.users.first()?.id != this.client.user.id && message.mentions.roles.first()?.tags?.botId != this.client.user.id){
+                            message.content = "DM "+message.content;
+                        }
+                        this.processTagCommand(message);
+                    }else{
+                        discordLog("Discord", this.getGuild(message.guildId).name, this.getChannel(message.channelId, message.guildId).name, message.author.username, message.content);
+
+                        if(message.content.startsWith("<@"+this.client.user.id+">")){
+                            message.isMentioned = true;
+                            this.processTagCommand(message);
+                        }
+
+                        if(message.content.toLowerCase() == "!join"){
+                            if(message.channel.type == ChannelType.GuildVoice){
+                                this.joinVoiceChannel(message.guildId, message.channelId);
+                                return;
+                            }
+                        }
+
+                        if(message.content.toLowerCase() == "!leave"){
+                            this.leaveVoiceChannel();
+                            return;
+                        }
+                    }
+
+                    this.callPlugins("message", message);
+                    
+                })
+            }
+>>>>>>> Stashed changes
             client.login(token);
         })
         
     }
 
+<<<<<<< Updated upstream
+=======
+    async processTagCommand(message){
+        let command = message.content.toLowerCase().split(" ");
+        if(command.length >= 2){
+            if(command[1] == "trust"){
+                if(message.author.id == this.config.master){
+                    console.log(message.mentions.users.at(1));
+                    let trustUser = message.mentions.users.at(1);
+                    if(this.config.handlers == null){this.config.handlers = {}}
+                    this.config.handlers[trustUser.id] = {id:trustUser.id};
+                    fs.writeFileSync(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8");
+                    message.react("👍");
+                    this.sendDM(trustUser.id, "My master has entrusted you to handle me. That means you can use my moderation commands in any server I'm in!");
+                }else{
+                    let masterUser = await this.findUser(this.config.master);
+                    message.reply("Only my master "+masterUser.username+" can assign trusted handlers");
+                }
+            }else if(command[1] == "tell"){
+                if(message.author.id == this.config.master){
+                    let channels = await twitch.getChannels();
+
+                    if(shares[command?.[2]] != null){
+                        if(channels.includes("#"+command[2])){
+                            sayInChat(message.content.substring((command[0]+" "+command[1]+" "+command[2]+" ").length), "twitch", command[2]);
+                        }else{
+                            message.reply(command[2]+"'s share isn't active.");
+                        }
+                    }else{
+                        message.reply(command[2]+" is not a shared Twitch user.");
+                    }
+                }
+            }else if(command[1] == "share"){
+                
+                if(message.author.id == this.config.master){
+                    let channels = await twitch.getChannels();
+                    if(shares[command?.[2]] != null){
+                        let isSharing = channels.includes("#"+command[2]);
+                        if(command?.[3] == "start"){
+                            if(isSharing == true){
+                                message.reply("Share is already running.");
+                                return;
+                            }
+                            webUI.setShare(command[2], true);
+                            message.reply("Share started for "+command[2]+"!");
+                        }else if(command?.[3] == "stop"){
+                            if(isSharing == false){
+                                message.reply("Share is not running.");
+                                return;
+                            }
+                            webUI.setShare(command[2], false);
+                            message.reply("Share stopped for "+command[2]+"!");
+                        }else{
+                            message.reply(command[2]+"'s share is "+(isSharing==true?"running":"not running")+".");
+                        }
+                        
+                    }else{
+                        message.reply(command[2]+" is not a shared Twitch user.");
+                    }
+                }
+            }
+        }
+    }
+
+    callPlugins(type, data){
+        for(let a in activePlugins){
+            if(typeof activePlugins[a].onDiscord != "undefined"){
+                try{
+                    activePlugins[a].onDiscord(type, data);
+                }catch(e){
+                    discordLog(e);
+                }
+                
+            }
+        }
+    }
+
+    isHandler(userid){
+        console.log(userid, this.config.master, this.config.handlers);
+        if(this.config.master == userid){
+            return true;
+        }
+        if(this.config.handlers != null){
+            if(this.config.handlers[userid] != null){
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> Stashed changes
     joinVoiceChannel(guildId, channelId){
         voice = require('@discordjs/voice');
         let targetServer = this.client.guilds.cache.get(guildId);
@@ -280,6 +472,27 @@ class SDiscord{
         return this.client.users.cache.get(userId);
     }
 
+<<<<<<< Updated upstream
+=======
+    findUser(userId){
+        if(!this.loggedIn){return null;}
+        return this.client.users.fetch(userId);
+    }
+
+    sendDM(userId, message){
+        if(!this.loggedIn){return null;}
+        return new Promise((res, rej) => {
+            this.findUser(userId)
+            .then(user => {
+                res(user.send(message));
+            }).catch(e=>{
+                rej(e);
+            })
+        })
+        
+    }
+
+>>>>>>> Stashed changes
     getUserName(userId){
         return this.client.users.cache.get(userId).username;
     }
@@ -290,6 +503,39 @@ class SDiscord{
         let targetChannel = targetServer.channels.cache.get(channel);
         targetChannel.send(message);
     }
+<<<<<<< Updated upstream
+=======
+
+    makeUserMentionString(id){
+        return "<@" + id + "> ";
+    }
+
+    makeLinkButton(label, url){
+        const {ButtonStyle, ButtonBuilder, ActionRowBuilder} = require("discord.js");
+        const button = new ButtonBuilder()
+        .setLabel(label)
+        .setURL(url)
+        .setStyle(ButtonStyle.Link);
+        const row = new ActionRowBuilder()
+			.addComponents(button);
+        return row;
+    }
+
+    makeConfirmCancelButtons(confirmLabel, cancelLabel){
+        const {ButtonStyle, ButtonBuilder, ActionRowBuilder} = require("discord.js");
+        const confirmButton = new ButtonBuilder()
+        .setCustomId('confirm')
+        .setLabel(confirmLabel)
+        .setStyle(ButtonStyle.Primary);
+        const cancelButton = new ButtonBuilder()
+        .setCustomId('cancel')
+        .setLabel(cancelLabel)
+        .setStyle(ButtonStyle.Danger);
+        const row = new ActionRowBuilder()
+			.addComponents(confirmButton, cancelButton);
+        return row;
+    }
+>>>>>>> Stashed changes
 }
 
 module.exports = SDiscord;

@@ -1,6 +1,14 @@
 {
   "name": "spooder",
+<<<<<<< Updated upstream
   "version": "0.3.9",
+=======
+  "version": "0.4.5",
+  "auto-updater": {
+    "repo": "/GreySole/Spooder",
+    "branch": "main"
+  },
+>>>>>>> Stashed changes
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.js",
   "scripts": {
@@ -19,11 +27,17 @@
     "body-parser": "^1.20.0",
     "buffer": "^6.0.3",
     "chmodr": "^1.2.0",
+    "cookie-parser": "^1.4.6",
+    "ddns-client": "^0.2.4",
     "discord.js": "^14.7.1",
     "express": "^4.18.1",
     "express-fileupload": "^1.4.0",
     "fs-extra": "^10.1.0",
+    "googleapis": "^118.0.0",
+    "http": "^0.0.1-security",
+    "http-proxy": "^1.18.1",
     "ngrok": "^4.3.3",
+    "node-dyndns-client": "^0.2.3",
     "obs-websocket-js": "^5.0.0",
     "osc-js": "^2.3.2",
     "tmi.js": "^1.8.5"
