@@ -40,8 +40,6 @@ var webLog = (...content) => {
     console.log(logEffects("Bright"),logEffects("FgBlue"), ...content, logEffects("Reset"));
 }
 
-<<<<<<< Updated upstream
-=======
 function isLocal(req){
     const remoteAddressRaw = req.socket.remoteAddress.split(":");
     const remoteAddress = remoteAddressRaw[remoteAddressRaw.length-1];
@@ -53,12 +51,16 @@ function isLocal(req){
     return isLocal;
 }
 
->>>>>>> Stashed changes
 class WebUI {
 
     constructor(props){
 
     }
+
+    router = null;
+    publicRouter = null;
+
+    
 
     startServer(devMode){
 
@@ -68,6 +70,8 @@ class WebUI {
         let webDir = path.join(backendDir, "web");
         let overlayDir = path.join(backendDir, "web", "overlay");
         let utilityDir = path.join(backendDir, "web", "utility");
+        let assetDir = path.join(backendDir, "web", "assets");
+        let iconDir = path.join(backendDir, "web", "icons");
         
         if(!fs.existsSync(pluginsDir)){
             fs.mkdirSync(pluginsDir);
@@ -85,23 +89,20 @@ class WebUI {
             fs.mkdirSync(utilityDir);
         }
 
+        if(!fs.existsSync(assetDir)){
+            fs.mkdirSync(assetDir);
+        }
+
+        if(!fs.existsSync(iconDir)){
+            fs.mkdirSync(iconDir);
+        }
+
         var app = new express();
         var router = express.Router();
+        var publicRouter = express.Router();
+        this.router = router;
+        this.publicRouter = publicRouter;
 
-<<<<<<< Updated upstream
-        channel = "#"+sconfig.broadcaster.username;
-        expressPort = devMode===false?sconfig.network.host_port:3001;
-        app.use("/",router);
-        if(devMode === false){
-            router.use("/", express.static(frontendDir+'/main/build'));
-        }
-        router.use("/mod", express.static(frontendDir+'/mod/build'));
-
-        router.use("/overlay", express.static(backendDir+'/web/overlay'));
-        router.use("/utility", express.static(backendDir+'/web/utility'));
-        router.use("/settings", express.static(backendDir+'/web/settings'));
-        router.use("/icons", express.static(backendDir+'/web/icons'));
-=======
         expressPort = sconfig.network.host_port;
         if(initMode == true){
             router.use("/", express.static(frontendDir+'/init/build'));
@@ -132,7 +133,6 @@ class WebUI {
             publicRouter.use("/", express.static(frontendDir+'/public/build'));
             publicRouter.use("/login", express.static(frontendDir+'/login/build'));
             publicRouter.use("/mod", express.static(frontendDir+'/mod/build'));
->>>>>>> Stashed changes
 
             publicRouter.use("/overlay", express.static(backendDir+'/web/overlay'));
             publicRouter.use("/utility", express.static(backendDir+'/web/utility'));
@@ -140,8 +140,6 @@ class WebUI {
             publicRouter.use("/assets", express.static(backendDir+'/web/assets'));
             publicRouter.use("/icons", express.static(backendDir+'/web/icons'));
 
-<<<<<<< Updated upstream
-=======
             publicRouter.use(bodyParser.urlencoded({extended:true}));
             publicRouter.use(bodyParser.json());
             publicRouter.use(cookieParser());
@@ -158,13 +156,12 @@ class WebUI {
               }
           });
 
->>>>>>> Stashed changes
         app.use((req, res, next) => {
             
-            res.status(404).send("<h1>Page not found on the server</h1>")
+            res.status(404).send("<h1>Page not found on the server</h1>");
         });
 
-        router.get("/overlay/get", async(req, res) => {
+        async function pluginGet(req, res){
 
             let isExternal = isLocal(req);
             var pluginName = req.query.plugin;
@@ -174,7 +171,7 @@ class WebUI {
                 var thisPlugin = fs.readFileSync(backendDir+"/plugins/"+pluginName+"/settings.json", {encoding:'utf8'});
                 pluginSettings = JSON.parse(thisPlugin);
             }catch(e){
-                webLog("Plugin has no settings");
+                webLog(pluginName+" has no settings");
             }
             
             let oscInfo = null;
@@ -182,19 +179,24 @@ class WebUI {
             if(isExternal == false){
                 oscInfo = {
                     host: sconfig.network.external_tcp_url,
+                    name:pluginName,
                     port: null,
                     settings: pluginSettings
                 };
             }else{
                 oscInfo = {
                     host: sconfig.network.host,
+                    name:pluginName,
                     port: sconfig.network.osc_tcp_port,
                     settings: pluginSettings
                 };
             }
 
             res.send({express: JSON.stringify(oscInfo)});
-        });
+        }
+
+        router.get("/plugin/get", pluginGet);
+        publicRouter.get("/plugin/get", pluginGet);
 
         publicRouter.get("/plugin/public", (req, res) => {
             let publicPlugins = [];
@@ -217,18 +219,6 @@ class WebUI {
         });
 
         router.get('/command_table', async (req, res) => {
-            let obs = {};
-            if(sosc.obs.connected){
-                let obsInputs = await callOBS("GetInputList");
-                let obsScenes = await callOBS("GetSceneList");
-                obs.inputs = obsInputs.inputs;
-                obs.scenes = obsScenes.scenes;
-                obs.sceneItems = {};
-                
-                for(let s in obs.scenes){
-                    obs.sceneItems[obs.scenes[s].sceneName] = await callOBS("GetSceneItemList", {sceneName:obs.scenes[s].sceneName});
-                }
-            }
             
             let props = {
                 "events":events,
@@ -273,23 +263,7 @@ class WebUI {
                 settings:fs.existsSync(backupSettingsDir)?fs.readdirSync(backupSettingsDir):{},
                 plugins:fs.existsSync(backupPluginsDir)?fs.readdirSync(backupPluginsDir):{}
             }
-<<<<<<< Updated upstream
-            let discordData = fs.existsSync(discordSettingsDir)?JSON.parse(fs.readFileSync(discordSettingsDir, {encoding:"utf-8"})):{
-                token:"",
-                autosendngrok:{
-                    enabled:false,
-                    destguild:"",
-                    destchannel:""
-                }
-            }
-            if(discord.loggedIn){
-                discordData.guilds = discord.guilds;
-            }
-            //console.log({config:sconfig, discord:discordData, backups:backups});
-            res.send({config:sconfig, discord:discordData, backups:backups});
-=======
             res.send({config:sconfig, backups:backups});
->>>>>>> Stashed changes
         });
 
         router.get('/udp_hosts', (req, res) => {
@@ -298,34 +272,17 @@ class WebUI {
 
         router.get('/server_state', async (req, res) => {
 
-            var oscReturn = {
-                host:sconfig.network.host,
-                port:sconfig.network.osc_tcp_port,
-                udp_clients:sconfig.network["udp_clients"],
-                plugins:Object.keys(activePlugins),
-            }
-
-            var hostReturn = {
-                port:expressPort
-            }
             let activeShares = await twitch.getChannels();
             res.send({
-<<<<<<< Updated upstream
-                "user":username,
-                "clientID": oauth["client-id"],
-                "osc":oscReturn,
-                "host":hostReturn,
-                "themes":themes
-=======
                 "user":twitch.botUsername,
                 "homeChannel":twitch.homeChannel,
-                "clientID": twitch.oauth["client-id"],
-                "osc":oscReturn,
-                "host":hostReturn,
+                "host":sconfig.network.host,
+                "port":sconfig.network.osc_tcp_port,
+                "udp_clients":sconfig.network["udp_clients"],
+                "plugins":Object.keys(activePlugins),
                 "themes":themes,
                 "activeShares":activeShares,
                 "shares":Object.keys(shares)
->>>>>>> Stashed changes
             });
         });
 
@@ -340,6 +297,7 @@ class WebUI {
         });
 
         router.post("/saveConfig", async (req, res) => {
+            
             let statusMsg = "";
             if(sconfig.network.externalhandle == "ngrok" && req.body.network.externalhandle != "ngrok"){
                 this.stopNgrok();
@@ -350,7 +308,7 @@ class WebUI {
                 statusMsg += " (Ngrok started)";
             }
 
-            if(sconfig.network.externalhandle != req.body.network.externalhandle || sconfig.network.external_http_url != req.body.external_http_url){
+            if(sconfig.network.externalhandle != req.body.network.externalhandle){
                 sconfig.network.externalhandle = req.body.network.externalhandle;
                 sconfig.network.external_http_url = req.body.network.external_http_url;
                 sconfig.network.ngrokauthtoken = sconfig.network.ngrokauthtoken;
@@ -358,11 +316,10 @@ class WebUI {
                 statusMsg += " (Refreshing EventSubs)";
             }
             
-            
             fs.writeFile(backendDir+"/settings/config.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 
                 sconfig = req.body;
-                res.send({status:statusMsg});
+                res.send({status:"CONFIG SAVED "+statusMsg});
                 webLog("SAVED THE CONFIG");
             });
         });
@@ -374,7 +331,11 @@ class WebUI {
                 res.send({status:statusMsg});
                 webLog("SAVED THE SPOODER");
             });
-        })
+        });
+
+        router.get("/osc_tunnels", async(req, res) => {
+            res.send(JSON.stringify(osctunnels));
+        });
 
         router.post("/saveOSCTunnels", async(req, res) => {
             fs.writeFile(backendDir+"/settings/osc-tunnels.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
@@ -385,9 +346,6 @@ class WebUI {
             });
         });
 
-<<<<<<< Updated upstream
-        
-=======
         router.post("/verifyResponseScript", async(req, res) => {
             let check = checkResponseTrigger(req.body.event, req.body.message);
             if(check != null){
@@ -501,7 +459,6 @@ class WebUI {
                 }
             })
         });
->>>>>>> Stashed changes
 
         router.post('/install_plugin', async (req, res) => {
             try{
@@ -513,164 +470,85 @@ class WebUI {
                     })
                 }else{
                     let pluginZip = req.files.file;
-                    let pluginDirName = pluginZip.name.split(".")[0];
-                    let renameCount = 1;
-                    while(fs.existsSync(path.join(backendDir, "plugins", pluginDirName))){
-                        if(!fs.existsSync(path.join(backendDir, "plugins", pluginDirName+renameCount))){
-                            pluginDirName += renameCount;
-                            break;
-                        }else{
-                            renameCount++;
-                        }
-                    }
+                    let pluginDirName = req.body.internalName;
+                    
 
-                    //Make /tmp
-                    if(!fs.existsSync(backendDir+"/tmp")){
-                        fs.mkdirSync(backendDir+"/tmp");
-                    }
-
-                    let tempFile = path.join(backendDir,"tmp", pluginZip.name);
                     let tempDir = path.join(backendDir, "tmp", pluginDirName);
-                    let pluginDir = path.join(backendDir,"plugins", pluginDirName);
-                    let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
-                    let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
-                    let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
-                    let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
+                    if(fs.existsSync(tempDir)){
+                        await fs.rm(tempDir, {recursive:true});
+                    }
+                    
+                    fs.mkdirSync(tempDir, {recursive:true});
+                    
+                    let tempFile = path.join(backendDir,"tmp", pluginDirName, pluginZip.name);
                     //Cleanup before install
                     if(fs.existsSync(tempFile)){
                         await fs.rm(tempFile);
                     }
-                    if(fs.existsSync(tempDir)){
-                        await fs.rm(tempDir, {recursive:true});
-                    }
-
+                    
+                    sendToTCP("/frontend/plugin/install/progress",{
+                        pluginName:pluginDirName,
+                        status:"progress",
+                        message:"Extracting..."
+                    });
                     //Start installing
                     await pluginZip.mv(tempFile);
                     webLog("EXTRACT ZIP");
-                    let zip = new AdmZip(tempFile);
-                    zip.extractAllTo(tempDir);
-
-                    if(!fs.existsSync(tempDir+"/command")){
-                        res.send({
-                            status: false,
-                            message: 'No command folder'
-                        })
-                    }
-
-                    if(fs.existsSync(tempDir+"/command")){
-                        await fs.move(tempDir+"/command", pluginDir, {overwrite:true});
-
-                        chmodr(pluginDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-                    
-                    if(fs.existsSync(tempDir+"/overlay")){
-                        await fs.move(tempDir+"/overlay", overlayDir, {overwrite:true});
-
-                        chmodr(overlayDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-
-                    if(fs.existsSync(tempDir+"/utility")){
-                        await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
-
-                        chmodr(utilityDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-
-                    if(fs.existsSync(tempDir+"/settings")){
-                        await fs.move(tempDir+"/settings", settingsDir, {overwrite:true});
-
-                        chmodr(settingsDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-
-                    if(fs.existsSync(tempDir+"/icon.png")){
-                        await fs.move(tempDir+"/icon.png", iconDir, {overwrite:true});
-
-                        chmodr(iconDir,0o777, (err) => {
-                            if(err) throw err;
-                            
-                        });
-                    }
-                    
-                    webLog("COMPLETE!");
-                    fs.rm(tempFile);
-                    fs.rm(tempDir, {recursive:true});
-                    this.getPlugins();
                     res.send({
                         status:true,
                         message: "File Upload Success",
                         plugin:pluginDirName
                     });
+                    let zip = new AdmZip(tempFile);
+                    zip.extractAllTo(tempDir);
+                    fs.rm(tempFile);
+                    await this.installPluginFromTemp(pluginDirName);
+                   
+                    
                 }
             }catch(e){
                 console.error(e);
             }
         });
 
+        router.get("/reinstall_plugin", async (req, res) => {
+            let pluginName = req.query.pluginname;
+            await this.installPluginDependencies(pluginName, path.join(backendDir, "plugins", pluginName));
+            this.getPlugins();
+            res.send({status:"ok"});
+        })
+
         router.get("/export_plugin/*", async(req, res) => {
             
             let pluginName = req.params['0'];
             
-            //let tempFile = path.join(backendDir,"tmp", pluginZip.name);
             let tempDir = path.join(backendDir, "tmp", pluginName);
             let pluginDir = path.join(backendDir,"plugins", pluginName);
             let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
             let utilityDir = path.join(backendDir, "web", "utility", pluginName);
             let settingsDir = path.join(backendDir, "web", "settings", pluginName);
             let iconFile = path.join(backendDir, "web", "icons", pluginName+".png");
-            if(fs.existsSync(pluginDir)){
-                fs.copySync(pluginDir, tempDir+"/command");
-            }
-            
-            if(fs.existsSync(overlayDir)){
-                fs.copySync(overlayDir, tempDir+"/overlay");
-                if(fs.existsSync(tempDir+"/overlay/assets")){
-                    await fs.rm(tempDir+"/overlay/assets", {recursive:true});
-                }
-            }
-
-            if(fs.existsSync(utilityDir)){
-                fs.copySync(utilityDir, tempDir+"/utility");
-            }
-
-            if(fs.existsSync(settingsDir)){
-                fs.copySync(settingsDir, tempDir+"/settings");
-            }
-
-            if(fs.existsSync(iconFile)){
-                fs.copyFileSync(iconFile, tempDir+"/icon.png");
-            }
 
             let zip = new AdmZip();
 
-            if(fs.existsSync(tempDir+"/command")){
-                zip.addLocalFolder(tempDir+"/command", "/command");
+            if(fs.existsSync(pluginDir)){
+                zip.addLocalFolder(pluginDir, "/command", (filename)=>{return !filename.includes("node_modules")&&!filename.includes("settings.json")});
             }
 
-            if(fs.existsSync(tempDir+"/overlay")){
-                zip.addLocalFolder(tempDir+"/overlay", "/overlay");
+            if(fs.existsSync(overlayDir)){
+                zip.addLocalFolder(overlayDir, "/overlay");
             }
 
-            if(fs.existsSync(tempDir+"/utility")){
-                zip.addLocalFolder(tempDir+"/utility", "/utility");
+            if(fs.existsSync(utilityDir)){
+                zip.addLocalFolder(utilityDir, "/utility");
             }
 
-            if(fs.existsSync(tempDir+"/settings")){
-                zip.addLocalFolder(tempDir+"/settings", "/settings");
+            if(fs.existsSync(settingsDir)){
+                zip.addLocalFolder(settingsDir, "/settings");
             }
 
-            if(fs.existsSync(tempDir+"/icon.png")){
-                zip.addLocalFile(tempDir+"/icon.png");
+            if(fs.existsSync(iconFile)){
+                zip.addLocalFile(iconFile, null, "icon.png");
             }
             
             zip.writeZip(tempDir+"/"+pluginName+".zip");
@@ -769,9 +647,11 @@ class WebUI {
         });
 
         router.post("/backup_plugins", async(req, res)=>{
+
             let zip = new AdmZip();
 
-            zip.addLocalFolder(backendDir+"/plugins", "/plugins");
+            zip.addLocalFolder(backendDir+"/plugins", "/plugins", (filename)=>{return !filename.includes("node_modules")});
+            
             zip.addLocalFolder(backendDir+"/web", "/web");
 
             if(!fs.existsSync(backendDir+"/backup")){
@@ -786,8 +666,9 @@ class WebUI {
                 backupName = req.body.backupName;
             }else{
                 let date = new Date();
-                backupName = date.getFullYear()+"-"+date.getMonth()+"-"+date.getDate()+"-"+date.getHours()+"-"+date.getMinutes()+"-"+date.getSeconds();
+                backupName = sconfig.bot.bot_name+"-"+date.getFullYear()+"-"+date.getMonth()+"-"+date.getDate()+"-"+date.getHours()+"-"+date.getMinutes()+"-"+date.getSeconds();
             }
+            
             webLog("Writing backup. This can take a while depending on how many plugins you have. I wish I could show you progress...");
             
             zip.writeZip(backendDir+"/backup/plugins/"+backupName+".zip", (e)=>{
@@ -862,18 +743,23 @@ class WebUI {
 
             let zip = new AdmZip(path.join(backendDir, "tmp", fileName));
             zip.extractAllTo(fileDir);
-            
-            for(let s in selections){
-                webLog("CHECKING", s+".json");
-                if(selections[s] == true){
-                    if(fs.existsSync(path.join(fileDir, s+".json"))){
-                        webLog("OVERWRITE "+s+".json");
-                        fs.copySync(path.join(fileDir, s+".json"), path.join(backendDir, "settings", s+".json"), {overwrite:true});
-                    }else{
-                        webLog(path.join(fileDir, s+".json"),"NOT FOUND");
+            if(selections["everything"] == true){
+                fs.copySync(path.join(fileDir), path.join(backendDir, "settings"), {overwrite:true});
+            }else{
+                for(let s in selections){
+                    if(s=="everything"){continue;}
+                    webLog("CHECKING", s+".json");
+                    if(selections[s] == true){
+                        if(fs.existsSync(path.join(fileDir, s+".json"))){
+                            webLog("OVERWRITE "+s+".json");
+                            fs.copySync(path.join(fileDir, s+".json"), path.join(backendDir, "settings", s+".json"), {overwrite:true});
+                        }else{
+                            webLog(path.join(fileDir, s+".json"),"NOT FOUND");
+                        }
                     }
                 }
             }
+            
 
             if(fs.existsSync(fileDir)){
                 await fs.rm(fileDir, {recursive:true});
@@ -932,6 +818,23 @@ class WebUI {
                 fs.copySync(path.join(fileDir, "plugins", pluginList[p]), path.join(backendDir, "plugins", pluginList[p]));
             }
 
+            webLog("Checking for dependencies...");
+            for(let p in pluginList){
+                if(fs.existsSync(path.join(backendDir, "plugins", pluginList[p], "node_modules"))){
+                    webLog("Clearing node_modules for "+pluginList[p]);
+                    fs.rmSync(path.join(backendDir, "plugins", pluginList[p], "node_modules"), {recursive:true});
+                }
+                if(fs.existsSync(path.join(backendDir, "plugins", pluginList[p],"package.json"))){
+                    let packagejson = JSON.parse(fs.readFileSync(path.join(backendDir, "plugins", pluginList[p],"package.json"),{encoding:"utf-8"}));
+                    let hasDependencies = packagejson.dependencies != null;
+                    if(hasDependencies){
+                        await this.installPluginDependencies(pluginList[p], path.join(backendDir, "plugins", pluginList[p]));
+                    }else{
+                        webLog("No dependencies for "+pluginList[p]);
+                    }
+                }
+            }
+
             let webfolders = fs.readdirSync(path.join(backendDir, "web"));
             webLog("Deleting Web Folders...");
             for(let w in webfolders){
@@ -964,13 +867,8 @@ class WebUI {
             res.send({status:"SUCCESS"});
         });
 
-<<<<<<< Updated upstream
-        router.post("/refresh_plugins", async (req, res) => {
-            this.getPlugins();
-=======
         router.get("/refresh_plugins", async (req, res) => {
             await this.getPlugins();
->>>>>>> Stashed changes
             res.send({"status":"Refresh Success!"});
         });
 
@@ -982,26 +880,20 @@ class WebUI {
         router.post('/delete_plugin_asset', async(req, res) =>{
 
             let pluginName = req.body.pluginName;
-            let assetName = req.body.assetName;
+            let assetPath = req.body.assetName;
             let fileStatus = "SUCCESS";
 
-            let assetDir = path.join(backendDir,"web", "overlay", pluginName, "assets");
-            let assetFile = path.join(backendDir,"web", "overlay", pluginName, "assets", assetName);
-            await fs.rm(assetFile, (err) => {
-                if(err) throw err;
+            let assetDir = path.join(backendDir,"web", "assets", pluginName, assetPath, "..");
+            let assetFile = path.join(backendDir,"web", "assets", pluginName, assetPath);
+            fs.rmSync(assetFile, {recursive:true});
+            let thisPluginAssets = fs.existsSync(assetDir)==true?fs.readdirSync(assetDir):null;
 
-                let thisPluginAssets = fs.existsSync(assetDir)==true ?
-                                    fs.readdirSync(assetDir):null;
-
-                res.send({
-                    status:fileStatus,
-                    newAssets:thisPluginAssets
-                });
+            res.send({
+                status:fileStatus,
+                newAssets:thisPluginAssets
             });
         });
 
-<<<<<<< Updated upstream
-=======
         router.post('/get_plugin_assets', async(req, res) => {
             let pluginName = req.body.pluginname;
             let mainDir = path.join(backendDir, "web", "assets", pluginName);
@@ -1063,7 +955,6 @@ class WebUI {
             res.send({status:"ok", dirs:dirs});
         })
 
->>>>>>> Stashed changes
         router.post('/upload_plugin_asset/*', async(req, res) => {
             try{
                 if(!req.files){
@@ -1074,10 +965,10 @@ class WebUI {
                     })
                 }else{
                     let pluginAsset = req.files.file;
-                    let pluginName = req.params['0'];
+                    let assetPath = req.params['0'];
 
-                    let assetDir = path.join(backendDir,"web", "overlay", pluginName, "assets");
-                    let assetFile = path.join(backendDir,"web", "overlay", pluginName, "assets", pluginAsset.name);
+                    let assetDir = path.join(backendDir,"web", "assets", assetPath);
+                    let assetFile = path.join(assetDir, pluginAsset.name);
                     
                     if(!fs.existsSync(assetDir)){
                         fs.mkdirSync(assetDir);
@@ -1115,8 +1006,11 @@ class WebUI {
             let overlayDir = path.join(backendDir,"web", "overlay", pluginName);
             let utilityDir = path.join(backendDir,"web", "utility", pluginName);
             let settingsDir = path.join(backendDir,"web", "settings", pluginName);
+            let assetsDir = path.join(backendDir,"web", "assets", pluginName);
             let iconFile = path.join(backendDir,"web", "icons", pluginName+".png");
-            await fs.rm(pluginDir, {recursive:true});
+            if(fs.existsSync(pluginDir)){
+                await fs.rm(pluginDir, {recursive:true});
+            }
             if(fs.existsSync(overlayDir)){
                 await fs.rm(overlayDir, {recursive:true});
             }
@@ -1125,6 +1019,9 @@ class WebUI {
             }
             if(fs.existsSync(settingsDir)){
                 await fs.rm(settingsDir, {recursive:true});
+            }
+            if(fs.existsSync(assetsDir)){
+                await fs.rm(assetsDir, {recursive:true});
             }
             if(fs.existsSync(iconFile)){
                 await fs.rm(iconFile);
@@ -1137,10 +1034,10 @@ class WebUI {
             let newSettings = req.body;
             let settingsFile = path.join(backendDir, "plugins", newSettings.pluginName, "settings.json");
             webLog("SAVING", settingsFile ,newSettings);
-            fs.writeFile(settingsFile, JSON.stringify(newSettings.settings), "utf-8", (err, data)=>{
-                res.send({saveStatus:"SAVE SUCCESS"});
+            fs.writeFileSync(settingsFile, JSON.stringify(newSettings.settings), "utf-8");
+            res.send({saveStatus:"SAVE SUCCESS"});
+                fs.chmod(settingsFile, 0o777);
                 webLog(""+newSettings.pluginName+" Settings Saved!");
-            });
 
             this.getPlugins();
         });
@@ -1150,49 +1047,37 @@ class WebUI {
             let pluginPacks = {};
             for(let a in activePlugins){
                 
-<<<<<<< Updated upstream
-                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort+"/overlay/"+a;
-=======
->>>>>>> Stashed changes
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
 
-                let settingsForm = path.join(backendDir, "plugins", a, "settings-form.html");
+                let settingsForm = path.join(backendDir, "plugins", a, "settings-form.json");
                 let thisPluginForm = fs.existsSync(settingsForm)==true ?
-                                fs.readFileSync(settingsForm, {encoding:'utf8'}):null;
+                                JSON.parse(fs.readFileSync(settingsForm, {encoding:'utf8'})):null;
 
-<<<<<<< Updated upstream
-                let assetDir = path.join(backendDir, "web", "overlay", a, "assets");
-                
-                let thisPluginAssets = fs.existsSync(assetDir)==true ?
-                                    fs.readdirSync(assetDir):null;
-
-=======
->>>>>>> Stashed changes
                 let overlayDir = path.join(backendDir, "web", "overlay", a);
                 let utilityDir = path.join(backendDir, "web", "utility", a);
                 let settingsDir = path.join(backendDir, "web", "settings", a);
                 pluginPacks[a] = {
-                    "name":activePlugins[a]._name==null?a:activePlugins[a]._name,
-                    "version":activePlugins[a]._version==null?"Unknown Version":activePlugins[a]._version,
-                    "author":activePlugins[a]._author==null?"Unknown Author":activePlugins[a]._author,
-                    "description":activePlugins[a]._description==null?"":activePlugins[a]._description,
+                    "name":activePlugins[a].name==null?a:activePlugins[a].name,
+                    "version":activePlugins[a].version==null?"Unknown Version":activePlugins[a].version,
+                    "author":activePlugins[a].author==null?"Unknown Author":activePlugins[a].author,
+                    "description":activePlugins[a].description==null?"":activePlugins[a].description,
+                    "dependencies":activePlugins[a].dependencies==null?{}:activePlugins[a].dependencies,
                     "settings":thisPlugin,
                     "settings-form":thisPluginForm,
-                    "assets":thisPluginAssets,
-                    "path":thisPluginPath,
+                    "assetBrowserPath":"/",
+                    "assetPath":path.join("assets", a),
                     "hasOverlay": fs.existsSync(overlayDir),
                     "hasUtility": fs.existsSync(utilityDir),
                     "hasExternalSettingsPage":fs.existsSync(settingsDir)
                 };
+                if(activePlugins[a].status != null && activePlugins[a].status != "ok"){
+                    pluginPacks[a].status = activePlugins[a].status;
+                }
             }
             
             res.send(JSON.stringify(pluginPacks));
-        });
-
-        router.get("/osc_tunnels", async(req, res) => {
-            res.send(JSON.stringify(osctunnels));
         });
 
         router.get("/get_plugin/*", async(req,res) => {
@@ -1217,20 +1102,6 @@ class WebUI {
             res.send(plugin);
         });
 
-<<<<<<< Updated upstream
-        router.post("/mod/authentication", async(req, res) => {
-            let modlist = await chat.mods(channel);
-            let isLocal = false;
-            if(req.headers.referer != null){
-                if(req.headers.referer.startsWith("http:")){
-                    isLocal = true;
-                }
-            }
-
-            if(isLocal){
-                activeMods[username] = "active";
-                res.send({status:"active", localUser:username});
-=======
         async function userVerify(req, res){
             let vType = req.body.vtype;
             let username = req.body.username;
@@ -1286,7 +1157,6 @@ class WebUI {
             if(activeUsers.pending[req.query.username] == null){
                 console.log("NULL PENDING");
                 res.send("verify-cancelled");
->>>>>>> Stashed changes
                 return;
             }
             if(activeUsers.pending[req.query.username].verified == true){
@@ -1298,13 +1168,6 @@ class WebUI {
         router.get("/user/verifycheck", verifyCheck)
         publicRouter.get("/user/verifycheck", verifyCheck)
 
-<<<<<<< Updated upstream
-            let moduser = req.body.moduser;
-            let modcode = req.body.code;
-            
-            if(modlist.includes(moduser) && modData["trusted_users"][moduser]?.includes("m")){
-                if(modData["trusted_users_pw"][moduser] == null){
-=======
         async function userLogin(req,res){
 
             let username = req.body.username.toLowerCase();
@@ -1321,7 +1184,6 @@ class WebUI {
                 }
                 if(activeUsers.pending[vusername].verified == true){
                     delete activeUsers.pending[vusername];
->>>>>>> Stashed changes
                     let newSalt = crypto.randomBytes(16).toString('hex');
                     let newHash = crypto.pbkdf2Sync(password, newSalt, 1000, 64, `sha512`).toString('hex');
                     
@@ -1355,20 +1217,8 @@ class WebUI {
                     res.send({status:"badpassword"});
                 }
             }
-        });
+        }
 
-<<<<<<< Updated upstream
-        router.get("/mod/utilities", async(req, res) => {
-            if(activeMods[req.query.moduser] == "active" || req.headers.referer.startsWith("http:")){
-                let modevents = {};
-                for(let e in events){
-                    if(events[e].triggers.chat.enabled){
-                        modevents[e] = {
-                            name:events[e].name,
-                            group:events[e].group,
-                            description:events[e].description
-                        }
-=======
         router.post("/user/authentication", (req, res) => {
             
             let browserToken = crypto.randomBytes(48).toString('hex');
@@ -1396,30 +1246,9 @@ class WebUI {
                     !users.trusted_users.permissions[activeUsers[accessCookie]].includes("a") ){
                         res.send({status:"nopermission"});
                         return;
->>>>>>> Stashed changes
                     }
                     moduser = activeUsers[accessCookie];
                 }
-<<<<<<< Updated upstream
-                let modplugins = {};
-                for(let p in activePlugins){
-                    let hasUtility = fs.existsSync(path.join(backendDir, "web", "utility", p));
-                    modplugins[p] = {
-                        name:p,
-                        modmap:activePlugins[p].modmap,
-                        utility:hasUtility
-                    }
-                }
-                let modTheme = null;
-                if(themes.modui[req.query.moduser] != null){
-                    modTheme = themes.modui[req.query.moduser];
-                }
-                let oscURL = null;
-                let oscPort = null;
-                if(req.headers.referer.startsWith("http:")){
-                    oscURL = sconfig.network.host;
-                    oscPort = sconfig.network.osc_tcp_port;
-=======
                 
             }else{
                 if(activeUsers[accessCookie] == null){
@@ -1432,15 +1261,11 @@ class WebUI {
                         httpOnly:true,
                         secure:false
                     });
->>>>>>> Stashed changes
                     
                 }else{
                     moduser = activeUsers[accessCookie];
                 }
             }
-<<<<<<< Updated upstream
-        });
-=======
             
             let modevents = {};
             for(let e in events){
@@ -1497,7 +1322,6 @@ class WebUI {
             console.log("I HEAR VOICE", req.body);
             res.status(200).end();
         })
->>>>>>> Stashed changes
 
         
 
@@ -1556,32 +1380,29 @@ class WebUI {
     async getPlugins(){
         try {
           const dir = await fsPromises.opendir(backendDir+'/plugins');
-<<<<<<< Updated upstream
-=======
           for(let p in activePlugins){
             if(activePlugins[p].onStop != null){
                 await activePlugins[p].onStop();
             }
           }
->>>>>>> Stashed changes
           activePlugins = {};
           for await (const dirent of dir){
             delete require.cache[require.resolve(backendDir+'/plugins/'+dirent.name)];
             try{
                 activePlugins[dirent.name] = new (require(backendDir+'/plugins/'+dirent.name))();
             }catch(e){
+                let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
+                activePlugins[dirent.name] = {};
+                activePlugins[dirent.name].name = dirent.name;
+                activePlugins[dirent.name].status = "failed";
+                activePlugins[dirent.name].description = e.code+" - "+e.message;
+                activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
                 console.log("PLUGIN FAILED TO LOAD", e);
                 continue;
             }
             
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/package.json")){
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
-<<<<<<< Updated upstream
-                activePlugins[dirent.name]._name = pluginMeta.name;
-                activePlugins[dirent.name]._author = pluginMeta.author;
-                activePlugins[dirent.name]._version = pluginMeta.version;
-                activePlugins[dirent.name]._description = pluginMeta.description;
-=======
                 activePlugins[dirent.name].name = pluginMeta.name;
                 activePlugins[dirent.name].author = pluginMeta.author;
                 activePlugins[dirent.name].version = pluginMeta.version;
@@ -1601,15 +1422,15 @@ class WebUI {
                 }
                 //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
                 activePlugins[dirent.name].status = "ok";
->>>>>>> Stashed changes
             }
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/settings.json")){
                 activePlugins[dirent.name].settings = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/settings.json",{encoding:'utf8'}));
+                
                 if(activePlugins[dirent.name].onSettings != null){
                     activePlugins[dirent.name].onSettings(activePlugins[dirent.name].settings);
                 }
             }
-          }
+        }
           webLog("Plugins Refreshed!");
           if(this.onPluginsLoaded != null){
             this.onPluginsLoaded();
@@ -1620,8 +1441,6 @@ class WebUI {
         
     }
 
-<<<<<<< Updated upstream
-=======
     async installPluginFromTemp(pluginDirName, options){
         if(options == null){options = {
             createInfo:null,
@@ -1777,9 +1596,8 @@ class WebUI {
         })
     }
 
->>>>>>> Stashed changes
     async startNgrok(){
-        if(maintainenceMode == true){
+        if(maintainenceMode == true || devMode == true){
             return;
         }
         
@@ -1835,9 +1653,6 @@ class WebUI {
 
     onNgrokStart = null;
 
-<<<<<<< Updated upstream
-    
-=======
     setShare(shareUser, isEnabled, message){
         if(message == null){
             if(isEnabled){
@@ -1875,7 +1690,28 @@ class WebUI {
             sendToTCP("/share/deactivate", shareUser);
         }
     }
->>>>>>> Stashed changes
 }
+
+//Contribution by ChatGPT :3
+function mergeDirectories(sourceDir, destDir) {
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir);
+    }
+  
+    const files = fs.readdirSync(sourceDir);
+  
+    files.forEach((file) => {
+      const srcPath = path.join(sourceDir, file);
+      const destPath = path.join(destDir, file);
+  
+      const stats = fs.statSync(srcPath);
+  
+      if (stats.isDirectory()) {
+        mergeDirectories(srcPath, destPath);
+      } else {
+        fs.moveSync(srcPath, destPath, { overwrite: true });
+      }
+    });
+  }
 
 module.exports = WebUI;

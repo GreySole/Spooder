@@ -1,6 +1,5 @@
 const fs = require("fs");
 const OSC = require('osc-js');
-const OBSOSC = require("./OBSOSC.js");
 
 var oscLog = (...content) => {
     console.log(logEffects("Bright"),logEffects("FgGreen"), ...content, logEffects("Reset"));
@@ -9,7 +8,6 @@ var oscLog = (...content) => {
 class SOSC {
     osc = null;
     oscTCP = null;
-    obs = null;
     udpClients = sconfig.network.udp_clients
     monitorLogs = {
         logs:[],
@@ -46,11 +44,14 @@ class SOSC {
 
     sendToTCP = (address, oscValue, log) => {
         if(log==null){log=true;}
+        if(typeof oscValue == "object" && !Array.isArray(oscValue)){
+            oscValue = JSON.stringify(oscValue);
+        }
         let newMessage = null;
         if(oscValue instanceof Array == false){
             newMessage = new OSC.Message(address, oscValue);
         }else{
-            newMessage = new OSC.Message(address, oscValue[0], oscValue[1]);
+            newMessage = new OSC.Message(address, ...oscValue);
         }
     
         if(log == true){
@@ -63,44 +64,55 @@ class SOSC {
     sendToUDP = (dest, address, oscValue) => {
         var udpClients = this.udpClients;
         
-        let valueType = "int";
-        if(!isNaN(oscValue)){
-            if(typeof oscValue == "string"){
-                if(oscValue.includes(".")){
-                    valueType = "f";
-                    oscValue = parseFloat(oscValue);
-                }else{
-                    valueType = "i";
-                    oscValue = parseInt(oscValue);
-                }
-            }
-        }
-<<<<<<< Updated upstream
-        else if(!isNaN(oscValue.split(",")[0])){valueType = "ii"}
-        else{valueType = "s"}
-        
-        if(valueType == "ii"){
-            oscValue = oscValue.split(",");
-            for(let o in oscValue){
-                if(!isNaN(oscValue[o])){
-                    if(oscValue[o].includes(".")){
-                        oscValue[o] = parseFloat(oscValue[o]);
+        let valueType = "i";
+        if(typeof oscValue == "string"){
+            if(oscValue.includes(",")){
+                valueType = "array";
+                oscValue = oscValue.split(",");
+                for(let o in oscValue){
+                    if(!isNaN(oscValue[o])){
+                        if(oscValue[o].includes(".")){
+                            oscValue[o] = parseFloat(oscValue[o]);
+                        }else{
+                            oscValue[o] = parseInt(oscValue[o]);
+                        }
                     }else{
-                        oscValue[o] = parseInt(oscValue[o]);
+                        if(oscValue[o].toLowerCase() == "true"){
+                            oscValue[o] = true;
+                        }else if(oscValue[o].toLowerCase() == "false"){
+                            oscValue[o] = false;
+                        }
                     }
                 }
-                
+            }else{
+                if(!isNaN(oscValue)){
+                    if(oscValue.includes(".")){
+                        valueType = "f";
+                        oscValue = parseFloat(oscValue);
+                    }else{
+                        valueType = "i";
+                        oscValue = parseInt(oscValue);
+                    }
+                }else{
+                    if(oscValue.toLowerCase() == "true"){
+                        valueType = "b";
+                        oscValue = true;
+                    }else if(oscValue.toLowerCase() == "false"){
+                        valueType = "b";
+                        oscValue = false;
+                    }
+                }
             }
+        }else if(Array.isArray(oscValue)){
+            valueType = "array";
         }
-=======
         
->>>>>>> Stashed changes
         this.sendToMonitor("udp", "send", {dest:dest, types:valueType, address:address, data:oscValue});
         if(dest == -1){return;}
         else if(dest == -2){
             let allMessage = null;
-            if(valueType == "ii"){
-                allMessage = new OSC.Message(address, oscValue[0], oscValue[1]);
+            if(valueType.length > 1){
+                allMessage = new OSC.Message(address, ...oscValue);
             }else{
                 allMessage = new OSC.Message(address, oscValue);
             }
@@ -109,8 +121,8 @@ class SOSC {
             }
         }else{
             let message = null;
-            if(valueType == "ii"){
-                message = new OSC.Message(address, oscValue[0], oscValue[1]);
+            if(valueType.length > 1){
+                message = new OSC.Message(address, ...oscValue);
             }else{
                 message = new OSC.Message(address, oscValue);
             }
@@ -128,30 +140,62 @@ class SOSC {
             if(o=="sectionname"){continue;}
             if(osctunnels[o]["handlerFrom"] == "tcp"){
                 oscTCP.on(osctunnels[o]["addressFrom"], message => {
+                    let address = null;
+                    if(osctunnels[o]["addressFrom"].endsWith("*")){
+                        address = message.address.replace(osctunnels[o]["addressFrom"].replace("*",""), osctunnels[o]["addressTo"].replace("*",""))
+                    }else{
+                        address = osctunnels[o]["addressTo"];
+                    }
                     switch(osctunnels[o]["handlerTo"]){
                         case "tcp":
-                            sendToTCP(osctunnels[o]["addressTo"], message.args[0]);
+                            sendToTCP(address, ...message.args);
                         break;
                         case "udp":
-                            sendToUDP(-2,osctunnels[o]["addressTo"], message.args.join(","));
+                            if(udpClients[osctunnels[o]["clientTo"]] != null){
+                                sendToUDP(osctunnels[o]["clientTo"],address, message.args.join(","));
+                            }else{ 
+                                sendToUDP(-2,address, message.args.join(","));
+                            }
+                        break;
+                        case "plugin":
+                            if(activePlugins[osctunnels[o]["clientTo"]]?.onOSC != null){
+                                activePlugins[osctunnels[o]["clientTo"]].onOSC(message);
+                            }
                         break;
                         default:
-                            sendToUDP(osctunnels[o]["handlerTo"], osctunnels[o]["addressTo"], message.args.join(","));
+                            sendToUDP(osctunnels[o]["clientTo"], address, message.args.join(","));
                     }
                 });
-            }else{
+            }else if(osctunnels[o]["handlerFrom"] == "udp"){
                 
                 osc.on(osctunnels[o]["addressFrom"], message => {
                     
+                    let address = null;
+                    if(osctunnels[o]["addressFrom"].endsWith("*")){
+                        address = message.address.replace(osctunnels[o]["addressFrom"].replace("*",""), osctunnels[o]["addressTo"].replace("*",""))
+                    }else{
+                        address = osctunnels[o]["addressTo"];
+                    }
                     switch(osctunnels[o]["handlerTo"]){
                         case "tcp":
-                            sendToTCP(osctunnels[o]["addressTo"], message.args[0]);
+                            sendToTCP(address, ...message.args);
                         break;
                         case "udp":
-                            sendToUDP(-2,osctunnels[o]["addressTo"], message.args.join(","));
+                            if(udpClients[osctunnels[o]["clientTo"]] != null){
+                                sendToUDP(osctunnels[o]["clientTo"],address, message.args.join(","));
+                            }else{ 
+                                sendToUDP(-2,address, message.args.join(","));
+                            }
+                            
+                        break;
+                        case "plugin":
+                            if(activePlugins[osctunnels[o]["clientTo"]]?.onOSC != null){
+                                console.log("PLUGIN");
+                                activePlugins[osctunnels[o]["clientTo"]].onOSC(message);
+                            }
                         break;
                         default:
-                            sendToUDP(osctunnels[o]["handlerTo"], osctunnels[o]["addressTo"], message.args.join(","));
+                            sendToUDP(osctunnels[o]["clientTo"], address, message.args.join(","));
                     }
                 });
             }
@@ -180,9 +224,6 @@ class SOSC {
 
             for(let e in events){
                 if(events[e].triggers.osc?.enabled == true){
-<<<<<<< Updated upstream
-                    if(message.address == events[e].triggers.osc.address){
-=======
                     message.eventType = "osc";
                     if(events[e].triggers.osc.handletype == "search"){
                         
@@ -199,24 +240,22 @@ class SOSC {
                         }
                         
                     }else if(message.address == events[e].triggers.osc.address){
->>>>>>> Stashed changes
                         if(events[e].triggers.osc.type != "double"){
                             if(eval(message.args[0]+events[e].triggers.osc.condition+events[e].triggers.osc.value)){
                             
                                 runCommands(message, e);
                             }
-                        }else{
+                        }else if(events[e].triggers.osc.type == "single"){
                             if(eval(message.args[0]+events[e].triggers.osc.condition+events[e].triggers.osc.value
                                 +" && "+message.args[1]+events[e].triggers.osc.condition2+events[e].triggers.osc.value2)){
                             
                                 runCommands(message, e);
                             }
                         }
-                        
                     }
                 }
             }
-
+            
             for(let p in activePlugins){
                 if(activePlugins[p].onOSC != null){
                     activePlugins[p].onOSC(message);
@@ -253,7 +292,7 @@ class SOSC {
 
                 //Only the plugin with its name in the beginning of the address
                 //will call its onOSC
-                if(address[1] == p){
+                if(p.startsWith(address[1])){
                     if(activePlugins[p].onOSC != null){
                         activePlugins[p].onOSC(message);
                     }
@@ -358,8 +397,8 @@ class SOSC {
             }
 
             if(message.address.startsWith("/obs")){
-                if(this.obs != null){
-                    this.obs.onOSC(message);
+                if(obs != null){
+                    obs.onOSC(message);
                 }
                 return;
             }
@@ -369,9 +408,6 @@ class SOSC {
         oscTCP.open();
 
         this.updateOSCListeners();
-
-        this.obs = new OBSOSC();
-        this.obs.autoLogin();
     }
 }
 
