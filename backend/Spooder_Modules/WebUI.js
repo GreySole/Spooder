@@ -125,6 +125,7 @@ class WebUI {
             router.use(bodyParser.json());
             router.use("/install_plugin",fileUpload());
             router.use("/upload_plugin_asset/*",fileUpload());
+            router.use("/upload_plugin_icon/*",fileUpload());
             router.use("/checkin_settings", fileUpload());
             router.use("/checkin_plugins", fileUpload());
             router.use(express.json({verify: this.verifyTwitchSignature}));
@@ -274,8 +275,6 @@ class WebUI {
 
             let activeShares = await twitch.getChannels();
             res.send({
-                "user":twitch.botUsername,
-                "homeChannel":twitch.homeChannel,
                 "host":sconfig.network.host,
                 "port":sconfig.network.osc_tcp_port,
                 "udp_clients":sconfig.network["udp_clients"],
@@ -873,7 +872,7 @@ class WebUI {
         });
 
         router.get("/refresh_plugin", async(req, res) => {
-            await this.refreshPlugin(req.body.pluginname);
+            await this.refreshPlugin(req.query.pluginname);
             res.send({"status":"success"});
         })
 
@@ -996,6 +995,44 @@ class WebUI {
             }
         });
 
+        router.post('/upload_plugin_icon/*', async(req, res) => {
+            try{
+                if(!req.files){
+                    webLog("NO FILES FOUND");
+                    res.send({
+                        status: false,
+                        message: 'No file uploaded'
+                    })
+                }else{
+                    let pluginAsset = req.files.file;
+                    let pluginName = req.params['0'];
+
+                    let iconDir = path.join(backendDir,"web", "icons");
+                    let iconFile = path.join(iconDir, pluginName+".png");
+                    
+                    if(!fs.existsSync(iconDir)){
+                        fs.mkdirSync(iconDir);
+                    }
+                    await pluginAsset.mv(iconFile);
+                    
+                    chmodr(iconFile,0o777, (err) => {
+                        if(err) throw err;
+                        
+                    });
+                    webLog("COMPLETE!");
+                    
+                    //this.getPlugins();
+
+                    res.send({
+                        status:true,
+                        message: "File Upload Success"
+                    });
+                }
+            }catch(e){
+                console.error(e);
+            }
+        });
+
         router.post('/delete_plugin', async(req, res) => {
             
             let thisBody = req.body;
@@ -1100,6 +1137,10 @@ class WebUI {
             }
             
             res.send(plugin);
+        });
+
+        router.get("/users", (req, res) => {
+            res.send(users.trusted_users);
         });
 
         async function userVerify(req, res){
@@ -1339,7 +1380,7 @@ class WebUI {
                 await activePlugins[pluginName].onClose();
             }
 
-            delete require.cache(require.resolve(backendDir+'/plugins/'+pluginName));
+            delete require.cache[require.resolve(backendDir+'/plugins/'+pluginName)];
             try{
                 activePlugins[pluginName] = new (require(backendDir+'/plugins/'+pluginName))();
                 if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/package.json")){

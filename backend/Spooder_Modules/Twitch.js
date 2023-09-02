@@ -135,6 +135,11 @@ class STwitch{
 
         router.get("/twitch/config", async(req, res) => {
             let sendSubs = Object.assign(this.oauth);
+            let twitchBotUser = await this.getUserInfo(this.botUsername);
+            let twitchBroadcasterUser = await this.getUserInfo(this.homeChannel);
+            sendSubs.botUser = twitchBotUser;
+            sendSubs.broadcasterUser = twitchBroadcasterUser;
+            sendSubs.host_port = sconfig.network.host_port;
             sendSubs.callback_url = sconfig.network.external_http_url;
             sendSubs.spooderevents = Object.keys(events);
             res.send(sendSubs);
@@ -911,11 +916,13 @@ class STwitch{
                     }else{
                         this.sayInChat("Trust a user to interact with the Mod UI");
                     }
-                }else if(modCommand == "verify"){
-                    if(activeUsers.pending[message.username].vtype == "twitch" && activeUsers.pending[message.username].verified == false){
-                        activeUsers.pending[message.username].verified = true;
-                        this.sayInChat(message.username+" You're verified! Now set a username and password for my records.");
-                    }
+                }
+            }
+
+            if(command[0] == "verify"){
+                if(activeUsers.pending[message.username].vtype == "twitch" && activeUsers.pending[message.username].verified == false){
+                    activeUsers.pending[message.username].verified = true;
+                    this.sayInChat(message.username+" You're verified! Now set a username and password for my records.");
                 }
             }
     

@@ -336,14 +336,16 @@ class SOSC {
                 }
                 if(address[3] == "lock"){
                     if(address[4] == "event"){
-                        lockEvent(address[2], message.args[1], address[5]);
-                        
+                        lockEvent(message.args[1], address[5]);
+                        sayInChat(address[2]+ " "+message.args[1]+"ed "+address[5]);
                     }else if(address[4] == "plugin"){
                         
                         if(address[6] == null){
-                            lockPlugin(address[2], message.args[1], address[5])
+                            lockPlugin(message.args[1], address[5])
+                            sayInChat(address[2]+ " "+message.args[1]+"ed "+address[5]);
                         }else{
-                            lockPlugin(address[2], message.args[1], address[5], address[6]);
+                            lockPlugin(message.args[1], address[5], address[6]);
+                            sayInChat(address[2]+ " "+message.args[1]+"ed "+address[6]+" in "+address[5]);
                         }
                         
                     }

@@ -642,6 +642,7 @@ if(initMode){
 	}
 
 	global.verifyResponseScript = async (eventName, message, extra, script) => {
+		message.eventType = "chat";
 		try{
 			let responseScript = "async () => { let event = "+JSON.stringify(message)
 			+"; let extra = "+JSON.stringify(extra)
@@ -653,6 +654,7 @@ if(initMode){
 			+"; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 			+"; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 			+"; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?~]/,\"\",'');}"
+			+"; function runEvent(eName){runCommands(event, eName)}"
 			+"let eventstorage = "+JSON.stringify(eventstorage)+"; "
 			+script.replace(/\n/g, "")+"}";
 			let responseFunct = await eval(responseScript);
@@ -779,6 +781,7 @@ if(initMode){
 							+"; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 							+"; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 							+"; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?~]/,\"\",'');}"
+							+"; function runEvent(eName){runCommands(event, eName)}"
 							+"; "
 							+eCommand.message.replace(/\n/g, "")+"}"
 							);
