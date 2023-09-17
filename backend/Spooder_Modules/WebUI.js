@@ -60,8 +60,6 @@ class WebUI {
     router = null;
     publicRouter = null;
 
-    
-
     startServer(devMode){
 
         var expressPort = null;
@@ -1143,6 +1141,12 @@ class WebUI {
             res.send(users.trusted_users);
         });
 
+        router.get("/saveUsers", (req, res) => {
+            Object.assign(users.trusted_users, req.body);
+            fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+            res.send({status:"SUCCESS"});
+        })
+
         async function userVerify(req, res){
             let vType = req.body.vtype;
             let username = req.body.username;
@@ -1455,6 +1459,7 @@ class WebUI {
                 activePlugins[dirent.name].hasOverlay = fs.existsSync(overlayDir);
                 activePlugins[dirent.name].hasUtility = fs.existsSync(utilityDir);
                 activePlugins[dirent.name].hasPublic = fs.existsSync(publicDir);
+                
                 if(activePlugins[dirent.name].hasPublic == true){
                     this.publicRouter.use("/plugin/"+dirent.name, express.static(publicDir));
                     if(activePlugins[dirent.name].onPublic != null){

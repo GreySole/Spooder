@@ -5,6 +5,7 @@ const SOSC = require("./backend/Spooder_Modules/OSC.js");
 global.newVersionAvailable = false;
 global.devMode = process.argv.length>2?process.argv[2] == "-d":false;
 global.initMode = process.argv.length>2?process.argv[2] == "-i":false;
+global.safeMode = process.argv.length>2?process.argv[2] == "-e":false;
 var noAutoLogin = process.argv.length>2?process.argv[2] == "-a":false;
 
 var spooderLog = (...content) => {
@@ -328,8 +329,9 @@ if(initMode){
 		if(sconfig.network.externalhandle == "ngrok" && sconfig.network.ngrokauthtoken != ""){
 			webUI.startNgrok();
 		}
-
-		webUI.getPlugins();
+		if(safeMode == false){
+			webUI.getPlugins();
+		}
 	}
 
 	
@@ -650,7 +652,9 @@ if(initMode){
 			+"; let toUser = "+JSON.stringify(message.message.split(" ")[1])+""
 			+"; let command = "+JSON.stringify(message.message.toLowerCase().split(" "))+""
 			+"; function getVar(key,defaultVal=0){return eventstorage["+JSON.stringify(eventName)+"]?.[key]??defaultVal;}"
-			+"; function setVar(key, value, save=true){if(save==true){eventstorage["+JSON.stringify(eventName)+"]??={}; eventstorage["+JSON.stringify(eventName)+"][key] = value;}}"
+			+"; function setVar(key, value, save=true){eventstorage["+JSON.stringify(eventName)+"]??={}; eventstorage[eventname][key] = value;}"
+			+"; function getSharedVar(eventname, key,defaultVal=0){return eventstorage[eventname]?.[key]??defaultVal;}"
+			+"; function setSharedVar(eventname, key, value, save=true){eventstorage[eventname]??={}; eventstorage[eventname][key] = value;}"
 			+"; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 			+"; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 			+"; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?~]/,\"\",'');}"
@@ -778,6 +782,8 @@ if(initMode){
 							+"; let command = "+JSON.stringify(eventData.message.toLowerCase().split(" "))+""
 							+"; function getVar(key,defaultVal=0){return eventstorage["+JSON.stringify(eventName)+"]?.[key]??defaultVal;}"
 							+"; function setVar(key, value, save=true){eventstorage["+JSON.stringify(eventName)+"]??={}; eventstorage["+JSON.stringify(eventName)+"][key] = value; if(save==true){saveEventStorage();}}"
+							+"; function getSharedVar(eventname, key,defaultVal=0){return eventstorage[eventname]?.[key]??defaultVal;}"
+							+"; function setSharedVar(eventname, key, value, save=true){eventstorage[eventname]??={}; eventstorage[eventname][key] = value; if(save==true){saveEventStorage();}}"
 							+"; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 							+"; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
 							+"; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?~]/,\"\",'');}"

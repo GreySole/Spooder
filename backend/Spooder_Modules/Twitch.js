@@ -826,27 +826,33 @@ class STwitch{
         return message;
     }
 
-    /*processDeletedMessage(message){
+    processDeletedMessage(channel, username, deletedMessage, userstate){
+        let message = {
+            channel:channel.replace("#",""),
+            platform:"twitch",
+            username:username,
+            deletedMessage:deletedMessage,
+            userstate:userstate
+        };
+        
         for(let p in activePlugins){
-            if(modlocks.plugins[p] != 1){
-                try{
-                    if(message.channel != this.homeChannel){
-                        if(shares[message.channel]?.plugins.includes(p)){
-                            if(activePlugins[p].onEvent != null){
-                                activePlugins[p].onEvent(message);
-                            }
-                        }
-                    }else{
+            try{
+                if(message.channel != this.homeChannel){
+                    if(shares[message.channel]?.plugins.includes(p)){
                         if(activePlugins[p].onEvent != null){
-                            activePlugins[p].onChat(message);
+                            activePlugins[p].onEvent("messagedeleted",message);
                         }
                     }
-                }catch(e){
-                    twitchLog(e);
+                }else{
+                    if(activePlugins[p].onEvent != null){
+                        activePlugins[p].onEvent("messagedeleted",message);
+                    }
                 }
+            }catch(e){
+                twitchLog(e);
             }
         }
-    }*/
+    }
     
     processMessage(channel, tags, txt, self){
         
@@ -1173,7 +1179,7 @@ class STwitch{
     
         
         this.chat.on("message", this.processMessage.bind(this));
-        //this.chat.on("messagedeleted", this.processDeletedMessage.bind(this));
+        this.chat.on("messagedeleted", this.processDeletedMessage.bind(this));
         this.chat.on("cheer", this.processCheer.bind(this));
         this.chat.on("connectFailed", this.onAuthenticationFailure.bind(this));
         this.chat.on("disconnect", this.restartChat.bind(this));

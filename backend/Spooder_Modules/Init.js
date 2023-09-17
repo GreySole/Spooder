@@ -100,7 +100,8 @@ class Initializer{
         })
 
         this.webUI.router.post("/save_config", async (req, res) => {
-            let newSettings = req.body.config;
+            
+            let newSettings = req.body;
             var newMod = {
                 "trusted_users": {},
                 "trusted_users_pw": {}
@@ -109,16 +110,10 @@ class Initializer{
             var newThemes = req.body.themes;
             global.sconfig = newSettings;
             fs.writeFileSync(backendDir+"/settings/config.json", JSON.stringify(newSettings))
-            fs.writeFileSync(backendDir+"/settings/osc-tunnels.json", "{}", "utf-8")
-            fs.writeFileSync(backendDir+"/settings/mod-blacklist.json", "{}", "utf-8")
-            fs.writeFileSync(backendDir+"/settings/eventsub.json", "{}", "utf-8")
-            fs.writeFileSync(backendDir+"/settings/commands.json", "{}", "utf-8")
-            fs.writeFileSync(backendDir+"/settings/mod.json", JSON.stringify(newMod), "utf-8")
-            fs.writeFileSync(backendDir+"/settings/themes.json", JSON.stringify(newThemes), "utf-8");
             res.send({status:"ok"});
         });
 
-        console.log("Init UI ready! Open your browser and go to", "http://localhost:"+sconfig.network.host_port);
+        console.log("Init UI ready! You must open this on localhost to set up Twitch.", "http://localhost:"+sconfig.network.host_port);
     }
 
     beginInit(){
