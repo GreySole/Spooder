@@ -105,7 +105,7 @@ class WebUI {
         if(initMode == true){
             router.use("/", express.static(frontendDir+'/init/build'));
             router.use(bodyParser.urlencoded({extended:true}));
-            router.use(bodyParser.json());
+            router.use(bodyParser.json({limit:"100mb"}));
             router.use("/restore_settings", fileUpload());
             router.use("/restore_plugins", fileUpload());
         }else{
@@ -120,7 +120,7 @@ class WebUI {
             router.use("/icons", express.static(backendDir+'/web/icons'));
 
             router.use(bodyParser.urlencoded({extended:true}));
-            router.use(bodyParser.json());
+            router.use(bodyParser.json({limit:"100mb"}));
             router.use("/install_plugin",fileUpload());
             router.use("/upload_plugin_asset/*",fileUpload());
             router.use("/upload_plugin_icon/*",fileUpload());
@@ -287,8 +287,14 @@ class WebUI {
             
             fs.writeFile(backendDir+"/settings/commands.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 events = req.body.events;
+                
                 eventGroups = req.body.groups;
                 res.send({status:"SAVE SUCCESS"});
+                for(let p in activePlatforms){
+                    if(activePlatforms[p].onEventFileSaved){
+                        activePlatforms[p].onEventFileSaved();
+                    }
+                }
                 webLog("SAVED COMMANDS");
             });
         });

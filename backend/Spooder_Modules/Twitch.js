@@ -13,12 +13,31 @@ function stringifyArray(a){
 class STwitch{
     constructor(router, publicRouter){
         let expressPort = sconfig.network.host_port;
+        if(fs.existsSync(backendDir+"/settings/eventsub.json")){
+            twitchLog("Obsolete Eventsub.json detected. Twitch eventsubs are now integrated with Spooder's event system. Go to the Twitch tab in the WebUI to convert your eventsubs!")
+        }
         if(fs.existsSync(backendDir+"/settings/twitch.json")){
             try{
                 this.oauth = JSON.parse(fs.readFileSync(backendDir+"/settings/twitch.json"));
+                if(this.oauth.events != null){
+                    twitchLog("Obsolete events property in twitch.json detected. Twitch eventsubs are now integrated with Spooder's event system. Go to the Twitch tab in the WebUI to convert your eventsubs!")
+                }
             }catch(e){
-                twitchLog("FAILED TO READ OAUTH FILE");
-                this.oauth = {};
+                
+                if(fs.existsSync(backendDir+"/settings/oauth.json")){
+                    try{
+                        this.oauth = JSON.parse(fs.readFileSync(backendDir+"/settings/oauth.json"));
+                        fs.writeFileSync(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8");
+                        fs.rmSync(backend+"/settings/oauth.json");
+                        twitchLog("Obsolete oauth.json is now twitch.json!");
+                    }catch(e){
+                        twitchLog("FAILED TO READ OAUTH FILE");
+                        this.oauth = {};
+                    }
+                }else{
+                    twitchLog("FAILED TO READ TWITCH FILE");
+                    this.oauth = {};
+                }
             }
         }
         router.get('/twitch/authorize', async (req,res)=>{
@@ -60,16 +79,21 @@ class STwitch{
 
         router.get("/twitch/revoke", async(req, res) => {
             let cid = this.oauth['client-id'];
-            let revokeBroadcaster = req.query.broadcaster == true;
-            let revokeToken = this.oauth.token;
-            if(revokeBroadcaster){
-                revokeToken = this.oauth.broadcaster_token;
-            }else{
-                revokeToken = this.oauth.token;
+            
+            if(revokeToken == this.oauth.broadcaster_token){
+                await Axios({
+                    url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+this.oauth.broadcaster_token,
+                    method: 'POST',
+                    headers:{
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    }
+                }).then((response) => {
+                    
+                })
             }
             twitchLog("Revoking: "+cid);
             await Axios({
-                url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+revokeToken,
+                url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+this.oauth.token,
                 method: 'POST',
                 headers:{
                     "Content-Type": "application/x-www-form-urlencoded"
@@ -77,27 +101,12 @@ class STwitch{
             })
             .then((response)=>{
 
-                if(this.oauth.broadcaster_token == this.oauth.token){
-                    this.oauth.broadcaster_token = "";
-                    this.oauth.broadcaster_refreshToken = "";
-                    this.oauth.token = "";
-                    this.oauth.refreshToken = "";
-                    twitchLog("Main token matches broadcaster, both oauth revoked");
-                    res.send({status:"Main token matches broadcaster, both oauth revoked"});
-                }else{
-                    if(revokeBroadcaster){
-                        this.oauth.broadcaster_token = "";
-                        this.oauth.broadcaster_refreshToken = "";
-                        twitchLog("Broadcaster oauth revoked, main token preserved");
-                        res.send({status:"Broadcaster oauth revoked, main token preserved"});
-                    }else{
-                        this.oauth.token = "";
-                        this.oauth.refreshToken = "";
-                        twitchLog("Broadcaster oauth preserved");
-                        res.send({status:"Main token revoked, broadcaster oauth preserved"});
-                    }
-                    
-                }
+                this.oauth.broadcaster_token = "";
+                this.oauth.broadcaster_refreshToken = "";
+                this.oauth.token = "";
+                this.oauth.refreshToken = "";
+                twitchLog("Both oauth revoked");
+                res.send({status:"Both oauth revoked"});
                 
                 fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
                     twitchLog("oauth saved!");
@@ -120,10 +129,111 @@ class STwitch{
 
         router.post("/twitch/saveEventSubs", async(req, res) => {
             delete req.body.callback_url;
-            fs.writeFile(backendDir+"/settings/eventsub.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
+            fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 eventsubs = req.body;
                 res.send({status:"SAVE SUCCESS"});
             });
+        })
+
+        router.get("/convertEventsubToSpooder", (req, res) => {
+            let oldEvents = null;
+            if(twitch.oauth.events != null){
+                oldEvents = twitch.oauth.events;
+            }else if(fs.existsSync(backendDir+"/settings/eventsub.json")){
+                oldEvents = JSON.parse(fs.readFileSync(backendDir+"/settings/eventsub.json"));
+            }
+
+            if(oldEvents == null){
+                res.send({status:"No legacy eventsub events found."});
+                return;
+            }
+
+            eventGroups.push("Twitch Events");
+            for(let e in oldEvents){
+                let newEventName = e.replaceAll(".", "_");
+                events[newEventName] = {
+                    "name":newEventName,
+                    "description":"",
+                    "group":"Twitch Events",
+                    "cooldown":0,
+                    "chatnotification":false,
+                    "cooldownnotification":false,
+                    "triggers":{
+                        "chat":{"enabled":false, "command":"!"},
+                        "twitch":{"enabled":true, type:e, reward:{ "id":"", override:false}},
+                        "osc":{"enabled":false, "address":"/", "type":"single","condition":"==", "value":0, "condition2":"==", "value2":0}
+                    },
+                    "commands":[]
+                };
+                if(oldEvents[e].chat.enabled == true){
+                    if(e == "stream.online"){
+                        events[newEventName].commands.push(
+                            {
+                                type:"response",
+                                search:false,
+                                message:oldEvents[e].chat.message,
+                                reoccuringmessage: oldEvents[e].chat.reoccuringmessage,
+                                delay:0,
+                                interval: oldEvents[e].chat.interval,
+                                discord: Object.assign({}, oldEvents[e].chat.discord)
+                            }
+                        )
+                    }else{
+                        events[newEventName].commands.push(
+                            {
+                                type:"response",
+                                message:oldEvents[e].chat.message,
+                                search:false,
+                                delay:0
+                            }
+                        )
+                    }
+                    
+                }
+
+                if(oldEvents[e].plugin.enabled == true){
+                    events[newEventName].commands.push(
+                        {
+                            type:"plugin",
+                            pluginname:oldEvents[e].plugin.pluginname,
+                            eventname:oldEvents[e].plugin.eventname,
+                            etype:"oneshot",
+                            stop_eventname:"",
+                            duration:60,
+                            delay:0
+                        }
+                    )
+                }
+
+                if(oldEvents[e].udp.enabled == true){
+                    events[newEventName].commands.push(
+                        {
+                            "type": "software",
+                            "etype": "timed",
+                            "dest_udp": oldEvents[e].udp.dest,
+                            "address": oldEvents[e].udp.address,
+                            "valueOn": oldEvents[e].udp.value,
+                            "valueOff": oldEvents[e].udp.valueoff,
+                            "duration": parseInt(oldEvents[e].udp.duration)/1000,
+                            "delay": 0,
+                            "priority": 0
+                        }
+                    )
+                }
+            }
+            fs.writeFileSync(backendDir+"/settings/commands.json", JSON.stringify({events:events, groups:eventGroups}), "utf-8");
+            res.send({status:"ok"});
+        })
+
+        router.get("/twitch/cleanupOldEventsubs", (req, res) => {
+            if(fs.existsSync(backendDir+"/settings/oauth.json")){
+                fs.rmSync(backendDir+"/settings/oauth.json");
+            }
+            if(fs.existsSync(backendDir+"/settings/eventsub.json")){
+                fs.rmSync(backendDir+"/settings/eventsub.json");
+            }
+            
+            res.send({status:"ok"});
         })
 
         router.get("/twitch/eventsubs", async(req, res) => {
@@ -263,14 +373,6 @@ class STwitch{
             });
         })
 
-        /*router.get("/twitch/chat_channel", async(req,res) => {
-            let channel = req.query.channel;
-            let leaveMessage = req.query.leavemessage;
-            let joinMessage = req.query.joinmessage;
-            this.chatSwitchChannels(channel, leaveMessage, joinMessage);
-            res.send(JSON.stringify({status:"SUCCESS"}));
-        });*/
-
         router.get("/twitch/chat_restart", async(req, res) => {
             this.restartChat("restart");
             res.send(JSON.stringify({status:"SUCCESS"}));
@@ -308,8 +410,11 @@ class STwitch{
                 event
             );
 
+            res.status(200).end();
+
             event.userId = event.user_id;
             event.displayName = event.user_name;
+            event.eventsubType = type;
 
             event.platform = "twitch";
             event.respond = (responseTxt)=>{
@@ -351,7 +456,7 @@ class STwitch{
                 if(eventsubs.events[type].discord?.enabled == true){
                     if(discord.loggedIn == true){
                         let channelInfo = await this.getChannelInfo(this.broadcasterUserID);
-                        let onlineMessage = channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
+                        let onlineMessage = "@everyone "+channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
                         let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+this.homeChannel)
                         discord.sendToChannel(eventsubs.events[type].discord.guild, eventsubs.events[type].discord.channel, 
                             {content:onlineMessage, components:[watchButton]})
@@ -365,80 +470,14 @@ class STwitch{
                     clearInterval(this.streamChatInterval);
                 }
             }
-            
-            if(eventsubs){
-                if(eventsubs.events[type]?.chat != null){
-                    if(eventsubs.events[type].chat.enabled){
-
-                        try{
-							let responseFunct = eval("() => { let event = "+JSON.stringify(event)+"; "+eventsubs.events[type].chat.message.replace(/\n/g, "")+"}");
-						
-							let response = responseFunct();
-							this.sayInChat(response);
-						}catch(e){
-							twitchLog("Failed to run response script. Check the event settings to verify it.");
-						}
-                    }
-                }
-
-                if(eventsubs.events[type]?.tcp != null){
-                    if(eventsubs.events[type].tcp.enabled){
-                        
-                        if(type == "channel.raid"){
-                            await this.getBroadcasterID();
-                            
-                            if(event.to_broadcaster_user_id == this.broadcasterUserID){
-                                event.raidType = "receive";
-                            }else if(event.from_broadcaster_user_id == this.broadcasterUserID){
-                                event.raidType = "send";
-                            }
-                            sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
-                        }else{
-                            sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
-                        }
-                    }
-                }
-
-                if(eventsubs.events[type]?.udp != null){
-                    if(eventsubs.events[type].udp.enabled){
-                        sendToUDP(eventsubs.events[type].udp.dest, eventsubs.events[type].udp.address, eventsubs.events[type].udp.value);
-                        setTimeout(()=>{
-                            sendToUDP(eventsubs.events[type].udp.dest, eventsubs.events[type].udp.address, eventsubs.events[type].udp.valueoff);
-                        }, eventsubs.events[type].udp.duration);
-                    }
-                }
-
-                if(eventsubs.events[type]?.plugin != null){
-                    if(eventsubs.events[type].plugin.enabled){
-                        let plugin = eventsubs.events[type].plugin;
-                        if(activePlugins[plugin.pluginname] != null){
-                            if(typeof activePlugins[plugin.pluginname].onEvent != null){
-                                try{
-                                    activePlugins[plugin.pluginname].onEvent(plugin.eventname, event);
-                                }catch(e){
-                                    twitchLog(e);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if(eventsubs.events[type]?.spooderevent != null){
-                    if(eventsubs.events[type].spooderevent.enabled){
-                        if(events[eventsubs.events[type].spooderevent.eventname] != null){
-                            event.eventType = "twitch-eventsub";
-                            runCommands(event, eventsubs.events[type].spooderevent.eventname);
-                        }
-                    }
-                }
-            }
 
             if(type == "channel.channel_points_custom_reward_redemption.add"){
 
                 for(let e in events){
-                    if(events[e].triggers.redemption.enabled
-                        && events[e].triggers.redemption.id == event.reward.id){
-                            if(event.status == "fulfilled" || events[e].triggers.redemption.override == true){
+                    if(events[e].triggers.twitch == null){return}
+                    if(events[e].triggers.twitch.enabled
+                        && events[e].triggers.twitch.reward.id == event.reward.id){
+                            if(event.status == "fulfilled" || events[e].triggers.twitch.reward.override == true){
                                 if(modlocks.events[e] != 1){
                                     event.eventType = "twitch-redeem";
                                     runCommands(event, e);
@@ -447,7 +486,7 @@ class STwitch{
                                     this.sayInChat(event.reward.title+" is locked on my end. Sorry.");
                                     return;
                                 }
-                            }else if(events[e].triggers.redemption.override == false && modlocks.events[e] == 1){
+                            }else if(events[e].triggers.twitch.reward.override == false && modlocks.events[e] == 1){
                                 this.sayInChat("MODS! This event is locked on my end. I can't reject it myself because I didn't create it :( please either lift the lock on "+e+" or reject it.")
                             }
                         }
@@ -456,9 +495,10 @@ class STwitch{
             }else if(type == "channel.channel_points_custom_reward_redemption.update"){
 
                 for(let e in events){
-                    if(events[e].triggers.redemption.enabled
-                    && events[e].triggers.redemption.id == event.reward.id
-                    && events[e].triggers.redemption.override == false){
+                    if(events[e].triggers.twitch == null){return}
+                    if(events[e].triggers.twitch.enabled
+                    && events[e].triggers.twitch.reward.id == event.reward.id
+                    && events[e].triggers.twitch.reward.override == false){
                         if(event.status == "fulfilled"){
                             if(modlocks.events[e] != 1){
                                 event.eventType = "twitch-redeem";
@@ -473,9 +513,17 @@ class STwitch{
                         }
                     }
                 }
+            }else{
+                for(let e in events){
+                    if(events[e].triggers.twitch == null){return}
+                    if(events[e].triggers.twitch?.enabled == true){
+                        if(events[e].triggers.twitch.type == type){
+                            event.eventType = "twitch-event";
+                            runCommands(event, e);
+                        }
+                    }
+                }
             }
-
-            res.status(200).end();
         });
 
         this.isStreamerLive()
@@ -484,6 +532,122 @@ class STwitch{
                 this.startReoccuringMessage();
             }
         });
+    }
+
+    eventsubs = {
+        "channel.update": "Channel Update",
+        "channel.follow": "Follow",
+        "channel.subscribe": "Subscribe",
+        "channel.subscription.end": "Subscription End",
+        "channel.subscription.gift": "Subscription Gift",
+        "channel.subscription.message": "Subscription Message",
+        "channel.cheer": "Cheer",
+        "channel.raid": "Raid",
+        "channel.ban": "Ban",
+        "channel.unban": "Unban",
+        "channel.moderator.add": "Mod Add",
+        "channel.moderator.remove": "Mod Remove",
+        "channel.channel_points_custom_reward.add": "Channel Points Custom Reward Add",
+        "channel.channel_points_custom_reward.update": "Channel Points Custom Reward Update",
+        "channel.channel_points_custom_reward.remove": "Channel Points Custom Reward Remove",
+        "channel.channel_points_custom_reward_redemption.add": "Channel Points Custom Reward Redemption Add",
+        "channel.channel_points_custom_reward_redemption.update": "Channel Points Custom Reward Redemption Update",
+        "channel.poll.begin": "Poll Begin",
+        "channel.poll.progress": "Poll Progress",
+        "channel.poll.end": "Poll End",
+        "channel.prediction.begin": "Prediction Begin",
+        "channel.prediction.progress": "Prediction Progress",
+        "channel.prediction.lock": "Prediction Lock",
+        "channel.prediction.end": "Prediction End",
+        "channel.charity_campaign.donate":"Charity Donate",
+        "channel.charity_campaign.start":"Charity Start",
+        "channel.charity_campaign.progress":"Charity Progress",
+        "channel.charity_campaign.stop":"Charity Stop",
+        "drop.entitlement.grant": "Drop Entitlement Grant",
+        "extension.bits_transaction.create": "Extension Bits Transaction Create",
+        "channel.goal.begin": "Goal Begin",
+        "channel.goal.progress": "Goal Progress",
+        "channel.goal.end": "Goal End",
+        "channel.hype_train.begin": "Hype Train Begin",
+        "channel.hype_train.progress": "Hype Train Progress",
+        "channel.hype_train.end": "Hype Train End",
+        "channel.shield_mode.begin":"Shield Mode Begin",
+        "channel.shield_mode.end":"Shield Mode End",
+        "channel.shoutout.create":"Shoutout Create",
+        "channel.shoutout.receive":"Shoutout Receive",
+        "stream.online": "Stream Online",
+        "stream.offline": "Stream Offline",
+        "user.authorization.grant": "User Authorization Grant",
+        "user.authorization.revoke": "User Authorization Revoke",
+        "user.update": "User Update"
+    }
+
+    async onEventFileSaved(){
+        let subs = await this.getEventSubs();
+        let usedEventsubs = [];
+        let redeemSet = false;
+        for(let e in events){
+            if(this.eventsubs[events[e].triggers.twitch.type] != null || events[e].triggers.twitch.type == "redeem"){
+                let subtype = events[e].triggers.twitch.type;
+                let bid = this.brodcasterUserID;
+                usedEventsubs.push(subtype);
+                let needsRefresh = true;
+
+                if(subtype == "redeem"){
+                    
+                    for(let s in subs.data){
+                        if(subs.data[s].type == "channel.channel_points_custom_reward_redemption.add"
+                            || subs.data[s].type == "channel.channel_points_custom_reward_redemption.update"){
+                            if(subs.data[s].transport.callback == sconfig.network.external_http_url+"/webhooks/eventsub"){
+                                needsRefresh = false;
+                            }else{
+                                await this.deleteEventSub(subs.data[s].id);
+                            }
+                        }
+                    }
+
+                    if(needsRefresh == true && redeemSet == false){
+                        await this.initEventSub("channel.channel_points_custom_reward_redemption.add", bid);
+                        await this.initEventSub("channel.channel_points_custom_reward_redemption.update", bid);
+                        redeemSet = true;
+                    }
+
+                }else{
+                    for(let s in subs.data){
+                        if(subs.data[s].type == subtype){
+                            if(subs.data[s].transport.callback == sconfig.network.external_http_url+"/webhooks/eventsub"){
+                                needsRefresh = false;
+                            }else{
+                                await this.deleteEventSub(subs.data[s].id);
+                            }
+                        }
+                    }
+    
+                    if(needsRefresh == true){
+                        if(subtype == "channel.raid"){
+                            await this.initEventSub(subtype+"-send", bid);
+                            await this.initEventSub(subtype+"-receive", bid);
+                        }else{
+                            await this.initEventSub(subtype, bid);
+                        }
+                    }
+                }                
+            }
+        }
+
+        if(usedEventsubs.includes("redeem")){
+            //channel.channel_points_custom_reward_redemption.add
+        }
+
+        for(let s in subs.data){
+            if(subs.data[s].condition.broadcaster_user_id == this.broadcasterUserID
+                || subs.data[s].condition.to_broadcaster_user_id == this.broadcasterUserID
+                || subs.data[s].condition.from_broadcaster_user_id == this.broadcasterUserID){
+                    if(!usedEventsubs.includes(subs.data[s].type)){
+                        await this.deleteEventSub(subs.data[s].id);
+                    }
+                }
+        }
     }
 
     loggedIn = false;
@@ -527,8 +691,6 @@ class STwitch{
         })
 	}
 
-    //BEGIN GLOBAL MIGRATION
-
     botUsername = "";
     botUserID = 0;
     homeChannel = "";
@@ -568,19 +730,6 @@ class STwitch{
             });
         }
     }
-
-    /*chatSwitchChannels = async (newChannel, leaveMessage, joinMessage) => {
-        if(this.loggedIn == false){return;}
-        await this.validateChatbot();
-        if(leaveMessage != null && leaveMessage != ""){this.sayInChat(leaveMessage);}
-        await this.chat.disconnect();
-        this.homeChannel = newChannel;
-        if(joinMessage != null && joinMessage != ""){
-            this.runChat(joinMessage);
-        }else{
-            this.runChat();
-        }
-    }*/
 
     disconnectChat = () => {
         if(this.loggedIn == false){return;}
@@ -752,6 +901,8 @@ class STwitch{
                 'moderator:read:chatters',
                 'moderator:read:shield_mode',
                 'moderator:manage:shield_mode',
+                'moderator:read:shoutouts',
+                'moderator:manage:shoutouts',
                 'user:edit',
                 'user:edit:follows',
                 'user:manage:blocked_users',
@@ -1344,7 +1495,7 @@ class STwitch{
         for(let s in subs.data){
             
             if(subs.data[s].transport.callback != sconfig.network.external_http_url){
-                await this.deleteEventSub(subs.data[s].id)
+                await this.deleteEventSub(subs.data[s].id);
             }
         }
         let subtype = "";
@@ -1423,9 +1574,7 @@ class STwitch{
         }
 
         let version = "1";
-        if(eventType == "channel.update"){
-            version = "beta";
-        }else if(eventType == "channel.follow"){
+        if(eventType == "channel.follow" || eventType == "channel.update"){
             version = "2";
         }else if(eventType.startsWith("channel.guest_star")){
             version = "beta";

@@ -314,15 +314,15 @@ if(initMode){
 			if(discord.loggedIn == true){
 				console.log("SET ON PLUGINS LOADED");
 				webUI.onPluginsLoaded = ()=>{discord.getCommands();}
-			}
 			
-			if(errorLog.crashed == true){
-				discord.sendDM(discord.config.master, "I died, this is what happened: \n"
-				+errorLog.log.stack
-				+"\n Last Twitch Message: "+errorLog.log.lastTwitch?.username+": "+errorLog.log.lastTwitch?.message
-				+"\n Last Discord Message: "+errorLog.log.lastDiscord?.author.username+": "+errorLog.log.lastDiscord?.content);
-				errorLog.crashed = false;
-				fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
+				if(errorLog.crashed == true){
+					discord.sendDM(discord.config.master, "I died, this is what happened: \n"
+					+errorLog.log.stack
+					+"\n Last Twitch Message: "+errorLog.log.lastTwitch?.username+": "+errorLog.log.lastTwitch?.message
+					+"\n Last Discord Message: "+errorLog.log.lastDiscord?.author.username+": "+errorLog.log.lastDiscord?.content);
+					errorLog.crashed = false;
+					fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
+				}
 			}
 		}
 		
@@ -698,11 +698,14 @@ if(initMode){
 		extra ??= {};
 		//console.log("RUNNING COMMANDS", eventData);
 		let isChat = eventData.eventType.includes("chat");
-		let isReward = eventData.eventType.includes("redeem");
+		let isReward = eventData.eventType.includes("redeem") || eventData.eventType.includes("twitch-event");
 		let isOSC = eventData.eventType.includes("osc");
 		if(isReward){
 			eventData.username = eventData.user_name.toLowerCase();
 			eventData.displayName = eventData.user_name;
+			if(eventData.message == null){
+				eventData.message = eventData.user_input != null ? eventData.user_input : "";
+			}
 		}else if(isOSC){
 			eventData.username = twitch.botUsername;
 			eventData.displayName = twitch.botUsername;
