@@ -11,6 +11,7 @@ function stringifyArray(a){
 }
 
 class STwitch{
+    oauth = {};
     constructor(router, publicRouter){
         let expressPort = sconfig.network.host_port;
         if(fs.existsSync(backendDir+"/settings/eventsub.json")){

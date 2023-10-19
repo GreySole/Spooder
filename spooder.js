@@ -113,7 +113,6 @@ global.refreshFiles = () => {
 	let settingsFiles = {
 		"sconfig":"config.json",
 		"events":"commands.json",
-		"eventsubs":"eventsub.json",
 		"osctunnels":"osc-tunnels.json",
 		"themes":"themes.json",
 		"eventstorage":"eventstorage.json",
@@ -172,7 +171,13 @@ global.refreshFiles = () => {
 						modui:{}
 					};
 				}
-				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], JSON.stringify(newFile), "utf-8", 
+
+				let newFileString = JSON.stringify(newFile);
+				if(newFileString == ""){
+					newFileString = "{}";
+				}
+
+				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], newFileString, "utf-8", 
 				(err, data)=>{
 					spooderLog(settingsFiles[s]+" not found. New file created.");
 				});
