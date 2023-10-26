@@ -413,10 +413,9 @@ class STwitch{
 
             res.status(200).end();
 
-            event.userId = event.user_id;
-            event.displayName = event.user_name;
             event.eventsubType = type;
 
+            event.message = "";
             event.platform = "twitch";
             event.respond = (responseTxt)=>{
                 sayInChat(responseTxt, "twitch", this.homeChannel);
@@ -445,8 +444,12 @@ class STwitch{
                 await this.getBroadcasterID();
                 if(event.to_broadcaster_user_id == this.broadcasterUserID){
                     event.raidType = "receive";
+                    event.username = event.from_broadcaster_user_login;
+                    event.displayName = event.from_broadcaster_user_name;
                 }else if(event.from_broadcaster_user_id == this.broadcasterUserID){
                     event.raidType = "send";
+                    event.username = event.to_broadcaster_user_login;
+                    event.displayName = event.to_broadcaster_user_name;
                 }
             }
 
@@ -473,7 +476,10 @@ class STwitch{
             }
 
             if(type == "channel.channel_points_custom_reward_redemption.add"){
-
+                event.userId = event.user_id;
+                event.username = event.user_login;
+                event.displayName = event.user_name;
+                event.message = event.user_input;
                 for(let e in events){
                     if(events[e].triggers.twitch == null){return}
                     if(events[e].triggers.twitch.enabled
@@ -494,7 +500,10 @@ class STwitch{
                 }
 
             }else if(type == "channel.channel_points_custom_reward_redemption.update"){
-
+                event.userId = event.user_id;
+                event.username = event.user_login;
+                event.displayName = event.user_name;
+                event.message = event.user_input;
                 for(let e in events){
                     if(events[e].triggers.twitch == null){return}
                     if(events[e].triggers.twitch.enabled
@@ -515,6 +524,11 @@ class STwitch{
                     }
                 }
             }else{
+                if(type != "channel.raid"){
+                    event.userId = event.user_id ?? event.broadcaster_user_id;
+                    event.username = event.user_login ?? event.broadcaster_user_login;
+                    event.displayName = event.user_name ?? event.broadcaster_user_name;
+                }
                 for(let e in events){
                     if(events[e].triggers.twitch == null){return}
                     if(events[e].triggers.twitch?.enabled == true){
@@ -591,7 +605,13 @@ class STwitch{
             if(this.eventsubs[events[e].triggers.twitch.type] != null || events[e].triggers.twitch.type == "redeem"){
                 let subtype = events[e].triggers.twitch.type;
                 let bid = this.brodcasterUserID;
-                usedEventsubs.push(subtype);
+                if(subtype == "redeem"){
+                    usedEventsubs.push("channel.channel_points_custom_reward_redemption.add");
+                    usedEventsubs.push("channel.channel_points_custom_reward_redemption.update");
+                }else{
+                    usedEventsubs.push(subtype);
+                }
+                
                 let needsRefresh = true;
 
                 if(subtype == "redeem"){
@@ -602,12 +622,14 @@ class STwitch{
                             if(subs.data[s].transport.callback == sconfig.network.external_http_url+"/webhooks/eventsub"){
                                 needsRefresh = false;
                             }else{
+                                twitchLog("Refreshing "+subs.data[s].type);
                                 await this.deleteEventSub(subs.data[s].id);
                             }
                         }
                     }
 
                     if(needsRefresh == true && redeemSet == false){
+                        twitchLog("Setting up redeems");
                         await this.initEventSub("channel.channel_points_custom_reward_redemption.add", bid);
                         await this.initEventSub("channel.channel_points_custom_reward_redemption.update", bid);
                         redeemSet = true;
@@ -619,6 +641,7 @@ class STwitch{
                             if(subs.data[s].transport.callback == sconfig.network.external_http_url+"/webhooks/eventsub"){
                                 needsRefresh = false;
                             }else{
+                                twitchLog("Refreshing "+subs.data[s].type);
                                 await this.deleteEventSub(subs.data[s].id);
                             }
                         }
@@ -636,15 +659,12 @@ class STwitch{
             }
         }
 
-        if(usedEventsubs.includes("redeem")){
-            //channel.channel_points_custom_reward_redemption.add
-        }
-
         for(let s in subs.data){
             if(subs.data[s].condition.broadcaster_user_id == this.broadcasterUserID
                 || subs.data[s].condition.to_broadcaster_user_id == this.broadcasterUserID
                 || subs.data[s].condition.from_broadcaster_user_id == this.broadcasterUserID){
                     if(!usedEventsubs.includes(subs.data[s].type)){
+                        twitchLog("Deleting sub no longer used: "+subs.data[s].type);
                         await this.deleteEventSub(subs.data[s].id);
                     }
                 }

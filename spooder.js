@@ -123,7 +123,7 @@ global.refreshFiles = () => {
 
 	for(let s in settingsFiles){
 		try{
-			var settingFile = fs.readFileSync(backendDir+"/settings/"+settingsFiles[s],{encoding:'utf8'});
+			let settingFile = fs.readFileSync(backendDir+"/settings/"+settingsFiles[s],{encoding:'utf8'});
 			switch(s){
 				case "events":
 					let eventsObj = JSON.parse(settingFile);
@@ -176,7 +176,6 @@ global.refreshFiles = () => {
 				if(newFileString == ""){
 					newFileString = "{}";
 				}
-
 				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], newFileString, "utf-8", 
 				(err, data)=>{
 					spooderLog(settingsFiles[s]+" not found. New file created.");
@@ -703,20 +702,13 @@ if(initMode){
 		extra ??= {};
 		//console.log("RUNNING COMMANDS", eventData);
 		let isChat = eventData.eventType.includes("chat");
-		let isReward = eventData.eventType.includes("redeem") || eventData.eventType.includes("twitch-event");
+		let isEvent = eventData.eventType.includes("event");
 		let isOSC = eventData.eventType.includes("osc");
-		if(isReward){
-			eventData.username = eventData.user_name.toLowerCase();
-			eventData.displayName = eventData.user_name;
-			if(eventData.message == null){
-				eventData.message = eventData.user_input != null ? eventData.user_input : "";
-			}
-		}else if(isOSC){
+		if(isOSC){
 			eventData.username = twitch.botUsername;
 			eventData.displayName = twitch.botUsername;
+			eventData.message = "";
 		}
-
-		eventData.user_name = eventData.username;
 
 		let event = events[eventName];
 
