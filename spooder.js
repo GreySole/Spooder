@@ -27,6 +27,10 @@ if(!fs.existsSync(logDir)){
 	fs.mkdirSync(logDir);
 }
 
+if(!fs.existsSync(path.join(backendDir, "settings", "config.json"))){
+	initMode = true;
+}
+
 
 let errorLogPath = path.join(logDir, "error.json");
 let errorLog = fs.existsSync(errorLogPath)?JSON.parse(fs.readFileSync(errorLogPath, {encoding:"utf-8"})):{
@@ -157,10 +161,14 @@ global.refreshFiles = () => {
 			if(e.code == "ENOENT"){
 				let newFile = {};
 				if(s == "events"){
-					newFile = {events:{}, groups:["Default"]};
+					newFile = {"events":{}, "groups":['Default']};
 				}else if(s == "users"){
 					newFile = {
-						"trusted_users": {},
+						"trusted_users": {
+							"permissions":{},
+							"twitch":{},
+							"discord":{}
+						},
 						"trusted_users_pw": {}
 					};
 				}else if(s == "themes"){
@@ -174,14 +182,26 @@ global.refreshFiles = () => {
 							"fangleft": " ",
 							"fangright": " ",
 							"mouth": "\u03c9",
+							"bodyleft":"(",
+							"bodyright":")",
+							"shortlegleft":"/\\",
+							"longlegleft":"/╲",
+							"shortlegright":"/\\",
+							"longlegright":"╱\\",
 							"colors": {
-								"bigeyeleft": "white",
-								"bigeyeright": "white",
-								"littleeyeleft": "white",
-								"littleeyeright": "white",
-								"fangleft": "white",
-								"fangright": "white",
-								"mouth": "white"
+								"bigeyeleft": "#FFFFFF",
+								"bigeyeright": "#FFFFFF",
+								"littleeyeleft": "#FFFFFF",
+								"littleeyeright": "#FFFFFF",
+								"fangleft": "#FFFFFF",
+								"fangright": "#FFFFFF",
+								"mouth": "#FFFFFF",
+								"bodyleft":"#FFFFFF",
+								"bodyright":"#FFFFFF",
+								"shortlegleft":"#FFFFFF",
+								"shortlegright":"#FFFFFF",
+								"longlegleft":"#FFFFFF",
+								"longlegright":"#FFFFFF"
 							}
 						},
 						modui:{}
@@ -192,6 +212,13 @@ global.refreshFiles = () => {
 				if(newFileString == ""){
 					newFileString = "{}";
 				}
+				if(s == "events"){
+					global[s] = newFile.events;
+					global["eventGroups"] = newFile.groups;
+				}else{
+					global[s] = JSON.parse(newFileString);
+				}
+				
 				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], newFileString, "utf-8", 
 				(err, data)=>{
 					spooderLog(settingsFiles[s]+" not found. New file created.");

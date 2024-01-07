@@ -1166,7 +1166,6 @@ class WebUI {
             let nameChanges = req.body.nameChanges;
             for(let n in nameChanges){
                 if(nameChanges[n] == n){continue;}
-                console.log(n,nameChanges[n]);
                 newList.permissions[nameChanges[n]] = newList.permissions[n];
                 newList.discord[nameChanges[n]] = newList.discord[n];
                 newList.twitch[nameChanges[n]] = newList.twitch[n];

@@ -128,10 +128,11 @@ class STwitch{
             });
         });
 
-        router.post("/twitch/saveEventSubs", async(req, res) => {
-            delete req.body.callback_url;
-            fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
-                eventsubs = req.body;
+        router.post("/twitch/saveConfig", async(req, res) => {
+            console.log(this.oauth);
+            this.oauth['client-id'] = req.body['client-id'];
+            this.oauth['client-secret'] = req.body['client-secret'];
+            fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
                 res.send({status:"SAVE SUCCESS"});
             });
         })
@@ -249,7 +250,7 @@ class STwitch{
         });
 
         router.get("/twitch/config", async(req, res) => {
-            let sendSubs = Object.assign(this.oauth);
+            let sendSubs = Object.assign({},this.oauth);
             let twitchBotUser = await this.getUserInfo(this.botUsername);
             let twitchBroadcasterUser = await this.getUserInfo(this.homeChannel);
             sendSubs.botUser = twitchBotUser;
