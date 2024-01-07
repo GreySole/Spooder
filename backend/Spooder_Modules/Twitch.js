@@ -173,12 +173,16 @@ class STwitch{
                                 type:"response",
                                 search:false,
                                 message:oldEvents[e].chat.message,
-                                reoccuringmessage: oldEvents[e].chat.reoccuringmessage,
                                 delay:0,
-                                interval: oldEvents[e].chat.interval,
-                                discord: Object.assign({}, oldEvents[e].chat.discord)
                             }
                         )
+                        events[newEventName].special = {
+                            discord: Object.assign({}, oldEvents[e].chat.discord),
+                            reoccuringmessage:{
+                                message: oldEvents[e].chat.reoccuringmessage,
+                                interval: oldEvents[e].chat.interval
+                            }
+                        }
                     }else{
                         events[newEventName].commands.push(
                             {
@@ -457,15 +461,17 @@ class STwitch{
 
             if(type == "stream.online"){
                 this.startReoccuringMessage();
-                if(eventsubs.events[type].discord?.enabled == true){
-                    if(discord.loggedIn == true){
-                        let channelInfo = await this.getChannelInfo(this.broadcasterUserID);
-                        let onlineMessage = "@everyone "+channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
-                        let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+this.homeChannel)
-                        discord.sendToChannel(eventsubs.events[type].discord.guild, eventsubs.events[type].discord.channel, 
-                            {content:onlineMessage, components:[watchButton]})
+                let onlineEvent = this.getStreamOnlineEvent();
+                if(onlineEvent != null){
+                    if(onlineEvent.special?.discord?.enabled == true){
+                        if(discord.loggedIn == true){
+                            let channelInfo = await this.getChannelInfo(this.broadcasterUserID);
+                            let onlineMessage = "@everyone "+channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
+                            let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+this.homeChannel)
+                            discord.sendToChannel(onlineEvent.special.discord.guild, onlineEvent.special.discord.channel, 
+                                {content:onlineMessage, components:[watchButton]})
+                        }
                     }
-                    
                 }
             }
 
@@ -547,6 +553,14 @@ class STwitch{
                 this.startReoccuringMessage();
             }
         });
+    }
+
+    getStreamOnlineEvent(){
+        for(let e in events){
+            if(events[e].triggers.twitch.type == "stream.online"){
+                return events[e];
+            }
+        }
     }
 
     eventsubs = {
@@ -1468,10 +1482,12 @@ class STwitch{
 
     startReoccuringMessage(){
         if(this.loggedIn == false){return;}
-        if(eventsubs.events["stream.online"]?.chat.enabled && eventsubs.events["stream.online"]?.chat.reoccuringmessage != "" ){
+        let onlineEvent = this.getStreamOnlineEvent();
+        if(onlineEvent == null){twitchLog("No stream.online event for reoccuring mesage found."); return;}
+        if(onlineEvent.special.reoccuringmessage.message != "" ){
             let reoccuringInterval = async function(){
                 try{
-                    let responseFunct = eval("() => {let count = "+JSON.stringify(this.reoccuringMessageCount)+"; "+eventsubs.events["stream.online"].chat.reoccuringmessage.replace(/\n/g, "")+"}");
+                    let responseFunct = eval("() => {let count = "+JSON.stringify(this.reoccuringMessageCount)+"; "+onlineEvent.special.reoccuringmessage.message.replace(/\n/g, "")+"}");
                     let response = await responseFunct();
                     this.sayInChat(response);
                     this.reoccuringMessageCount++;
@@ -1481,7 +1497,7 @@ class STwitch{
                 }
                 
             };
-            let reoccurTime = eventsubs.events["stream.online"].chat.interval;
+            let reoccurTime = onlineEvent.special.reoccuringmessage.interval;
             if(reoccurTime == null){reoccurTime = 15}
 
             this.streamChatInterval = setInterval(reoccuringInterval.bind(this), reoccurTime*60*1000);
@@ -1632,19 +1648,21 @@ class STwitch{
     streamChatInterval = null;
     reoccuringMessageCount = Math.round(Math.random()*10);
 
-    //END GLOBAL MIGRATION
-
-    callBotAPI(url){
+    callBotAPI(url, postBody){
+        let method = postBody==null?"GET":"POST";
+        if(postBody == "DELETE"){method = "DELETE"}
+        if(postBody == "PATCH"){method = "PATCH"}
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
                 url: url,
-                method: 'GET',
+                method: method,
                 headers:{
                     "Client-Id":this.oauth["client-id"],
                     "Authorization":"Bearer "+this.oauth.token,
                     "Content-Type":"application/json"
-                }
+                },
+                body:postBody
             })
             .then(data => res(data))
             .catch(error=>{
@@ -1654,17 +1672,21 @@ class STwitch{
         })
     }
 
-    callAppAPI(url){
+    callAppAPI(url, postBody){
+        let method = postBody==null?"GET":"POST";
+        if(postBody == "DELETE"){method = "DELETE"}
+        if(postBody == "PATCH"){method = "PATCH"}
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
                 url: url,
-                method: 'GET',
+                method: method,
                 headers:{
                     "Client-Id":this.oauth["client-id"],
                     "Authorization":"Bearer "+this.appToken,
                     "Content-Type":"application/json"
-                }
+                },
+                body:postBody
             })
             .then(data => {
                 console.log(data.data);
@@ -1677,17 +1699,21 @@ class STwitch{
         })
     }
 
-    callBroadcasterAPI(url){
+    callBroadcasterAPI(url, postBody){
+        let method = postBody==null?"GET":"POST";
+        if(postBody == "DELETE"){method = "DELETE"}
+        if(postBody == "PATCH"){method = "PATCH"}
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
                 url: url,
-                method: 'GET',
+                method: method,
                 headers:{
                     "Client-Id":this.oauth["client-id"],
                     "Authorization":"Bearer "+this.oauth.broadcaster_token,
                     "Content-Type":"application/json"
-                }
+                },
+                body:postBody
             })
             .then(data => res(data))
             .catch(error=>{

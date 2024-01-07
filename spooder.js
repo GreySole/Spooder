@@ -55,14 +55,30 @@ process.on('uncaughtException', function(err){
 	}
 	console.error(err);
 	process.exit(1);
-})
+});
 
 process.on('exit', function(){
 	if(process.exitCode == 1){
 		errorLog.crashed = true;
 		fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
 	}
-})
+});
+
+global.logToFile = (filename, message, maxlines) => {
+	let logDir = path.join(backendDir, "log");
+	let filePath = path.join(logDir, filename);
+
+	if(!fs.existsSync(logDir)){
+		fs.mkdirSync(logDir);
+	}
+
+	let logFile = fs.existsSync(filePath)?fs.readFileSync(filePath, {encoding:"utf-8"}):"";
+	if(logFile.split("\n").length >= maxlines){
+		logFile = logFile.substring(logFile.indexOf("\n", 1));
+	}
+	logFile += message+"\n";
+	fs.writeFileSync(filePath, logFile);
+}
 
 let settingsDir = path.join(backendDir, "settings");
 

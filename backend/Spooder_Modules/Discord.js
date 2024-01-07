@@ -286,7 +286,7 @@ class SDiscord{
             adapterCreator: targetServer.voiceAdapterCreator //voice adapter creator
         });
         
-        this.callPlugins("voice", {event:"join", members:this.getChannel(channelId, guildId).members});
+        this.callPlugins("voice", {event:"join", guildId:guildId, channelId:channelId, members:this.getChannel(channelId, guildId).members});
 
         this.voiceChannel.receiver.speaking.on('start', (userId) => {
             //actions here
@@ -411,17 +411,40 @@ class SDiscord{
         return this.client.users.fetch(userId);
     }
 
+    chopMessage(message){
+        let returnArray = [];
+        if(message.length >= 2000){
+            let limit = 2000;
+            let totalMessages = Math.ceil(message.length/limit);
+            
+            for(let stringpos=0; stringpos<message.length; stringpos+=limit){
+                
+                if(stringpos+limit > message.length){
+                    returnArray.push("["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
+                }else{
+                    returnArray.push("["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+                }
+            }
+        }else{
+            returnArray.push(message);
+        }
+        return returnArray;
+    }
+
     sendDM(userId, message){
         if(!this.loggedIn){return null;}
+        let msgs = this.chopMessage(message);
         return new Promise((res, rej) => {
             this.findUser(userId)
             .then(user => {
-                res(user.send(message));
+                for(m in msgs){
+                    user.send(msgs[message])
+                }
+                res("OK");
             }).catch(e=>{
                 rej(e);
             })
         })
-        
     }
 
     getUserName(userId){

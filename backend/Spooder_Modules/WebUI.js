@@ -41,13 +41,15 @@ var webLog = (...content) => {
 }
 
 function isLocal(req){
-    const remoteAddressRaw = req.socket.remoteAddress.split(":");
+    const remoteAddressRaw = req.ip.split(":");
     const remoteAddress = remoteAddressRaw[remoteAddressRaw.length-1];
     const isLocal = remoteAddress.startsWith('192.168.') ||
                     remoteAddress.startsWith('10.') ||
                     (remoteAddress == 1 && devMode == true) ||
                     req.headers.host.startsWith("localhost")
-    //console.log("IS LOCAL", isLocal, remoteAddress, (remoteAddress == 1 && devMode == true), req.headers.host);
+    if(isLocal == false){
+        logToFile("external_connections", `IP: ${remoteAddress} Path: ${req.path} Cookie: ${req.cookies?.access != null ? "PRESENT" : "NONE"}`, 300);
+    }
     return isLocal;
 }
 
@@ -1144,11 +1146,40 @@ class WebUI {
         });
 
         router.get("/users", (req, res) => {
-            res.send(users.trusted_users);
+            let returnUsers = Object.assign({}, users.trusted_users);
+            returnUsers._hasPassword = {};
+            for(let u in users.trusted_users.permissions){
+                returnUsers._hasPassword[u] = users.trusted_users_pw[u] != null;
+            }
+            res.send(returnUsers);
         });
 
-        router.get("/saveUsers", (req, res) => {
-            Object.assign(users.trusted_users, req.body);
+        router.get("/users/resetPassword", (req, res) => {
+            let username = req.query.username;
+            delete users.trusted_users_pw[username];
+            fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+            res.send({status:"SUCCESS"});
+        })
+
+        router.post("/saveUsers", (req, res) => {
+            let newList = req.body.users;
+            let nameChanges = req.body.nameChanges;
+            for(let n in nameChanges){
+                if(nameChanges[n] == n){continue;}
+                console.log(n,nameChanges[n]);
+                newList.permissions[nameChanges[n]] = newList.permissions[n];
+                newList.discord[nameChanges[n]] = newList.discord[n];
+                newList.twitch[nameChanges[n]] = newList.twitch[n];
+                delete newList.permissions[n];
+                delete newList.discord[n];
+                delete newList.twitch[n];
+                
+                if(users.trusted_users_pw[n] != null){
+                    users.trusted_users_pw[nameChanges[n]] = Object.assign({},users.trusted_users_pw[n]);
+                    delete users.trusted_users_pw[n];
+                }
+            }
+            Object.assign(users.trusted_users, newList);
             fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
             res.send({status:"SUCCESS"});
         })
@@ -1468,9 +1499,10 @@ class WebUI {
                 
                 if(activePlugins[dirent.name].hasPublic == true){
                     this.publicRouter.use("/plugin/"+dirent.name, express.static(publicDir));
-                    if(activePlugins[dirent.name].onPublic != null){
-                        activePlugins[dirent.name].onPublic(this.publicRouter);
-                    }
+                }
+                if(activePlugins[dirent.name].onPublic != null){
+                    console.log("ON PUBLIC", dirent.name);
+                    activePlugins[dirent.name].onPublic(this.publicRouter);
                 }
                 //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
                 activePlugins[dirent.name].status = "ok";
