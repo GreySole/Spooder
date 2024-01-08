@@ -1188,7 +1188,7 @@ class WebUI {
             let username = req.body.username;
 
             if(vType == "twitch"){
-                if(users["trusted_users"].twitch.includes(username)){
+                if(users["trusted_users"].twitch[username] != null){
                     res.send({status:"found"});
                     activeUsers.pending[username.toLowerCase()] = {
                         vtype:vType,
