@@ -443,25 +443,41 @@ class WebUI {
             }else{
                 fs.rmSync(pluginPath, {recursive:true});
             }
-            
-            const childProcess = require("child_process");
-            childProcess.exec("git clone https://github.com/GreySole/Spooder-Sample-Plugin "+pluginPath,{
-                cwd: './'
-              }, async (error, out, err)=>{
-                if(error){
-                    console.log(err);
-                    res.send({
-                        status:"error",
-                        error:err
-                    });
-                }else{
-                    res.send({
-                        status:"OK",
-                        pluginName:pluginName
-                    });
-                    
-                    await this.installPluginFromTemp(pluginDirName, options);
+
+            fetch("https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/main")
+            .then(response => response.arrayBuffer())
+            .then(async data => {
+                const tempDir = path.join(backendDir, "tmp", pluginDirName);
+                const tempFile = path.join(backendDir, "tmp", pluginDirName, pluginDirName+".zip");
+                if(fs.existsSync(tempDir)){
+                    fs.rmSync(tempDir, {recursive:true});
                 }
+                
+                fs.mkdirSync(tempDir, {recursive:true});
+                fs.writeFileSync(tempFile, Buffer.from(data));
+                
+                let zip = new AdmZip(tempFile);
+                zip.extractEntryTo(zip.getEntries()[0], tempDir);
+
+                const fileDir = path.join(tempDir, zip.getEntries()[0].entryName)
+
+                const files = fs.readdirSync(fileDir);
+
+                for (const file of files) {
+                    const currentFilePath = path.join(fileDir, file);
+                    const newFilePath = path.join(tempDir, file); 
+
+                    fs.renameSync(currentFilePath, newFilePath);
+                }
+                
+                fs.rmSync(tempFile);
+                fs.rmdirSync(path.join(tempDir, zip.getEntries()[0].entryName));
+
+                res.send({
+                    status:"OK",
+                    pluginName:pluginName
+                });
+                await this.installPluginFromTemp(pluginDirName, options);
             })
         });
 
