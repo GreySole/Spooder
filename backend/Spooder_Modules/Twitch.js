@@ -1,6 +1,7 @@
 const Axios = require("axios");
 const fs = require("fs");
 const tmi = require("tmi.js");
+const path = require("path");
 
 var twitchLog = (...content) => {
     console.log(logEffects("Bright"),logEffects("FgMagenta"), ...content, logEffects("Reset"));
@@ -142,7 +143,7 @@ class STwitch{
             if(twitch.oauth.events != null){
                 oldEvents = twitch.oauth.events;
             }else if(fs.existsSync(backendDir+"/settings/eventsub.json")){
-                oldEvents = JSON.parse(fs.readFileSync(backendDir+"/settings/eventsub.json"));
+                oldEvents = JSON.parse(fs.readFileSync(backendDir+"/settings/eventsub.json")).events;
             }
 
             if(oldEvents == null){
@@ -258,6 +259,7 @@ class STwitch{
             sendSubs.host_port = sconfig.network.host_port;
             sendSubs.callback_url = sconfig.network.external_http_url;
             sendSubs.spooderevents = Object.keys(events);
+            sendSubs.oldEventsubFile = fs.existsSync(path.join(backendDir, "settings", "eventsub.json"));
             res.send(sendSubs);
         });
 
@@ -400,6 +402,10 @@ class STwitch{
             
         });
 
+        router.get("/eventsub_types", (req, res) => {
+            res.send(this.eventsubs);
+        })
+        
         //HTTPS ROUTER
         publicRouter.post("/webhooks/eventsub", async (req, res) => {
             const messageType = req.header("Twitch-Eventsub-Message-Type");
@@ -430,7 +436,7 @@ class STwitch{
                 if(type == "stream.online"){
                     await this.validateChatbot();
                     webUI.setShare(event.broadcaster_user_login, true);
-                    if(discord.loggedIn == true){
+                    if(discord.loggedIn == true && discord.sharenotif == true){
                         discord.findUser(discord.config.master)
                         .then(user => {
                             let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+event.broadcaster_user_login)
@@ -614,10 +620,12 @@ class STwitch{
 
     async onEventFileSaved(){
         let subs = await this.getEventSubs();
+        
         let usedEventsubs = [];
         let redeemSet = false;
         for(let e in events){
             if(this.eventsubs[events[e].triggers.twitch.type] != null || events[e].triggers.twitch.type == "redeem"){
+                
                 let subtype = events[e].triggers.twitch.type;
                 let bid = this.brodcasterUserID;
                 if(subtype == "redeem"){
@@ -1531,40 +1539,9 @@ class STwitch{
         if(this.loggedIn == false){return;}
         let subs = await this.getEventSubs();
         for(let s in subs.data){
-            
-            if(subs.data[s].transport.callback != sconfig.network.external_http_url){
-                await this.deleteEventSub(subs.data[s].id);
-            }
+            await this.deleteEventSub(subs.data[s].id);
         }
-        let subtype = "";
-        for(let s in subs.data){
-            subtype = subs.data[s].type;
-            let bid = subs.data[s].condition.broadcaster_user_id;
-            if(subs.data[s].type == "channel.raid"){
-                if(subs.data[s].condition.to_broadcaster_user_id != ""){
-                    subtype += "-receive";
-                    bid = subs.data[s].condition.to_broadcaster_user_id;
-                }else{
-                    subtype += "-send";
-                    bid = subs.data[s].condition.from_broadcaster_user_id;
-                }
-            }
-
-            if(subtype == "stream.online" && bid != this.broadcasterUserID){
-                for(let s in shares){
-                    if(shares[s].twitchid == bid){
-                        this.isStreamerLive(s)
-                        .then(isLive=>{
-                            if(isLive == true){
-                                webUI.setShare(s, true);
-                            }
-                        })
-                    }
-                }
-            }
-            
-            await this.initEventSub(subtype, bid);
-        }
+        this.onEventFileSaved();
     }
 
     async deleteEventSub(id){
@@ -1585,6 +1562,7 @@ class STwitch{
     
     async initEventSub(eventType, bid){
         if(this.loggedIn == false){return;}
+        
         await this.getAppToken();
         
         if(bid == null){
@@ -1617,8 +1595,9 @@ class STwitch{
         }else if(eventType.startsWith("channel.guest_star")){
             version = "beta";
         }
-
+        
         return new Promise((res, rej)=>{
+            
             Axios({
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
                 method: 'post',

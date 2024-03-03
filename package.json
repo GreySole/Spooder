@@ -26,7 +26,7 @@
     "express-fileupload": "^1.4.0",
     "fs-extra": "^10.1.0",
     "googleapis": "^118.0.0",
-    "ngrok": "^4.3.3",
+    "ngrok": "^5.0.0-beta.2",
     "obs-websocket-js": "^5.0.0",
     "osc-js": "^2.3.2",
     "tmi.js": "^1.8.5"

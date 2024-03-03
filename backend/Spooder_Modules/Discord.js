@@ -9,7 +9,9 @@ class SDiscord{
 
     constructor(router){
         router.post("/discord/saveDiscordConfig", async(req, res) => {
-            fs.writeFile(backendDir+"/settings/discord.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
+            console.log(req.body);
+            Object.assign(this.config, req.body);
+            fs.writeFile(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8", (err, data)=>{
                 if(this.loggedIn == false && req.body.token != null && req.body.token != ""){
                     this.autoLogin();
                     res.send({status:"SAVED! Logging into Discord..."});
@@ -36,7 +38,20 @@ class SDiscord{
                 res.send({userInfo:user});
             }
         })
-        this.config = fs.existsSync(backendDir+"/settings/discord.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/discord.json",{encoding:"utf-8"})):null;
+        this.config = fs.existsSync(backendDir+"/settings/discord.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/discord.json",{encoding:"utf-8"}))
+        :{
+            "master": "",
+            "token": "",
+            "clientId": "",
+            "autosendngrok": {
+                "enabled": false,
+                "destguild": "",
+                "destchannel": ""
+            },
+            "handlers": {
+            },
+            "commands": []
+        };
     }
     config = null;
     client = null;
@@ -437,13 +452,24 @@ class SDiscord{
         return new Promise((res, rej) => {
             this.findUser(userId)
             .then(user => {
-                for(m in msgs){
-                    user.send(msgs[message])
+                for(let m in msgs){
+                    user.send(msgs[m])
                 }
                 res("OK");
             }).catch(e=>{
                 rej(e);
             })
+        })
+    }
+
+    sendInteraction(userId, message){
+        return new Promise((res, rej) => {
+            if(!this.loggedIn){return null;}
+            this.findUser(userId)
+            .then(user => {
+                res(user.send(message));
+            })
+            .catch(e=>rej(e))
         })
     }
 

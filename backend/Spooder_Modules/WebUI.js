@@ -61,6 +61,34 @@ class WebUI {
 
     router = null;
     publicRouter = null;
+    pluginApi = {
+        local:{
+            get:{},
+            post:{}
+        },
+        public:{
+            get:{},
+            post:{}
+        }
+    }
+
+    registerPluginApi(context, router, method, address, funct){
+        if(router === "local"){
+            if(method.toLowerCase() === "get"){
+                this.pluginApi.local.get[path.join(context.dirname, address)] = funct.bind(context);
+            }else if(method.toLowerCase() === "post"){
+                this.pluginApi.local.post[path.join(context.dirname, address)] = funct.bind(context);
+            }
+        }else if(router === "public"){
+            if(method.toLowerCase() === "get"){
+                this.pluginApi.public.get[path.join(context.dirname, address)] = funct.bind(context);
+            }else if(method.toLowerCase() === "post"){
+                this.pluginApi.public.post[path.join(context.dirname, address)] = funct.bind(context);
+            }
+        }else{
+            throw new Error(`Unknown router: ${router}. There's only local and public routers.`);
+        }
+    }
 
     startServer(devMode){
 
@@ -117,6 +145,7 @@ class WebUI {
 
             router.use("/overlay", express.static(backendDir+'/web/overlay'));
             router.use("/utility", express.static(backendDir+'/web/utility'));
+            router.use("/plugin", express.static(backendDir+"/web/public"));
             router.use("/settings", express.static(backendDir+'/web/settings'));
             router.use("/assets", express.static(backendDir+'/web/assets'));
             router.use("/icons", express.static(backendDir+'/web/icons'));
@@ -137,6 +166,7 @@ class WebUI {
 
             publicRouter.use("/overlay", express.static(backendDir+'/web/overlay'));
             publicRouter.use("/utility", express.static(backendDir+'/web/utility'));
+            publicRouter.use("/plugin", express.static(backendDir+"/web/public"));
             publicRouter.use("/settings", express.static(backendDir+'/web/settings'));
             publicRouter.use("/assets", express.static(backendDir+'/web/assets'));
             publicRouter.use("/icons", express.static(backendDir+'/web/icons'));
@@ -670,8 +700,13 @@ class WebUI {
         router.post("/backup_plugins", async(req, res)=>{
 
             let zip = new AdmZip();
+            zip.on('zip:error', (e) => {
+                console.log("Zip error");
+            })
 
-            zip.addLocalFolder(backendDir+"/plugins", "/plugins", (filename)=>{return !filename.includes("node_modules")});
+            zip.addLocalFolder(backendDir+"/plugins", "/plugins", (entry)=>{
+                return !entry.isDirectory || !entry.name.endsWith('/node_modules');
+            });
             
             zip.addLocalFolder(backendDir+"/web", "/web");
 
@@ -1177,25 +1212,40 @@ class WebUI {
             res.send({status:"SUCCESS"});
         })
 
-        router.post("/saveUsers", (req, res) => {
+        router.post("/saveUsers", async (req, res) => {
             let newList = req.body.users;
             let nameChanges = req.body.nameChanges;
+            if(discord.loggedIn == true){
+                for(let d in newList.discord){
+                    if(newList.discord[d] != "" && !isNaN(newList.discord[d])){
+                        let thisUser = await discord.findUser(newList.discord[d]);
+                        nameChanges[d] = thisUser.username;
+                    }
+                }
+            }
+            
             for(let n in nameChanges){
                 if(nameChanges[n] == n){continue;}
-                newList.permissions[nameChanges[n]] = newList.permissions[n];
-                newList.discord[nameChanges[n]] = newList.discord[n];
-                newList.twitch[nameChanges[n]] = newList.twitch[n];
+                if(nameChanges[n] != null){
+                    newList.permissions[nameChanges[n]] = newList.permissions[n].slice();
+                    newList.discord[nameChanges[n]] = newList.discord[n].slice();
+                    newList.twitch[nameChanges[n]] = newList.twitch[n].slice();
+                }
                 delete newList.permissions[n];
                 delete newList.discord[n];
                 delete newList.twitch[n];
                 
                 if(users.trusted_users_pw[n] != null){
-                    users.trusted_users_pw[nameChanges[n]] = Object.assign({},users.trusted_users_pw[n]);
+                    if(nameChanges[n] != null){
+                        users.trusted_users_pw[nameChanges[n]] = Object.assign({},users.trusted_users_pw[n]);
+                    }
+                    
                     delete users.trusted_users_pw[n];
                 }
             }
             Object.assign(users.trusted_users, newList);
             fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+            console.log("USERS", users);
             res.send({status:"SUCCESS"});
         })
 
@@ -1204,10 +1254,13 @@ class WebUI {
             let username = req.body.username;
 
             if(vType == "twitch"){
-                if(users["trusted_users"].twitch[username] != null){
+                if(Object.values(users["trusted_users"].twitch).includes(username)){
+                    let sUsername = Object.keys(users["trusted_users"].twitch)[Object.values(users["trusted_users"].twitch).indexOf(username)];
+                    
                     res.send({status:"found"});
                     activeUsers.pending[username.toLowerCase()] = {
                         vtype:vType,
+                        sUsername: sUsername.toLowerCase(),
                         verified:false
                     };
                     sayInChat(username+" it looks like you're trying to set a login for me. If this is you, please call '!verify'", "twitch");
@@ -1215,16 +1268,20 @@ class WebUI {
                     res.send({status:"notfound"});
                 }
             }else if(vType == "discord"){
-                if(users["trusted_users"].discord[username] != null){
+                
+                if(Object.keys(users["trusted_users"].discord).includes(username)){
                     res.send({status:"found"});
+                    let sUsername = username;
                     activeUsers.pending[username.toLowerCase()] = {
                         vtype:vType,
+                        sUsername: sUsername.toLowerCase(),
                         verified:false
                     };
                     
-                    let response = await discord.sendDM(users["trusted_users"].discord[username], {
+                    let response = await discord.sendInteraction(users["trusted_users"].discord[username], {
                         content:"Hi, it looks like you're creating a login for me. If this is you, click confirm.",
-                        components:[discord.makeConfirmCancelButtons("Yes :D", "No D:")]
+                        components:[discord.makeConfirmCancelButtons("Yes :D", "No D:")],
+                        fetchReply: true
                     });
 
                     const collectorFilter = i => i.user.id === users["trusted_users"].discord[username];
@@ -1239,6 +1296,7 @@ class WebUI {
                             await confirmation.update({ content: 'Declined!', components: [] });
                         }
                     } catch (e) {
+                        console.log(e);
                         delete activeUsers.pending[username];
                     }
                 }else{
@@ -1250,7 +1308,6 @@ class WebUI {
         publicRouter.post("/user/verify", userVerify);
 
         function verifyCheck(req, res) {
-            console.log(req.query);
             if(activeUsers.pending[req.query.username] == null){
                 console.log("NULL PENDING");
                 res.send("verify-cancelled");
@@ -1280,10 +1337,19 @@ class WebUI {
                     return;
                 }
                 if(activeUsers.pending[vusername].verified == true){
+                    if(vusername !== activeUsers.pending[vusername].sUsername){
+                        users["trusted_users"].permissions[vusername] = users["trusted_users"].permissions[activeUsers.pending[vusername].sUsername].slice();
+                        users["trusted_users"].twitch[vusername] = users["trusted_users"].twitch[activeUsers.pending[vusername].sUsername].slice();
+                        users["trusted_users"].discord[vusername] = users["trusted_users"].discord[activeUsers.pending[vusername].sUsername].slice();
+                        delete users["trusted_users"].permissions[activeUsers.pending[vusername].sUsername];
+                        delete users["trusted_users"].twitch[activeUsers.pending[vusername].sUsername];
+                        delete users["trusted_users"].discord[activeUsers.pending[vusername].sUsername];
+                    }
+                    
                     delete activeUsers.pending[vusername];
                     let newSalt = crypto.randomBytes(16).toString('hex');
                     let newHash = crypto.pbkdf2Sync(password, newSalt, 1000, 64, `sha512`).toString('hex');
-                    
+
                     users["trusted_users_pw"][username] = {
                         salt:newSalt,
                         hash:newHash
@@ -1339,8 +1405,8 @@ class WebUI {
                     res.send({status:"notactive"});
                     return;
                 }else{
-                    if(!users.trusted_users.permissions[activeUsers[accessCookie]].includes("m") &&
-                    !users.trusted_users.permissions[activeUsers[accessCookie]].includes("a") ){
+                    if(!users.trusted_users.permissions[activeUsers[accessCookie]]?.includes("m") &&
+                    !users.trusted_users.permissions[activeUsers[accessCookie]]?.includes("a") ){
                         res.send({status:"nopermission"});
                         return;
                     }
@@ -1415,12 +1481,33 @@ class WebUI {
         router.get("/mod/utilities", modUtil);
         publicRouter.get("/mod/utilities", modUtil);
 
-        publicRouter.post("/webhooks/caption", (req, res)=>{
-            console.log("I HEAR VOICE", req.body);
+        router.get("/plugin/*", (req, res) => {
+            if(this.pluginApi.local.get[`${req.params[0]}`] != null){
+                this.pluginApi.local.get[`${req.params[0]}`](req, res);
+            }
             res.status(200).end();
         })
 
-        
+        router.post("/plugin/*", (req, res) => {
+            if(this.pluginApi.local.post[`${req.params[0]}`] != null){
+                this.pluginApi.local.post[`${req.params[0]}`](req, res);
+            }
+            res.status(200).end();
+        })
+
+        publicRouter.get("/plugin/*", (req, res) => {
+            if(this.pluginApi.public.get[`${req.params[0]}`] != null){
+                this.pluginApi.public.get[`${req.params[0]}`](req, res);
+            }
+            res.status(200).end();
+        })
+
+        publicRouter.post("/plugin/*", (req, res) => {
+            if(this.pluginApi.public.post[`${req.params[0]}`] != null){
+                this.pluginApi.public.post[`${req.params[0]}`](req, res);
+            }
+            res.status(200).end();
+        })
 
         app.listen(expressPort);
 
@@ -1442,15 +1529,17 @@ class WebUI {
                 if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/package.json")){
                     let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/package.json",{encoding:'utf8'}));
                     activePlugins[pluginName].name = pluginMeta.name;
+                    activePlugins[pluginName].dirname = pluginName;
                     activePlugins[pluginName].author = pluginMeta.author;
                     activePlugins[pluginName].version = pluginMeta.version;
                     activePlugins[pluginName].description = pluginMeta.description;
                     activePlugins[pluginName].dependencies = pluginMeta.dependencies;
                     let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
                     let utilityDir = path.join(backendDir, "web", "utility", pluginName);
+                    let publicDir = path.join(backendDir, "web", "public", pluginName);
                     activePlugins[pluginName].hasOverlay = fs.existsSync(overlayDir);
                     activePlugins[pluginName].hasUtility = fs.existsSync(utilityDir);
-                    //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
+                    activePlugins[pluginName].hasPublic = fs.existsSync(publicDir);
                     activePlugins[pluginName].status = "ok";
                 }
                 if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/settings.json")){
@@ -1464,6 +1553,7 @@ class WebUI {
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/package.json",{encoding:'utf8'}));
                 activePlugins[pluginName] = {};
                 activePlugins[pluginName].name = pluginName;
+                activePlugins[pluginName].dirname = pluginName;
                 activePlugins[pluginName].status = "failed";
                 activePlugins[pluginName].description = e.code+" - "+e.message;
                 activePlugins[pluginName].dependencies = pluginMeta.dependencies;
@@ -1491,6 +1581,7 @@ class WebUI {
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
                 activePlugins[dirent.name] = {};
                 activePlugins[dirent.name].name = dirent.name;
+                activePlugins[dirent.name].dirname = dirent.name;
                 activePlugins[dirent.name].status = "failed";
                 activePlugins[dirent.name].description = e.code+" - "+e.message;
                 activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
@@ -1501,6 +1592,7 @@ class WebUI {
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/package.json")){
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
                 activePlugins[dirent.name].name = pluginMeta.name;
+                activePlugins[dirent.name].dirname = dirent.name;
                 activePlugins[dirent.name].author = pluginMeta.author;
                 activePlugins[dirent.name].version = pluginMeta.version;
                 activePlugins[dirent.name].description = pluginMeta.description;
@@ -1511,15 +1603,6 @@ class WebUI {
                 activePlugins[dirent.name].hasOverlay = fs.existsSync(overlayDir);
                 activePlugins[dirent.name].hasUtility = fs.existsSync(utilityDir);
                 activePlugins[dirent.name].hasPublic = fs.existsSync(publicDir);
-                
-                if(activePlugins[dirent.name].hasPublic == true){
-                    this.publicRouter.use("/plugin/"+dirent.name, express.static(publicDir));
-                }
-                if(activePlugins[dirent.name].onPublic != null){
-                    console.log("ON PUBLIC", dirent.name);
-                    activePlugins[dirent.name].onPublic(this.publicRouter);
-                }
-                //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
                 activePlugins[dirent.name].status = "ok";
             }
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/settings.json")){
@@ -1555,6 +1638,7 @@ class WebUI {
         let pluginDir = path.join(backendDir,"plugins", pluginDirName);
         let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
         let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
+        let publicDir = path.join(backendDir, "web", "public", pluginDirName);
         let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
         let assetsDir = path.join(backendDir, "web", "assets", pluginDirName);
         let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
@@ -1610,6 +1694,15 @@ class WebUI {
             await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
 
             chmodr(utilityDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/public") && options.public == true){
+            await fs.move(tempDir+"/public", publicDir, {overwrite:true});
+
+            chmodr(publicDir,0o777, (err) => {
                 if(err) throw err;
                 
             });
@@ -1700,9 +1793,15 @@ class WebUI {
             return;
         }
         
-        await ngrok.connect({
-            authtoken:sconfig.network.ngrokauthtoken,
-        });
+        try{
+            await ngrok.connect({
+                authtoken:sconfig.network.ngrokauthtoken,
+            });
+        }catch(e){
+            console.log("Error creating Ngrok tunnel",e);
+            return;
+        }
+        
         let napi = ngrok.getApi();
         
         let tunnels = await napi.listTunnels();

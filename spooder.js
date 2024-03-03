@@ -161,7 +161,7 @@ global.refreshFiles = () => {
 			if(e.code == "ENOENT"){
 				let newFile = {};
 				if(s == "events"){
-					newFile = {"events":{}, "groups":['Default']};
+					newFile = {events:{}, groups:["Default"]};
 				}else if(s == "users"){
 					newFile = {
 						"trusted_users": {
@@ -213,15 +213,15 @@ global.refreshFiles = () => {
 					newFileString = "{}";
 				}
 				if(s == "events"){
-					global[s] = newFile.events;
-					global["eventGroups"] = newFile.groups;
+					events = newFile.events;
+					eventGroups = newFile.groups;
 				}else{
 					global[s] = JSON.parse(newFileString);
 				}
 				
 				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], newFileString, "utf-8", 
 				(err, data)=>{
-					spooderLog(settingsFiles[s]+" not found. New file created.");
+					spooderLog(settingsFiles[s]+" not found. New file created.", global.s);
 				});
 			}else{
 				console.error(e);
@@ -326,7 +326,7 @@ if(initMode){
 	webUI.onNgrokStart = function(){
 		twitch.refreshEventSubs();
 		
-		if(discord.loggedIn && discord.config?.autosendngrok.enabled){
+		if(discord.loggedIn && discord.config.autosendngrok?.enabled){
 			spooderLog("SENDING NGROK TO MODS");
 			discord.sendToChannel(discord.config.autosendngrok.destguild, discord.config.autosendngrok.destchannel, sconfig.network.external_http_url+"/mod");
 		}
@@ -362,7 +362,7 @@ if(initMode){
 				console.log("SET ON PLUGINS LOADED");
 				webUI.onPluginsLoaded = ()=>{discord.getCommands();}
 			
-				if(errorLog.crashed == true){
+				if(errorLog.crashed == true && discord.config.crashreport == true){
 					discord.sendDM(discord.config.master, "I died, this is what happened: \n"
 					+errorLog.log.stack
 					+"\n Last Twitch Message: "+errorLog.log.lastTwitch?.username+": "+errorLog.log.lastTwitch?.message
@@ -750,7 +750,7 @@ if(initMode){
 		if(isOSC){
 			eventData.username = twitch.botUsername;
 			eventData.displayName = twitch.botUsername;
-			eventData.message = "";
+			eventData.message ?? "";
 		}
 
 		let event = events[eventName];
