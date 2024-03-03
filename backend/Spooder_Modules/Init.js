@@ -11,7 +11,6 @@ const nets = networkInterfaces();
 class Initializer{
 
     constructor(){
-        console.log("HELLO MOTO");
         this.webUI = new WebUI();
 
         sconfig.network = {host_port:3000};
@@ -48,7 +47,7 @@ class Initializer{
 
             }*/
 
-            if(this.discord.config?.["token"] != null){
+            if(this.discord.config?.["token"] != ""){
                 if(this.discord.loggedIn == false){
                     await this.discord.autoLogin();
                 }
@@ -85,7 +84,7 @@ class Initializer{
                 discord:this.discord.config ?? {},
                 discord_user:discordUser,
                 themes:themes
-            })
+            });
         })
 
         this.webUI.router.post("/save_twitch", async(req, res) => {
