@@ -72,16 +72,14 @@ class SDiscord{
 
             let discordInfo = this.config;
             
-            if(discordInfo == null){
-                discordLog("No Discord token. You can set this in the Config tab.");
-                rej("notoken");
-                return;
-            }
-            
             if(discordInfo.token != "" && discordInfo.token != null){
                 discordLog("STARTING DISCORD CLIENT");
                 await this.startClient(discordInfo.token).catch(e=>{rej(e)});
                 res("success");
+            }else{
+                discordLog("No Discord token. You can set this in the Config tab.");
+                rej("notoken");
+                return;
             }
         });
     }
