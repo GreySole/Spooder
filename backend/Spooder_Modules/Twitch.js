@@ -1,710 +1,101 @@
 const Axios = require("axios");
 const fs = require("fs");
-
-const clientId = oauth['client-id'];
-const clientSecret = oauth['client-secret'];
-
-global.botUsername = "";
-global.botUserID = 0;
-global.homeChannel = sconfig.broadcaster.username;
-global.broadcasterUserID = 0;
-
-global.token = "";
-global.refreshToken = "";
-
-if(oauth.token != null && oauth.token != ""){
-    token = oauth.token;
-}
-
-if(oauth.refreshToken != null && oauth.refreshToken != ""){
-    refreshToken = oauth.refreshToken;
-}
-
-//For Event Subs
-global.appToken = "";
-
 const tmi = require("tmi.js");
-global.chat = null;
+const path = require("path");
 
 var twitchLog = (...content) => {
     console.log(logEffects("Bright"),logEffects("FgMagenta"), ...content, logEffects("Reset"));
-}
-
-function sayAlreadyOn(name){
-    for(let c in activeEvents[name]){
-        if(activeEvents[name][c].etype == "event"){
-            sayInChat(events[name].name+" is cooling down. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name][c]["timeout"]))+"s");
-            break;
-        }
-    }
-}
-
-async function getBroadcasterID(){
-    if(broadcasterUserID==0){
-        await Axios({
-            url: 'https://api.twitch.tv/helix/users?login='+sconfig.broadcaster.username,
-            method: 'get',
-            headers:{
-                "Authorization": "Bearer "+token,
-                "Client-Id":clientId
-            }
-        })
-        .then((response)=>{
-            broadcasterUserID = response.data.data[0].id;
-        }).catch(error=>{
-            console.error(error);
-            if(error.response?.status == 401){
-                onAuthenticationFailure();
-            }
-            return;
-        });
-    }
-}
-
-async function getBotID(){
-    if(broadcasterUserID==0){
-        await Axios({
-            url: 'https://api.twitch.tv/helix/users?login='+botUsername,
-            method: 'get',
-            headers:{
-                "Authorization": "Bearer "+token,
-                "Client-Id":clientId
-            }
-        })
-        .then((response)=>{
-            botUserID = response.data.data[0].id;
-        }).catch(error=>{
-            console.error(error);
-            if(error.response?.status == 401){
-                onAuthenticationFailure();
-            }
-            return;
-        });
-    }
-}
-
-async function getAppToken(){
-    if(appToken == ""){
-
-        var twitchScopes = [
-            'channel:moderate',
-            'chat:read',
-            'chat:edit', 
-            'whispers:read', 
-            'whispers:edit', 
-            'analytics:read:extensions', 
-            'analytics:read:games', 
-            'bits:read', 
-            'channel:edit:commercial', 
-            'channel:manage:broadcast', 
-            'channel:read:charity', 
-            'channel:manage:extensions', 
-            'channel:manage:moderators', 
-            'channel:manage:polls', 
-            'channel:manage:predictions', 
-            'channel:manage:raids', 
-            'channel:manage:redemptions', 
-            'channel:manage:schedule', 
-            'channel:manage:videos', 
-            'channel:read:editors', 
-            'channel:read:goals', 
-            'channel:read:hype_train', 
-            'channel:read:polls', 
-            'channel:read:predictions', 
-            'channel:read:redemptions', 
-            'channel:read:stream_key', 
-            'channel:read:subscriptions', 
-            'channel:read:vips', 
-            'channel:manage:vips', 
-            'clips:edit', 
-            'moderation:read', 
-            'moderator:manage:announcements', 
-            'moderator:manage:automod',
-            'moderator:read:automod_settings', 
-            'moderator:manage:automod_settings', 
-            'moderator:manage:banned_users', 
-            'moderator:read:blocked_terms',
-            'moderator:manage:chat_messages',
-            'moderator:read:chat_settings',
-            'moderator:manage:chat_settings',
-            'moderator:read:chatters',
-            'moderator:read:shield_mode',
-            'moderator:manage:shield_mode',
-            'user:edit',
-            'user:edit:follows',
-            'user:manage:blocked_users',
-            'user:read:blocked_users',
-            'user:read:broadcast',
-            'user:manage:chat_color',
-            'user:read:email',
-            'user:read:follows',
-            'user:read:subscriptions',
-            'user:manage:whispers'
-           ];
-        
-        let scopeString = "";
-        for(let t in twitchScopes){
-            if(twitchScopes[t] == ""){continue;}
-            if(scopeString == ""){
-                scopeString += twitchScopes[t];
-            }else{
-                scopeString += "+"+twitchScopes[t];
-            }
-            
-        }
-
-        var appParams = "?client_id="+oauth["client-id"]+
-            "&client_secret="+oauth["client-secret"]+
-            "&grant_type=client_credentials"+
-            "&scope="+scopeString;
-        
-        await Axios.post('https://id.twitch.tv/oauth2/token'+appParams)
-                .then((response)=>{
-                    
-                    if(typeof response.data.access_token != "undefined"){
-                        appToken = response.data.access_token;
-                    }
-                }).catch(error=>{
-                    console.error(error);
-                    return;
-                });
-    }
-}
-
-//We switched to tmi.js but we're reforming the message data to reflect its fork, twitch-js.
-//I was going to rewrite the overlays to work with tmi, but I think twitch-js has a better obj structure.
-//Why switch to tmi.js? Well, I felt tmi was more stable and better maintained than twitch-js. Not sure if I'm right...but it felt right.
-function twitchjsify(channel, tags, txt){
-    let message = {
-        channel:channel.replace("#",""),
-        respond:(responseTxt)=>{
-            sayInChat(responseTxt, channel.replace("#",""));
-        },
-        username:tags.username,
-        displayName:tags["display-name"],
-        tags:tags,
-        message:txt,
-        eventType:"twitch-chat"
-    };
-
-    let emotes = tags.emotes;
-    let newEmotes = [];
-    for(let e in emotes){
-        for(let ei in emotes[e]){
-            newEmotes.push({
-                id:e,
-                start:parseInt(emotes[e][ei].split("-")[0]),
-                end: parseInt(emotes[e][ei].split("-")[1])
-            });
-        }
-        
-    }
-    if(message.tags.badges == null){message.tags.badges = {};}
-    message.tags.emotes = newEmotes;
-    return message;
-}
-
-function processMessage(channel, tags, txt, self){
-    let message = twitchjsify(channel, tags, txt);
-    message.tags.displayName = message.displayName;
-    if(typeof message.message == "undefined"){return;}
-    
-    if(message.message.startsWith("!")){
-        if(modlocks.spamguard == 1){
-            if(checkForSpamming(message.username) == true){
-                return;
-            }
-        }
-        
-        let command = message.message.substr(1).split(" ");
-
-        if(command[0] == "stop" && (chatIsMod(message) || chatIsBroadcaster(message))){
-            let cEvent = command[1];
-            stopEvent(cEvent);
-            return;
-        }
-
-        if(command[0] == "mod" && (chatIsMod(message) || chatIsBroadcaster(message))){
-            let modCommand = command[1];
-            if(modCommand == "spamguard"){
-                setSpamGuard(command[2]);
-            }else if(modCommand == "lock" || modCommand == "unlock"){
-                let eventtarget = command[2];
-                let plugin = command[2];
-                let target = command.length>=4?command[3]:null;
-                if(lockEvent(message.username, modCommand, eventtarget) == true && eventtarget != "all"){return;}
-                if(lockPlugin(message.username, modCommand, plugin, target) == true && plugin != "all"){return;}
-                if(command[2] == "all"){
-                    lockEvent(message.username, modCommand, eventtarget);
-                    lockPlugin(message.username, modCommand, plugin, target);
-                    sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all chat commands");
-                }
-            }else if(modCommand == "blacklist"){
-                let modAction = command[2];
-                let viewer = command[3];
-                if(modAction == "add"){
-                    modlocks.blacklist[viewer] == 1;
-                    sayInChat(message.username+" blacklisted "+viewer);
-                    sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 1);
-                }else if(modAction == "remove"){
-                    modlocks.blacklist[viewer] == 0;
-                    sayInChat(message.username+" unblacklisted "+viewer);
-                    sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 0);
-                }
-                fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
-                    twitchLog("Mod file saved!");
-                });
-            }else if(modCommand == "trust" && chatIsBroadcaster(message)){
-                if(command.length>2){
-                    let trustedUser = command[2].startsWith("@")?command[2].substring(1).trim():command[2].trim();
-                    modData["trusted_users"][trustedUser] = "m";
-                    fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(modData), "utf-8", (err, data)=>{
-                        twitchLog("Mod file saved!");
-                        sayInChat(trustedUser+" has been added as a trustworthy user for the Mod UI!");
-                    });
-                }else{
-                    sayInChat("Trust a user to interact with the Mod UI");
-                }
-            }else if(modCommand == "verify"){
-                if(activeMods[message.username]?.startsWith("pending")){
-                    activeMods[message.username] = "active";
-                    fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(modData), "utf-8", (err, data)=>{
-                        twitchLog("Mod file saved!");
-                        sayInChat(message.username+" you're all set! Refresh the Mod UI to gain access.");
-                    });
-                }else{
-                    sayInChat(message.username+" you're not waiting for Mod UI verification. Access the Mod UI to start authorizing your device.")
-                }
-                
-            }
-        }
-
-        if(command[0] == "share"){
-            
-            if(command[1] == null){
-                sayInChat("Join another channel on the side with certain plugins and commands enabled!");
-            }else{
-                let shareUser = command[1];
-                if(command[2] == null){
-                    if(shares[shareUser] == null){sayInChat("Share with that user isn't available");}
-                }else{
-                    if(shares[shareUser] == null){shares[shareUser] = {
-                        enabled:false,
-                        commands:[],
-                        plugins:[]
-                    }};
-                    if(command[2] == "join"){
-                        
-                        let joinmsg = message.message.substring(("!share "+shareUser+" join").length);
-                        joinChannel(shareUser, joinmsg);
-                    }else if(command[2] == "leave"){
-                        
-                        let partmsg = message.message.substring(("!share "+shareUser+" leave").length);
-                        leaveChannel(shareUser, partmsg);
-                    }else if(command[2] == "set"){
-                        if(command[3] == "commands"){
-                            let setCommands = message.message.substring(("!share "+shareUser+" set commands").length).replaceAll(" ","").split(",");
-                            shares[shareUser].commands = setCommands;
-                            sayInChat("Commands set for "+shareUser);
-                        }else if(command[3] == "plugins"){
-                            let setPlugins = message.message.substring(("!share "+shareUser+" set plugins").length).replaceAll(" ","").split(",");
-                            shares[shareUser].plugins = setPlugins;
-                            sayInChat("Plugins set for "+shareUser);
-                        }
-                    }else{
-                        sayInChat(shareUser+" will have these commands shared: "+shares[shareUser].commands.join(", ")+" and these plugins: "+shares[shareUser].plugins.join(", "));
-                    }
-
-                    fs.writeFileSync(backendDir+"/settings/share.json", JSON.stringify(shares));
-                }
-            }
-        }
-
-        if(command[0] == "commands"){
-            let commandsArray = getChatCommands(message.channel);
-            sayInChat("Here's the chat command list: "+commandsArray.join(", "), message.channel);
-            return;
-        }
-
-        if(command[0] == "plugins"){
-            if(command.length == 1){
-                let pluginList = Object.keys(activePlugins);
-                sayInChat("Use this command like !plugins [plugin-name] [plugin-command] to get info on an active plugin. Plugin names are: "+pluginList.join(", "));
-                return;
-            }else{
-                if(command[1] == p && command.length == 2){
-                    let commandList = Object.keys(activePlugins[p].commandList);
-                    sayInChat("Commands for "+p+" are: "+commandList.join((", ")));
-                    return;
-                }else if(command[1] == p){
-                    if(activePlugins[p].commandList[command[2]] != null){
-                        sayInChat(activePlugins[p].commandList[command[2]]);
-                        return;
-                    }
-                }
-            }
-            
-        }
-        
-        if(command[0] == sconfig.bot.help_command){
-            if(command.length>1){
-                let commands = [];
-                let done = false;
-
-                if(command[1] == "help"){
-                    sayInChat("Pass a command type like '!"+sconfig.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+sconfig.bot.help_command+" event command' to get a description of what that command does. Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]");
-                    return;
-                }
-
-                
-                if(command[1] == "event" || command[1] == "events"){
-                    for(let e in events){
-                        if(command.length == 2){
-                            commands.push(e);
-                        }else{
-                            if(command[2] == e){
-                                sayInChat(events[e].name+" | Chat command: "+
-                                (events[e].triggers.chat.enabled?events[e].triggers.chat.command:" No chat command")+
-                                " | Reward: "+
-                                (events[e].triggers.redemption.enabled?"It has a channel point reward":"No channel point reward")+
-                                " | OSC: "+
-                                (events[e].triggers.osc.enabled?"Triggered by OSC":"No OSC Trigger")+
-                                " | Description: "+
-                                events[e].description);
-                                done = true;
-                            }
-                        }
-                    }
-                }
-
-                if(command[1] == "plugin" || command[1] == "plugins"){
-                    for(let p in activePlugins){
-                        
-                        if(command.length == 2){
-                            commands.push(p);
-                        }else{
-                            if(command[2] == p && command.length == 3){
-                                commands = Object.keys(activePlugins[p].commandList);
-                            }else if(command[2] == p){
-                                if(activePlugins[p].commandList[command[3]] != null){
-                                    sayInChat(activePlugins[p].commandList[command[3]]);
-                                    done = true;
-                                }
-                            }
-                        }
-                    }
-                }
-                if(commands.length == 0 && done == false){
-                    sayInChat("I'm not sure what "+command[1]+" is (^_^;)");
-                }else if(done == false){
-                    
-                    sayInChat(command[1]+" are: "+stringifyArray(commands));
-                }
-                
-            }else{
-                sayInChat("Hi, I'm "+sconfig.bot.bot_name+". "+sconfig.bot.introduction);
-            }
-        }
-    }
-
-    for(let e in events){
-        if(message.channel != sconfig.broadcaster.username){
-            if(!shares[message.channel]?.commands.includes(e)){
-                continue;
-            }
-        }
-        
-        if(modlocks.events[e] == 1){continue;}
-        if(events[e].triggers.chat.enabled && self == false){
-            if(events[e].triggers.chat.broadcaster == true ||
-                events[e].triggers.chat.mod == true ||
-                events[e].triggers.chat.sub == true ||
-                events[e].triggers.chat.vip == true){
-                let pass = false;
-                if(events[e].triggers.chat.broadcaster == true && chatIsBroadcaster(message)){
-                    pass = true;
-                }
-                if(events[e].triggers.chat.mod == true && chatIsMod(message)){
-                    pass = true;
-                }
-                if(events[e].triggers.chat.sub == true && chatIsSubscriber(message)){
-                    pass = true;
-                }
-                if(events[e].triggers.chat.vip == true && chatIsVIP(message)){
-                    pass = true;
-                }
-                if(pass == false){
-                    continue;
-                }
-            }
-            
-            let check = checkResponseTrigger(events[e], message);
-            if(check != null){
-                
-                if(runCommands(check.message, e, check.extra) == "alreadyon"){
-                    sayAlreadyOn(e);
-                }
-            }
-        }
-    }
-    
-    for(p in activePlugins){
-        if(modlocks.plugins[p] != 1){
-            try{
-                if(message.channel != sconfig.broadcaster.username){
-                    if(shares[message.channel]?.plugins.includes(p)){
-                        if(activePlugins[p].onChat != null){
-                            activePlugins[p].onChat(message);
-                        }
-                    }
-                }else{
-                    if(activePlugins[p].onChat != null){
-                        activePlugins[p].onChat(message);
-                    }
-                }
-            }catch(e){
-                twitchLog(e);
-            }
-        }
-    }
-}
-
-function checkForSpamming(viewername){
-		
-    if(modlocks.blacklist[viewername] == null){
-        modlocks.blacklist[viewername] = {
-            active:0,
-            timeout:null,
-            commandCount:1,
-            lastCommand:Date.now()
-        };
-        return false;
-    }
-
-    if(modlocks.blacklist[viewername].active == 1){
-        if(Date.now() >= modlocks.blacklist[viewername].timeout){
-            modlocks.blacklist[viewername].active = 0;
-            modlocks.blacklist[viewername].commandCount = 1;
-        }else{
-            return true;
-        }
-    }
-
-    if(Date.now()-modlocks.blacklist[viewername].lastCommand <= 2000){
-        modlocks.blacklist[viewername].commandCount++;
-    }else{
-        modlocks.blacklist[viewername].commandCount = 1;
-    }
-    modlocks.blacklist[viewername].lastCommand = Date.now();
-    if(modlocks.blacklist[viewername].commandCount >= 6){
-        sayInChat("Hey, cut that out "+viewername+", you're on cooldown for a minute.");
-        modlocks.blacklist[viewername].active = 1;
-        modlocks.blacklist[viewername].timeout = Date.now()+60000;
-        return true;
-    }
-    
-    return false;
-}
-
-function processCheer(channel, userstate, message){
-    twitchLog("CHEER", userstate);
-}
-
-const runChat = async(startCase) => {
-    twitchLog("Running chat...");
-    if(chat != null){
-        if(chat.readyState() == "OPEN" || chat.readyState() == "CONNECTING"){
-            await chat.disconnect();
-        }
-        chat.off("message", processMessage);
-        chat.off("cheer", processCheer);
-        chat.off("connectFailed", onAuthenticationFailure);
-        chat.off("disconnect", restartChat);
-    }
-
-    chat = new tmi.Client({
-        options:{debug:true},
-        identity:{
-            username:botUsername,
-            password:token
-        }
-    });
-    
-    await chat.connect().catch(error=>{console.error(error); onAuthenticationFailure();});
-    chat.join(homeChannel).then(()=>{
-        if(startCase == "restart"){
-            sayInChat("Chat restarted, I'm back :D");
-        }else if(startCase == "reconnect"){
-            sayInChat("Stream reconnected. I'm okay :)");
-        }else if(startCase == "disconnected"){
-            sayInChat("Stream disconnected. Hold on a sec...");
-        }else if(startCase != null){
-            sayInChat(startCase);
-        }
-    }).catch(error=>{console.error(error)});
-
-    
-    chat.on("message", processMessage);
-    chat.on("cheer", processCheer);
-    chat.on("connectFailed", onAuthenticationFailure);
-    chat.on("disconnect", restartChat);
-    upInterval = setInterval(runInterval, 1000);
-};
-
-function getChatCommands(shareChannel){
-
-    let commandsArray = [];
-    
-    for(let e in events){
-       //console.log("CHECKING ", e);
-        if(shareChannel != null && shareChannel != homeChannel){
-            if(!shares[shareChannel].commands.includes(e)){
-                //console.log("Command skipped", e, shareChannel);
-                continue;
-            }
-        }
-        if(events[e].triggers.chat.enabled == true){
-            if(events[e].triggers.chat.command.startsWith("!")){
-                commandsArray.push(events[e].triggers.chat.command);
-            }
-        }
-    }
-    return commandsArray;
 }
 
 function stringifyArray(a){
     return a.join(", ");
 }
 
-function onAuthenticationFailure(){
-    twitchLog("Authentication failed, refreshing...");
-    if(refreshToken == "" || refreshToken == null){
-        twitchLog("NO REFRESH TOKEN IN OAUTH.JSON");
-        return;}
-    
-    return new Promise((res, rej) => {
-        let clientId = oauth["client-id"];
-        let clientSecret = oauth["client-secret"];
-        var refreshParams = "?client_id="+clientId+
-            "&client_secret="+clientSecret+
-            "&grant_type=refresh_token"+
-            "&refresh_token="+refreshToken;
-            
-        Axios.post('https://id.twitch.tv/oauth2/token'+refreshParams)
-        .then((response)=>{
-            
-            if(typeof response.data.access_token != "undefined"){
-                token = response.data.access_token;
-                oauth.token = token;
-                twitchLog("TOKEN REFRESHED");
-                fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-                    twitchLog("oauth saved!");
-                    res(token);
-                });
-            }
-        }).catch(error=>{
-            rej(error);
-        });
-    });
-};
-
-function onBroadcasterAuthFailure(){
-    twitchLog("Broadcaster auth failed, refreshing...");
-    if(oauth.broadcaster_refreshToken == "" || oauth.broadcaster_refreshToken == null){return;}
-
-    return new Promise((res, rej)=>{
-        let clientId = oauth["client-id"]
-        let clientSecret = oauth["client-secret"];
-        var refreshParams = "?client_id="+clientId+
-            "&client_secret="+clientSecret+
-            "&grant_type=refresh_token"+
-            "&refresh_token="+oauth.broadcaster_refreshToken;
-
-        Axios.post('https://id.twitch.tv/oauth2/token'+refreshParams)
-        .then((response)=>{
-            
-            if(typeof response.data.access_token != "undefined"){
-                
-                oauth.broadcaster_token = response.data.access_token;
-                
-                twitchLog("BROADCASTER TOKEN REFRESHED");
-                fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-                    twitchLog("broadcaster oauth saved!");
-                    res(oauth.broadcaster_token);
-                });
-            }
-        }).catch(error=>{
-            rej(error);
-        });
-    })
-};
-
-var streamChatInterval = null;
-var reoccuringMessageCount = Math.round(Math.random()*10);
-
 class STwitch{
+    oauth = {};
     constructor(router, publicRouter){
         let expressPort = sconfig.network.host_port;
+        if(fs.existsSync(backendDir+"/settings/eventsub.json")){
+            twitchLog("Obsolete Eventsub.json detected. Twitch eventsubs are now integrated with Spooder's event system. Go to the Twitch tab in the WebUI to convert your eventsubs!")
+        }
+        if(fs.existsSync(backendDir+"/settings/twitch.json")){
+            try{
+                this.oauth = JSON.parse(fs.readFileSync(backendDir+"/settings/twitch.json"));
+                if(this.oauth.events != null){
+                    twitchLog("Obsolete events property in twitch.json detected. Twitch eventsubs are now integrated with Spooder's event system. Go to the Twitch tab in the WebUI to convert your eventsubs!")
+                }
+            }catch(e){
+                
+                if(fs.existsSync(backendDir+"/settings/oauth.json")){
+                    try{
+                        this.oauth = JSON.parse(fs.readFileSync(backendDir+"/settings/oauth.json"));
+                        fs.writeFileSync(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8");
+                        fs.rmSync(backend+"/settings/oauth.json");
+                        twitchLog("Obsolete oauth.json is now twitch.json!");
+                    }catch(e){
+                        twitchLog("FAILED TO READ OAUTH FILE");
+                        this.oauth = {};
+                    }
+                }else{
+                    twitchLog("FAILED TO READ TWITCH FILE");
+                    this.oauth = {};
+                }
+            }
+        }
         router.get('/twitch/authorize', async (req,res)=>{
             twitchLog("Got code");
-            token = req.query.code;
-            var twitchParams = "?client_id="+clientId+
-                "&client_secret="+clientSecret+
+            let code = req.query.code;
+            var twitchParams = "?client_id="+this.oauth['client-id']+
+                "&client_secret="+this.oauth['client-secret']+
                 "&grant_type=authorization_code"+
-                "&code="+token+
+                "&code="+code+
                 "&redirect_uri=http://localhost:"+expressPort+"/twitch/authorize"+
                 "&response_type=code";
                 
                 
-            await Axios.post('https://id.twitch.tv/oauth2/token'+twitchParams)
-                    .then((response)=>{
-                        
-                        if(typeof response.data.access_token != "undefined"){
-                            token = response.data.access_token;
-                            refreshToken = response.data.refresh_token;
-                            oauth.token = token;
-                            oauth.refreshToken = refreshToken;
-                            fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
-                                twitchLog("oauth saved!");
-                            });
-
-                        }
-                    }).catch(error=>{
-                        console.error(error);
-                        return;
-                    });
-            twitchLog("Got token");
-            
-            await Axios({
-                url: 'https://id.twitch.tv/oauth2/validate',
-                method: 'get',
-                headers:{
-                    "Authorization": "Bearer "+token
-                }
-            })
+            Axios.post('https://id.twitch.tv/oauth2/token'+twitchParams)
             .then((response)=>{
-                
-                botUsername = response.data.login;
+                twitchLog("Got token");
+                if(typeof response.data.access_token != "undefined"){
+                    let token = response.data.access_token;
+                    let refreshToken = response.data.refresh_token;
+                    this.oauth.token = token;
+                    this.oauth.refreshToken = refreshToken;
+                    if(this.oauth["broadcaster_token"] == null){
+                        this.oauth["broadcaster_token"] = this.oauth.token;
+                        this.oauth["broadcaster_refreshToken"] = this.oauth.refreshToken;
+                    }
+                    fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", async (err, data)=>{
+                        twitchLog("oauth saved!");
+                        await this.autoLogin();
+                        res.redirect("http://localhost:"+expressPort+"?twitchauthsuccess=true");
+                    });
+                }
             }).catch(error=>{
                 console.error(error);
+                res.send({status:"error", error:error});
                 return;
             });
-            this.autoLogin();
-            res.redirect("http://localhost:"+(expressPort));
+            
         });
 
         router.get("/twitch/revoke", async(req, res) => {
-            let cid = clientId;
-            let revokeBroadcaster = req.query.broadcaster == true;
-            let revokeToken = token;
-            if(revokeBroadcaster){
-                revokeToken = oauth.broadcaster_token;
-            }else{
-                revokeToken = token;
+            let cid = this.oauth['client-id'];
+            
+            if(revokeToken == this.oauth.broadcaster_token){
+                await Axios({
+                    url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+this.oauth.broadcaster_token,
+                    method: 'POST',
+                    headers:{
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    }
+                }).then((response) => {
+                    
+                })
             }
             twitchLog("Revoking: "+cid);
             await Axios({
-                url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+revokeToken,
+                url: 'https://id.twitch.tv/oauth2/revoke?client_id='+cid+"&token="+this.oauth.token,
                 method: 'POST',
                 headers:{
                     "Content-Type": "application/x-www-form-urlencoded"
@@ -712,33 +103,14 @@ class STwitch{
             })
             .then((response)=>{
 
-                if(oauth.broadcaster_token == token){
-                    oauth.broadcaster_token = "";
-                    oauth.broadcaster_refreshToken = "";
-                    token = "";
-                    refreshToken = "";
-                    oauth.token = token;
-                    oauth.refreshToken = refreshToken;
-                    twitchLog("Main token matches broadcaster, both oauth revoked");
-                    res.send({status:"Main token matches broadcaster, both oauth revoked"});
-                }else{
-                    if(revokeBroadcaster){
-                        oauth.broadcaster_token = "";
-                        oauth.broadcaster_refreshToken = "";
-                        twitchLog("Broadcaster oauth revoked, main token preserved");
-                        res.send({status:"Broadcaster oauth revoked, main token preserved"});
-                    }else{
-                        token = "";
-                        refreshToken = "";
-                        oauth.token = token;
-                        oauth.refreshToken = refreshToken;
-                        twitchLog("Broadcaster oauth preserved");
-                        res.send({status:"Main token revoked, broadcaster oauth preserved"});
-                    }
-                    
-                }
+                this.oauth.broadcaster_token = "";
+                this.oauth.broadcaster_refreshToken = "";
+                this.oauth.token = "";
+                this.oauth.refreshToken = "";
+                twitchLog("Both oauth revoked");
+                res.send({status:"Both oauth revoked"});
                 
-                fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
+                fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
                     twitchLog("oauth saved!");
                 });
 
@@ -749,20 +121,126 @@ class STwitch{
         });
 
         router.get("/twitch/save_auth_to_broadcaster", async(req, res) => {
-            oauth["broadcaster_token"] = token;
-            oauth["broadcaster_refreshToken"] = refreshToken;
-            fs.writeFile(backendDir+"/settings/oauth.json", JSON.stringify(oauth), "utf-8", (err, data)=>{
+            this.oauth["broadcaster_token"] = this.oauth.token;
+            this.oauth["broadcaster_refreshToken"] = this.oauth.refreshToken;
+            fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
                 twitchLog("oauth saved!");
                 res.send({status:"SUCCESS"});
             });
         });
 
-        router.post("/twitch/saveEventSubs", async(req, res) => {
-            delete req.body.callback_url;
-            fs.writeFile(backendDir+"/settings/eventsub.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
-                eventsubs = req.body;
+        router.post("/twitch/saveConfig", async(req, res) => {
+            console.log(this.oauth);
+            this.oauth['client-id'] = req.body['client-id'];
+            this.oauth['client-secret'] = req.body['client-secret'];
+            fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
                 res.send({status:"SAVE SUCCESS"});
             });
+        })
+
+        router.get("/convertEventsubToSpooder", (req, res) => {
+            let oldEvents = null;
+            if(twitch.oauth.events != null){
+                oldEvents = twitch.oauth.events;
+            }else if(fs.existsSync(backendDir+"/settings/eventsub.json")){
+                oldEvents = JSON.parse(fs.readFileSync(backendDir+"/settings/eventsub.json")).events;
+            }
+
+            if(oldEvents == null){
+                res.send({status:"No legacy eventsub events found."});
+                return;
+            }
+
+            eventGroups.push("Twitch Events");
+            for(let e in oldEvents){
+                let newEventName = e.replaceAll(".", "_");
+                events[newEventName] = {
+                    "name":newEventName,
+                    "description":"",
+                    "group":"Twitch Events",
+                    "cooldown":0,
+                    "chatnotification":false,
+                    "cooldownnotification":false,
+                    "triggers":{
+                        "chat":{"enabled":false, "command":"!"},
+                        "twitch":{"enabled":true, type:e, reward:{ "id":"", override:false}},
+                        "osc":{"enabled":false, "address":"/", "type":"single","condition":"==", "value":0, "condition2":"==", "value2":0}
+                    },
+                    "commands":[]
+                };
+                if(oldEvents[e].chat.enabled == true){
+                    if(e == "stream.online"){
+                        events[newEventName].commands.push(
+                            {
+                                type:"response",
+                                search:false,
+                                message:oldEvents[e].chat.message,
+                                delay:0,
+                            }
+                        )
+                        events[newEventName].special = {
+                            discord: Object.assign({}, oldEvents[e].chat.discord),
+                            reoccuringmessage:{
+                                message: oldEvents[e].chat.reoccuringmessage,
+                                interval: oldEvents[e].chat.interval
+                            }
+                        }
+                    }else{
+                        events[newEventName].commands.push(
+                            {
+                                type:"response",
+                                message:oldEvents[e].chat.message,
+                                search:false,
+                                delay:0
+                            }
+                        )
+                    }
+                    
+                }
+
+                if(oldEvents[e].plugin.enabled == true){
+                    events[newEventName].commands.push(
+                        {
+                            type:"plugin",
+                            pluginname:oldEvents[e].plugin.pluginname,
+                            eventname:oldEvents[e].plugin.eventname,
+                            etype:"oneshot",
+                            stop_eventname:"",
+                            duration:60,
+                            delay:0
+                        }
+                    )
+                }
+
+                if(oldEvents[e].udp.enabled == true){
+                    events[newEventName].commands.push(
+                        {
+                            "type": "software",
+                            "etype": "timed",
+                            "dest_udp": oldEvents[e].udp.dest,
+                            "address": oldEvents[e].udp.address,
+                            "valueOn": oldEvents[e].udp.value,
+                            "valueOff": oldEvents[e].udp.valueoff,
+                            "duration": parseInt(oldEvents[e].udp.duration)/1000,
+                            "delay": 0,
+                            "priority": 0
+                        }
+                    )
+                }
+            }
+            fs.writeFileSync(backendDir+"/settings/commands.json", JSON.stringify({events:events, groups:eventGroups}), "utf-8");
+            res.send({status:"ok"});
+        })
+
+        router.get("/twitch/cleanupOldEventsubs", (req, res) => {
+            if(fs.existsSync(backendDir+"/settings/oauth.json")){
+                fs.rmSync(backendDir+"/settings/oauth.json");
+            }
+            if(fs.existsSync(backendDir+"/settings/eventsub.json")){
+                fs.rmSync(backendDir+"/settings/eventsub.json");
+            }
+            
+            res.send({status:"ok"});
         })
 
         router.get("/twitch/eventsubs", async(req, res) => {
@@ -772,9 +250,23 @@ class STwitch{
             res.send(JSON.stringify(sendSubs));
         });
 
+        router.get("/twitch/config", async(req, res) => {
+            let sendSubs = Object.assign({},this.oauth);
+            let twitchBotUser = await this.getUserInfo(this.botUsername);
+            let twitchBroadcasterUser = await this.getUserInfo(this.homeChannel);
+            sendSubs.botUser = twitchBotUser;
+            sendSubs.broadcasterUser = twitchBroadcasterUser;
+            sendSubs.host_port = sconfig.network.host_port;
+            sendSubs.callback_url = sconfig.network.external_http_url;
+            sendSubs.spooderevents = Object.keys(events);
+            sendSubs.oldEventsubFile = fs.existsSync(path.join(backendDir, "settings", "eventsub.json"));
+            res.send(sendSubs);
+        });
+
         router.get("/twitch/get_eventsubs", async(req,res) => {
-            await getAppToken();
-            if(appToken ==""){
+            if(this.loggedIn === false){res.send({error:"nologin"})}
+            await this.getAppToken();
+            if(this.appToken ==""){
                 twitchLog("NO APP TOKEN");
                 return;
             }
@@ -782,8 +274,8 @@ class STwitch{
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
                 method: 'GET',
                 headers:{
-                    "Client-Id": oauth["client-id"],
-                    "Authorization": " Bearer "+appToken,
+                    "Client-Id": this.oauth["client-id"],
+                    "Authorization": " Bearer "+this.appToken,
                     "Content-Type": "application/json"
                 }
             })
@@ -797,25 +289,26 @@ class STwitch{
         });
 
         router.get("/twitch/get_channelpoint_rewards", async(req, res) => {
-            if(oauth.broadcaster_token=="" || oauth.broadcaster_token == null){
+            if(this.loggedIn === false){res.send({error:"nologin"})}
+            if(this.oauth.broadcaster_token=="" || this.oauth.broadcaster_token == null){
                 res.send({status:"NO BROADCASTER TOKEN"});
                 return;
             }
             
-            await getBroadcasterID();
+            await this.getBroadcasterID();
             await this.validateBroadcaster();
 
-            if(broadcasterUserID == 0){
+            if(this.broadcasterUserID == 0){
                 res.send({status:"NO BROADCASTER USER ID"});
                 return;
             }
 
             await Axios({
-                url: 'https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id='+broadcasterUserID,
+                url: 'https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id='+this.broadcasterUserID,
                 method: 'GET',
                 headers:{
-                    "Client-Id": oauth["client-id"],
-                    "Authorization": " Bearer "+oauth.broadcaster_token,
+                    "Client-Id": this.oauth["client-id"],
+                    "Authorization": " Bearer "+this.oauth.broadcaster_token,
                     "Content-Type": "application/json"
                 }
             })
@@ -823,25 +316,23 @@ class STwitch{
                 res.send(JSON.stringify(response.data));
             }).catch(error=>{
                 console.error(error);
-                
-                onBroadcasterAuthFailure();
+                this.onBroadcasterAuthFailure();
                 return;
             });
         });
 
         router.get("/twitch/delete_eventsub", async(req,res) => {
-            
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             await Axios({
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+req.query.id,
                 method: 'DELETE',
                 headers:{
-                    "Client-Id": oauth["client-id"],
-                    "Authorization": " Bearer "+appToken,
+                    "Client-Id": this.oauth["client-id"],
+                    "Authorization": " Bearer "+this.appToken,
                     "Content-Type": "application/json"
                 }
             })
             .then((response)=>{
-                
                 res.send(JSON.stringify({status:"SUCCESS"}));
             }).catch(error=>{
                 console.error(error);
@@ -850,26 +341,28 @@ class STwitch{
         });
 
         router.get("/twitch/refresh_eventsubs", async(req,res)=>{
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             await this.refreshEventSubs();
             res.send({status:"SUCCESS"});
         })
 
         router.get("/twitch/init_eventsub", async(req,res) => {
             
-            let subStatus = await initEventSub(req.query.type, req.query.user_id);
+            let subStatus = await this.initEventSub(req.query.type, req.query.user_id);
             
             res.send(JSON.stringify({status:subStatus}));
         });
 
         router.get("/twitch/get_eventsubs_by_user", async(req,res) => {
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             let twitchid = req.query.twitchid;
             
             if(twitchid == null){
-                twitchid = broadcasterUserID;
+                twitchid = this.broadcasterUserID;
             }
             
-            await getAppToken();
-            if(appToken ==""){
+            await this.getAppToken();
+            if(this.appToken ==""){
                 twitchLog("NO APP TOKEN");
                 return;
             }
@@ -877,8 +370,8 @@ class STwitch{
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions?user_id='+twitchid,
                 method: 'GET',
                 headers:{
-                    "Client-Id": oauth["client-id"],
-                    "Authorization": " Bearer "+appToken,
+                    "Client-Id": this.oauth["client-id"],
+                    "Authorization": " Bearer "+this.appToken,
                     "Content-Type": "application/json"
                 }
             })
@@ -892,23 +385,15 @@ class STwitch{
             });
         })
 
-        router.get("/twitch/chat_channel", async(req,res) => {
-            let channel = req.query.channel;
-            let leaveMessage = req.query.leavemessage;
-            let joinMessage = req.query.joinmessage;
-            chatSwitchChannels(channel, leaveMessage, joinMessage);
-            res.send(JSON.stringify({status:"SUCCESS"}));
-        });
-
         router.get("/twitch/chat_restart", async(req, res) => {
-            restartChat("restart");
+            this.restartChat("restart");
             res.send(JSON.stringify({status:"SUCCESS"}));
         });
 
         router.get("/mod/currentviewers", async(req,res) => {
             
             await Axios({
-                url: "https://tmi.twitch.tv/group/user/"+homeChannel.substr(1)+"/chatters",
+                url: "https://tmi.twitch.tv/group/user/"+this.homeChannel.substr(1)+"/chatters",
                 method: 'get',
             })
             .then((response)=>{
@@ -921,6 +406,10 @@ class STwitch{
             
         });
 
+        router.get("/eventsub_types", (req, res) => {
+            res.send(this.eventsubs);
+        })
+        
         //HTTPS ROUTER
         publicRouter.post("/webhooks/eventsub", async (req, res) => {
             const messageType = req.header("Twitch-Eventsub-Message-Type");
@@ -937,10 +426,21 @@ class STwitch{
                 event
             );
 
-            if(event.broadcaster_user_id != broadcasterUserID && type != "channel.raid"){
+            res.status(200).end();
+
+            event.eventsubType = type;
+
+            event.message = "";
+            event.platform = "twitch";
+            event.respond = (responseTxt)=>{
+                sayInChat(responseTxt, "twitch", this.homeChannel);
+            };
+
+            if(event.broadcaster_user_id != this.broadcasterUserID && type != "channel.raid"){
                 if(type == "stream.online"){
+                    await this.validateChatbot();
                     webUI.setShare(event.broadcaster_user_login, true);
-                    if(discord.loggedIn == true){
+                    if(discord.loggedIn == true && discord.config.sharenotif == true){
                         discord.findUser(discord.config.master)
                         .then(user => {
                             let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+event.broadcaster_user_login)
@@ -956,435 +456,1200 @@ class STwitch{
             }
 
             if(type == "channel.raid"){
-                await getBroadcasterID();
-                if(event.to_broadcaster_user_id == broadcasterUserID){
+                await this.getBroadcasterID();
+                if(event.to_broadcaster_user_id == this.broadcasterUserID){
                     event.raidType = "receive";
-                }else if(event.from_broadcaster_user_id == broadcasterUserID){
+                    event.username = event.from_broadcaster_user_login;
+                    event.displayName = event.from_broadcaster_user_name;
+                }else if(event.from_broadcaster_user_id == this.broadcasterUserID){
                     event.raidType = "send";
+                    event.username = event.to_broadcaster_user_login;
+                    event.displayName = event.to_broadcaster_user_name;
                 }
             }
 
             
 
             if(type == "stream.online"){
-                startReoccuringMessage();
-                if(eventsubs.events[type].discord?.enabled == true){
-                    if(discord.loggedIn == true){
-                        let channelInfo = await this.getChannelInfo(broadcasterUserID);
-                        let onlineMessage = channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
-                        let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+homeChannel)
-                        discord.sendToChannel(eventsubs.events[type].discord.guild, eventsubs.events[type].discord.channel, 
-                            {content:onlineMessage, components:[watchButton]})
+                this.startReoccuringMessage();
+                let onlineEvent = this.getStreamOnlineEvent();
+                if(onlineEvent != null){
+                    if(onlineEvent.special?.discord?.enabled == true){
+                        if(discord.loggedIn == true){
+                            let channelInfo = await this.getChannelInfo(this.broadcasterUserID);
+                            let onlineMessage = "@everyone "+channelInfo[0].broadcaster_name+" is live: "+channelInfo[0].title+"!";
+                            let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+this.homeChannel)
+                            discord.sendToChannel(onlineEvent.special.discord.guild, onlineEvent.special.discord.channel, 
+                                {content:onlineMessage, components:[watchButton]})
+                        }
                     }
-                    
                 }
             }
 
             if(type == "stream.offline"){
-                if(streamChatInterval != null){
-                    clearInterval(streamChatInterval);
-                }
-            }
-            
-            if(eventsubs){
-                if(eventsubs.events[type].chat != null){
-                    if(eventsubs.events[type].chat.enabled){
-
-                        try{
-							let responseFunct = eval("() => { let event = "+JSON.stringify(event)+"; "+eventsubs.events[type].chat.message.replace(/\n/g, "")+"}");
-						
-							let response = responseFunct();
-							sayInChat(response);
-						}catch(e){
-							twitchLog("Failed to run response script. Check the event settings to verify it.");
-						}
-                    }
-                }
-
-                if(eventsubs.events[type].tcp != null){
-                    if(eventsubs.events[type].tcp.enabled){
-                        
-                        if(type == "channel.raid"){
-                            await getBroadcasterID();
-                            
-                            if(event.to_broadcaster_user_id == broadcasterUserID){
-                                event.raidType = "receive";
-                            }else if(event.from_broadcaster_user_id == broadcasterUserID){
-                                event.raidType = "send";
-                            }
-                            sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
-                        }else{
-                            sendToTCP(eventsubs.events[type].tcp.address, JSON.stringify(event));
-                        }
-                    }
-                }
-
-                if(eventsubs.events[type].udp != null){
-                    if(eventsubs.events[type].udp.enabled){
-                        sendToUDP(eventsubs.events[type].udp.dest, eventsubs.events[type].udp.address, eventsubs.events[type].udp.value);
-                        setTimeout(()=>{
-                            sendToUDP(eventsubs.events[type].udp.dest, eventsubs.events[type].udp.address, eventsubs.events[type].udp.valueoff);
-                        }, eventsubs.events[type].udp.duration);
-                    }
-                }
-
-                if(eventsubs.events[type].plugin != null){
-                    if(eventsubs.events[type].plugin.enabled){
-                        let plugin = eventsubs.events[type].plugin;
-                        if(activePlugins[plugin.pluginname] != null){
-                            if(typeof activePlugins[plugin.pluginname].onEvent != null){
-                                try{
-                                    activePlugins[plugin.pluginname].onEvent(plugin.eventname, event);
-                                }catch(e){
-                                    twitchLog(e);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if(eventsubs.events[type].spooderevent != null){
-                    if(eventsubs.events[type].spooderevent.enabled){
-                        if(events[eventsubs.events[type].spooderevent.eventname] != null){
-                            event.eventType = "twitch-eventsub";
-                            runCommands(event, eventsubs.events[type].spooderevent.eventname);
-                        }
-                    }
+                if(this.streamChatInterval != null){
+                    clearInterval(this.streamChatInterval);
                 }
             }
 
             if(type == "channel.channel_points_custom_reward_redemption.add"){
-
+                event.userId = event.user_id;
+                event.username = event.user_login;
+                event.displayName = event.user_name;
+                event.message = event.user_input;
                 for(let e in events){
-                    if(events[e].triggers.redemption.enabled
-                        && events[e].triggers.redemption.id == event.reward.id){
-                            if(event.status == "fulfilled" || events[e].triggers.redemption.override == true){
+                    if(events[e].triggers.twitch == null){return}
+                    if(events[e].triggers.twitch.enabled
+                        && events[e].triggers.twitch.reward.id == event.reward.id){
+                            if(event.status == "fulfilled" || events[e].triggers.twitch.reward.override == true){
                                 if(modlocks.events[e] != 1){
                                     event.eventType = "twitch-redeem";
                                     runCommands(event, e);
                                 }else{
                                     //rejectChannelPointReward(event.reward.id, event.id);
-                                    sayInChat(event.reward.title+" is locked on my end. Sorry.");
+                                    this.sayInChat(event.reward.title+" is locked on my end. Sorry.");
                                     return;
                                 }
-                            }else if(events[e].triggers.redemption.override == false && modlocks.events[e] == 1){
-                                sayInChat("MODS! This event is locked on my end. I can't reject it myself because I didn't create it :( please either lift the lock on "+e+" or reject it.")
+                            }else if(events[e].triggers.twitch.reward.override == false && modlocks.events[e] == 1){
+                                this.sayInChat("MODS! This event is locked on my end. I can't reject it myself because I didn't create it :( please either lift the lock on "+e+" or reject it.")
                             }
                         }
                 }
 
             }else if(type == "channel.channel_points_custom_reward_redemption.update"){
-
+                event.userId = event.user_id;
+                event.username = event.user_login;
+                event.displayName = event.user_name;
+                event.message = event.user_input;
                 for(let e in events){
-                    if(events[e].triggers.redemption.enabled
-                    && events[e].triggers.redemption.id == event.reward.id
-                    && events[e].triggers.redemption.override == false){
+                    if(events[e].triggers.twitch == null){return}
+                    if(events[e].triggers.twitch.enabled
+                    && events[e].triggers.twitch.reward.id == event.reward.id
+                    && events[e].triggers.twitch.reward.override == false){
                         if(event.status == "fulfilled"){
                             if(modlocks.events[e] != 1){
                                 event.eventType = "twitch-redeem";
                                 runCommands(event, e);
                             }else{
                                 //rejectChannelPointReward(event.reward.id, event.id);
-                                sayInChat(event.reward.title+" is locked on my end. Sorry.");
+                                this.sayInChat(event.reward.title+" is locked on my end. Sorry.");
                                 return;
                             }
                         }else{
-                            sayInChat(event.user_name+" Sorry, the "+event.reward.title+" is a no go.");
+                            this.sayInChat(event.user_name+" Sorry, the "+event.reward.title+" is a no go.");
+                        }
+                    }
+                }
+            }else{
+                if(type != "channel.raid"){
+                    event.userId = event.user_id ?? event.broadcaster_user_id;
+                    event.username = event.user_login ?? event.broadcaster_user_login;
+                    event.displayName = event.user_name ?? event.broadcaster_user_name;
+                }
+                for(let e in events){
+                    if(events[e].triggers.twitch == null){return}
+                    if(events[e].triggers.twitch?.enabled == true){
+                        if(events[e].triggers.twitch.type == type){
+                            event.eventType = "twitch-event";
+                            runCommands(event, e);
                         }
                     }
                 }
             }
-
-            res.status(200).end();
         });
 
-        isStreamerLive();
+        this.isStreamerLive()
+        .then(isLive =>{
+            if(this.loggedIn === false){return;}
+            if(isLive == true){
+                this.startReoccuringMessage();
+            }
+        });
+    }
 
-        async function isStreamerLive(){
-            await getAppToken();
-
-            return new Promise((res, rej) => {
-                Axios({
-                    url: "https://api.twitch.tv/helix/streams?user_login="+sconfig.broadcaster.username,
-                    method: 'GET',
-                    headers:{
-                        "Authorization": "Bearer "+appToken,
-                        "Client-Id":clientId,
-                        "user_login":sconfig.broadcaster.username
-                    }
-                })
-                .then((response)=>{
-                    twitchLog(response.data.data[0] != null?"STREAMER IS LIVE":"STREAMER IS NOT LIVE");
-                    if(response.data.data[0] != null){
-                        startReoccuringMessage();
-                        res(true);
-                    }else{
-                        res(false);
-                    }
-                    
-                }).catch(error=>{
-                    rej(error);
-                });
-            })
+    getStreamOnlineEvent(){
+        for(let e in events){
+            if(events[e].triggers.twitch.type == "stream.online"){
+                return events[e];
+            }
         }
+    }
 
-        function startReoccuringMessage(){
-            if(eventsubs.events["stream.online"]?.chat.enabled && eventsubs.events["stream.online"]?.chat.reoccuringmessage != "" ){
-                let reoccuringInterval = async function(){
-                    try{
-                        let responseFunct = eval("() => {let count = "+JSON.stringify(reoccuringMessageCount)+"; "+eventsubs.events["stream.online"].chat.reoccuringmessage.replace(/\n/g, "")+"}");
-                        let response = await responseFunct();
-                        sayInChat(response);
-                        reoccuringMessageCount++;
-                    }catch(e){
-                        sayInChat("The reoccuring message failed to send :( Check my logs to see what went wrong!");
-                        clearInterval(streamChatInterval);
-                    }
+    eventsubs = {
+        "channel.update": "Channel Update",
+        "channel.follow": "Follow",
+        "channel.subscribe": "Subscribe",
+        "channel.subscription.end": "Subscription End",
+        "channel.subscription.gift": "Subscription Gift",
+        "channel.subscription.message": "Subscription Message",
+        "channel.cheer": "Cheer",
+        "channel.raid": "Raid",
+        "channel.ban": "Ban",
+        "channel.unban": "Unban",
+        "channel.moderator.add": "Mod Add",
+        "channel.moderator.remove": "Mod Remove",
+        "channel.channel_points_custom_reward.add": "Channel Points Custom Reward Add",
+        "channel.channel_points_custom_reward.update": "Channel Points Custom Reward Update",
+        "channel.channel_points_custom_reward.remove": "Channel Points Custom Reward Remove",
+        "channel.channel_points_custom_reward_redemption.add": "Channel Points Custom Reward Redemption Add",
+        "channel.channel_points_custom_reward_redemption.update": "Channel Points Custom Reward Redemption Update",
+        "channel.poll.begin": "Poll Begin",
+        "channel.poll.progress": "Poll Progress",
+        "channel.poll.end": "Poll End",
+        "channel.prediction.begin": "Prediction Begin",
+        "channel.prediction.progress": "Prediction Progress",
+        "channel.prediction.lock": "Prediction Lock",
+        "channel.prediction.end": "Prediction End",
+        "channel.charity_campaign.donate":"Charity Donate",
+        "channel.charity_campaign.start":"Charity Start",
+        "channel.charity_campaign.progress":"Charity Progress",
+        "channel.charity_campaign.stop":"Charity Stop",
+        "drop.entitlement.grant": "Drop Entitlement Grant",
+        "extension.bits_transaction.create": "Extension Bits Transaction Create",
+        "channel.goal.begin": "Goal Begin",
+        "channel.goal.progress": "Goal Progress",
+        "channel.goal.end": "Goal End",
+        "channel.hype_train.begin": "Hype Train Begin",
+        "channel.hype_train.progress": "Hype Train Progress",
+        "channel.hype_train.end": "Hype Train End",
+        "channel.shield_mode.begin":"Shield Mode Begin",
+        "channel.shield_mode.end":"Shield Mode End",
+        "channel.shoutout.create":"Shoutout Create",
+        "channel.shoutout.receive":"Shoutout Receive",
+        "stream.online": "Stream Online",
+        "stream.offline": "Stream Offline",
+        "user.authorization.grant": "User Authorization Grant",
+        "user.authorization.revoke": "User Authorization Revoke",
+        "user.update": "User Update"
+    }
+
+    async onEventFileSaved(){
+        let subs = await this.getEventSubs();
+        
+        let usedEventsubs = [];
+        let redeemSet = false;
+        for(let e in events){
+            if(this.eventsubs[events[e].triggers.twitch.type] != null || events[e].triggers.twitch.type == "redeem"){
+                
+                let subtype = events[e].triggers.twitch.type;
+                let bid = this.brodcasterUserID;
+                if(subtype == "redeem"){
+                    usedEventsubs.push("channel.channel_points_custom_reward_redemption.add");
+                    usedEventsubs.push("channel.channel_points_custom_reward_redemption.update");
+                }else{
+                    usedEventsubs.push(subtype);
+                }
+                
+                let needsRefresh = true;
+
+                if(subtype == "redeem"){
                     
-                };
-                let reoccurTime = eventsubs.events["stream.online"].chat.interval;
-                if(reoccurTime == null){reoccurTime = 15}
+                    for(let s in subs.data){
+                        if(subs.data[s].type == "channel.channel_points_custom_reward_redemption.add"
+                            || subs.data[s].type == "channel.channel_points_custom_reward_redemption.update"){
+                            if(subs.data[s].transport.callback == sconfig.network.external_http_url+"/webhooks/eventsub"){
+                                needsRefresh = false;
+                            }else{
+                                twitchLog("Refreshing "+subs.data[s].type);
+                                await this.deleteEventSub(subs.data[s].id);
+                            }
+                        }
+                    }
 
-                streamChatInterval = setInterval(reoccuringInterval, reoccurTime*60*1000);
+                    if(needsRefresh == true && redeemSet == false){
+                        twitchLog("Setting up redeems");
+                        await this.initEventSub("channel.channel_points_custom_reward_redemption.add", bid);
+                        await this.initEventSub("channel.channel_points_custom_reward_redemption.update", bid);
+                        redeemSet = true;
+                    }
+
+                }else{
+                    for(let s in subs.data){
+                        if(subs.data[s].type == subtype){
+                            if(subs.data[s].transport.callback == sconfig.network.external_http_url+"/webhooks/eventsub"){
+                                needsRefresh = false;
+                            }else{
+                                twitchLog("Refreshing "+subs.data[s].type);
+                                await this.deleteEventSub(subs.data[s].id);
+                            }
+                        }
+                    }
+    
+                    if(needsRefresh == true){
+                        if(subtype == "channel.raid"){
+                            await this.initEventSub(subtype+"-send", bid);
+                            await this.initEventSub(subtype+"-receive", bid);
+                        }else{
+                            await this.initEventSub(subtype, bid);
+                        }
+                    }
+                }                
             }
         }
 
-        async function getEventSubs(){
-            await getAppToken();
-            if(appToken ==""){
-                twitchLog("No app token found");
+        for(let s in subs.data){
+            if(subs.data[s].condition.broadcaster_user_id == this.broadcasterUserID
+                || subs.data[s].condition.to_broadcaster_user_id == this.broadcasterUserID
+                || subs.data[s].condition.from_broadcaster_user_id == this.broadcasterUserID){
+                    if(!usedEventsubs.includes(subs.data[s].type)){
+                        twitchLog("Deleting sub no longer used: "+subs.data[s].type);
+                        await this.deleteEventSub(subs.data[s].id);
+                    }
+                }
+        }
+    }
+
+    loggedIn = false;
+
+    autoLogin(startChat=true){
+        
+        return new Promise(async (res, rej)=>{
+            if(this.oauth.token == "" || this.oauth.token == null){
+                twitchLog("No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens.");
+                rej("notoken");
                 return;
             }
-            let response = await Axios({
-                url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
-                method: 'GET',
-                headers:{
-                    "Client-Id": oauth["client-id"],
-                    "Authorization": " Bearer "+appToken,
-                    "Content-Type": "application/json"
+            let botStatus = await this.validateChatbot();
+            
+            if(botStatus.status == "newtoken"){
+                this.oauth["token"] = botStatus.newtoken;
+            }else if(botStatus.status == "error"){
+                twitchLog("CHATBOT ERROR", botStatus.error);
+                return;
+            }
+    
+            if(this.oauth.broadcaster_refreshToken != "" && this.oauth.broadcaster_refreshToken != null){
+                let broadcasterStatus = await this.validateBroadcaster();
+                if(broadcasterStatus.status == "newtoken"){
+                    this.oauth["broadcaster_token"] = broadcasterStatus.newtoken;
+                }else if(broadcasterStatus.status == "error"){
+                    twitchLog("BROADCASTER ERROR", broadcasterStatus.error);
+                    return;
                 }
+            }
+
+            await this.getBotID();
+            await this.getBroadcasterID();
+            await this.getAppToken();
+    
+            if(initMode == false){
+                this.runChat();
+            }
+            this.loggedIn = true;
+            res("success");
+        })
+	}
+
+    botUsername = "";
+    botUserID = 0;
+    homeChannel = "";
+    broadcasterUserID = 0;
+
+    //For Event Subs
+    appToken = "";
+
+    lastMessage = null;
+    chat = null;
+
+    sayInChat = async (message, chatChannel) =>{
+        if(this.loggedIn == false){return;}
+        if(chatChannel == null){chatChannel = this.homeChannel}
+        if(message == null || message == ""){
+            twitchLog("EMPTY MESSAGE");
+            return;
+        }
+        if(message.length >= 490){
+            let limit = 490;
+            let totalMessages = Math.ceil(message.length/limit);
+            
+            for(let stringpos=0; stringpos<message.length; stringpos+=limit){
+                
+                if(stringpos+limit > message.length){
+                    await this.chat.say(chatChannel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
+                }else{
+                    //twitchLog(stringpos, stringpos.limit);
+                    await this.chat.say(chatChannel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+                }
+            }
+        }else{
+            await this.chat.say(chatChannel,message)
+            .catch(e=>{
+                twitchLog("chat ERROR", e);
+                this.restartChat(message);
+            });
+        }
+    }
+
+    disconnectChat = () => {
+        if(this.loggedIn == false){return;}
+        this.chat.disconnect();
+    }
+
+    joinChannel = async (channelname, joinmsg)=>{
+        if(this.loggedIn == false){return;}
+        await this.chat.join(channelname).catch(e=>{console.log(e)});
+        this.sayInChat(joinmsg, channelname);
+    }
+
+    leaveChannel = async (channelname, partmsg)=>{
+        if(this.loggedIn == false){return;}
+        this.sayInChat(partmsg, channelname);
+        await this.chat.part(channelname).catch(e=>{console.log(e)})
+    }
+
+    restartChat = async (message) => {
+        if(this.loggedIn == false){return;}
+        twitchLog("Restarting chat");
+        await this.validateChatbot();
+        this.runChat(message);
+    }
+
+    chatIsFirstMessage = (message) => {
+        if(this.loggedIn == false){return;}
+        return message.tags["first-msg"] == true;
+    }
+
+    chatIsReturningChatter = (message) => {
+        if(this.loggedIn == false){return;}
+        return message.tags["returning-chatter"] == true;
+    }
+
+    chatIsMod = (message) => {
+        if(this.loggedIn == false){return;}
+        return message.tags.mod == true;
+    }
+
+    chatIsSubscriber = (message) => {
+        if(this.loggedIn == false){return;}
+        return message.tags.subscriber == true;
+    }
+
+    chatIsBroadcaster = (message) => {
+        if(this.loggedIn == false){return;}
+        return message.tags.badges?.broadcaster == true;
+    }
+
+    chatIsVIP = (message) => {
+        if(this.loggedIn == false){return;}
+        return message.tags.badges?.vip == true;
+    }
+
+    getChatters = async (type) => {
+        if(this.loggedIn == false){return;}
+        const axios = require("axios");
+        let response = await axios.get("https://tmi.twitch.tv/group/user/"+this.homeChannel.substr(1)+"/chatters");
+        let chArray = [];
+        if(type == "all"){
+            for(let c in response.data.chatters){chArray = chArray.concat(response.data.chatters[c]);}
+        }else{
+            if(response.data.chatters[type] != null){
+                chArray = response.data.chatters[type];
+            }
+        }
+        return chArray;
+    }
+
+    sayAlreadyOn(name){
+        if(this.loggedIn == false){return;}
+        for(let c in activeEvents[name]){
+            if(activeEvents[name][c].etype == "event"){
+                this.sayInChat(events[name].name+" is cooling down. Time Left: "+Math.abs(Math.floor(uptime-activeEvents[name][c]["timeout"]))+"s");
+                break;
+            }
+        }
+    }
+    
+    async getBroadcasterID(){
+        if(this.broadcasterUserID==0){
+            await Axios({
+                url: 'https://api.twitch.tv/helix/users?login='+this.homeChannel,
+                method: 'get',
+                headers:{
+                    "Authorization": "Bearer "+this.oauth.token,
+                    "Client-Id":this.oauth['client-id']
+                }
+            })
+            .then((response)=>{
+                this.broadcasterUserID = response.data.data[0].id;
             }).catch(error=>{
                 console.error(error);
+                if(error.response?.status == 401){
+                    this.onAuthenticationFailure();
+                }
                 return;
             });
-            return response.data;
         }
-
-        this.refreshEventSubs = async() =>{
-            let subs = await getEventSubs();
-            for(let s in subs.data){
+    }
+    
+    async getBotID(){
+        if(this.botUserID==0){
+            await Axios({
+                url: 'https://api.twitch.tv/helix/users?login='+this.botUsername,
+                method: 'get',
+                headers:{
+                    "Authorization": "Bearer "+this.oauth.token,
+                    "Client-Id":this.oauth['client-id']
+                }
+            })
+            .then((response)=>{
+                this.botUserID = response.data.data[0].id;
+            }).catch(error=>{
+                console.error(error);
+                if(error.response?.status == 401){
+                    this.onAuthenticationFailure();
+                }
+                return;
+            });
+        }
+    }
+    
+    async getAppToken(){
+        if(this.appToken == ""){
+    
+            var twitchScopes = [
+                'channel:moderate',
+                'chat:read',
+                'chat:edit', 
+                'whispers:read', 
+                'whispers:edit', 
+                'analytics:read:extensions', 
+                'analytics:read:games', 
+                'bits:read', 
+                'channel:edit:commercial', 
+                'channel:manage:broadcast', 
+                'channel:read:charity', 
+                'channel:manage:extensions', 
+                'channel:manage:moderators', 
+                'channel:manage:polls', 
+                'channel:manage:predictions', 
+                'channel:manage:raids', 
+                'channel:manage:redemptions', 
+                'channel:manage:schedule', 
+                'channel:manage:videos', 
+                'channel:read:editors', 
+                'channel:read:goals', 
+                'channel:read:hype_train', 
+                'channel:read:polls', 
+                'channel:read:predictions', 
+                'channel:read:redemptions', 
+                'channel:read:stream_key', 
+                'channel:read:subscriptions', 
+                'channel:read:vips', 
+                'channel:manage:vips', 
+                'clips:edit', 
+                'moderation:read', 
+                'moderator:manage:announcements', 
+                'moderator:manage:automod',
+                'moderator:read:automod_settings', 
+                'moderator:manage:automod_settings', 
+                'moderator:manage:banned_users', 
+                'moderator:read:blocked_terms',
+                'moderator:manage:chat_messages',
+                'moderator:read:chat_settings',
+                'moderator:manage:chat_settings',
+                'moderator:read:chatters',
+                'moderator:read:shield_mode',
+                'moderator:manage:shield_mode',
+                'moderator:read:shoutouts',
+                'moderator:manage:shoutouts',
+                'user:edit',
+                'user:edit:follows',
+                'user:manage:blocked_users',
+                'user:read:blocked_users',
+                'user:read:broadcast',
+                'user:manage:chat_color',
+                'user:read:email',
+                'user:read:follows',
+                'user:read:subscriptions',
+                'user:manage:whispers'
+               ];
+            
+            let scopeString = "";
+            for(let t in twitchScopes){
+                if(twitchScopes[t] == ""){continue;}
+                if(scopeString == ""){
+                    scopeString += twitchScopes[t];
+                }else{
+                    scopeString += "+"+twitchScopes[t];
+                }
                 
-                if(subs.data[s].transport.callback != sconfig.network.external_http_url){
-                    await deleteEventSub(subs.data[s].id)
+            }
+    
+            var appParams = "?client_id="+this.oauth["client-id"]+
+                "&client_secret="+this.oauth["client-secret"]+
+                "&grant_type=client_credentials"+
+                "&scope="+scopeString;
+            
+            await Axios.post('https://id.twitch.tv/oauth2/token'+appParams)
+                    .then((response)=>{
+                        
+                        if(typeof response.data.access_token != "undefined"){
+                            this.appToken = response.data.access_token;
+                        }
+                    }).catch(error=>{
+                        console.error(error);
+                        return;
+                    });
+        }
+    }
+    
+    twitchjsify(channel, tags, txt){
+        let message = {
+            channel:channel.replace("#",""),
+            respond:(responseTxt)=>{
+                sayInChat(responseTxt, "twitch", channel.replace("#",""));
+            },
+            username:tags.username,
+            botUsername:this.botUsername,
+            displayName:tags["display-name"],
+            tags:tags,
+            message:txt,
+            userId: tags["user-id"],
+            eventType:"twitch-chat",
+            platform:"twitch"
+        };
+    
+        let emotes = tags.emotes;
+        let newEmotes = [];
+        for(let e in emotes){
+            for(let ei in emotes[e]){
+                newEmotes.push({
+                    id:e,
+                    start:parseInt(emotes[e][ei].split("-")[0]),
+                    end: parseInt(emotes[e][ei].split("-")[1])
+                });
+            }
+            
+        }
+        if(message.tags.badges == null){message.tags.badges = {};}
+        message.tags.emotes = newEmotes;
+        return message;
+    }
+
+    processDeletedMessage(channel, username, deletedMessage, userstate){
+        let message = {
+            channel:channel.replace("#",""),
+            platform:"twitch",
+            username:username,
+            deletedMessage:deletedMessage,
+            userstate:userstate
+        };
+        
+        for(let p in activePlugins){
+            try{
+                if(message.channel != this.homeChannel){
+                    if(shares[message.channel]?.plugins.includes(p)){
+                        if(activePlugins[p].onEvent != null){
+                            activePlugins[p].onEvent("messagedeleted",message);
+                        }
+                    }
+                }else{
+                    if(activePlugins[p].onEvent != null){
+                        activePlugins[p].onEvent("messagedeleted",message);
+                    }
+                }
+            }catch(e){
+                twitchLog(e);
+            }
+        }
+    }
+    
+    processMessage(channel, tags, txt, self){
+        
+        let message = this.twitchjsify(channel, tags, txt);
+        message.tags.displayName = message.displayName;
+        if(typeof message.message == "undefined"){return;}
+        this.lastMessage = {
+            username:message.username,
+            channel:message.channel,
+            message:message.message
+        };
+        
+        if(message.message.startsWith("!")){
+            if(modlocks.spamguard == 1){
+                if(this.checkForSpamming(message.username) == true){
+                    return;
                 }
             }
+            
+            let command = message.message.substr(1).split(" ");
+    
+            if(command[0] == "stop" && (this.chatIsMod(message) || this.chatIsBroadcaster(message))){
+                let cEvent = command[1];
+                let status = stopEvent(cEvent);
+                this.sayInChat(status);
+                return;
+            }
+    
+            if(command[0] == "mod" && (this.chatIsMod(message) || this.chatIsBroadcaster(message))){
+                let modCommand = command[1];
+                if(modCommand == "spamguard"){
+                    let response = setSpamGuard(command[2]);
+                    this.sayInChat(response);
+                }else if(modCommand == "lock" || modCommand == "unlock"){
+                    let eventtarget = command[2];
+                    let plugin = command[2];
+                    let target = command.length>=4?command[3]:null;
+                    if(lockEvent(message.username, modCommand, eventtarget) == true && eventtarget != "all"){return;}
+                    if(lockPlugin(message.username, modCommand, plugin, target) == true && plugin != "all"){return;}
+                    if(command[2] == "all"){
+                        lockEvent(message.username, modCommand, eventtarget);
+                        lockPlugin(message.username, modCommand, plugin, target);
+                        this.sayInChat(message.username+" "+(modCommand=="lock"?"locked":"unlocked")+" all chat commands");
+                    }
+                }else if(modCommand == "blacklist"){
+                    let modAction = command[2];
+                    let viewer = command[3];
+                    if(modAction == "add"){
+                        modlocks.blacklist[viewer] == 1;
+                        this.sayInChat(message.username+" blacklisted "+viewer);
+                        sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 1);
+                    }else if(modAction == "remove"){
+                        modlocks.blacklist[viewer] == 0;
+                        this.sayInChat(message.username+" unblacklisted "+viewer);
+                        sendToTCP("/mod/"+message.username+"/blacklist"+viewer, 0);
+                    }
+                    fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
+                        twitchLog("Mod file saved!");
+                    });
+                }else if(modCommand == "trust" && this.chatIsBroadcaster(message)){
+                    if(command.length>2){
+                        let trustedUser = command[2].startsWith("@")?command[2].substring(1).trim():command[2].trim();
+                        modData["trusted_users"].permissions[trustedUser] = "m";
+                        modData["trusted_users"].twitch[trustedUser] = trustedUser;
+                        fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(modData), "utf-8", (err, data)=>{
+                            twitchLog("Mod file saved!");
+                            this.sayInChat(trustedUser+" has been added as a trustworthy user for the Mod UI!");
+                        });
+                    }else{
+                        this.sayInChat("Trust a user to interact with the Mod UI");
+                    }
+                }
+            }
+
+            if(command[0] == "verify"){
+                if(activeUsers.pending[message.username].vtype == "twitch" && activeUsers.pending[message.username].verified == false){
+                    activeUsers.pending[message.username].verified = true;
+                    this.sayInChat(message.username+" You're verified! Now set a username and password for my records.");
+                }
+            }
+    
+            if(command[0] == "commands"){
+                let commandsArray = this.getChatCommands(message.channel);
+                this.sayInChat("Here's the chat command list: "+commandsArray.join(", "), message.channel);
+                return;
+            }
+    
+            if(command[0] == "plugins"){
+                if(command.length == 1){
+                    let pluginList = Object.keys(activePlugins);
+                    this.sayInChat("Use this command like !plugins [plugin-name] [plugin-command] to get info on an active plugin. Plugin names are: "+pluginList.join(", "));
+                    return;
+                }else{
+                    for(let p in activePlugins){
+                        if(command[1] == p && command.length == 2){
+                            let commandList = Object.keys(activePlugins[p].commandList);
+                            this.sayInChat("Commands for "+p+" are: "+commandList.join((", ")));
+                            return;
+                        }else if(command[1] == p){
+                            if(activePlugins[p].commandList[command[2]] != null){
+                                this.sayInChat(activePlugins[p].commandList[command[2]]);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if(command[0] == sconfig.bot.help_command){
+                if(command.length>1){
+                    let commands = [];
+                    let done = false;
+    
+                    if(command[1] == "help"){
+                        this.sayInChat("Pass a command type like '!"+sconfig.bot.help_command+" event' to show the commands for that type. You can also pass a command like '!"+sconfig.bot.help_command+" event command' to get a description of what that command does. Active plugins are: ["+stringifyArray(Object.keys(activePlugins))+"]");
+                        return;
+                    }
+    
+                    
+                    if(command[1] == "event" || command[1] == "events"){
+                        for(let e in events){
+                            if(command.length == 2){
+                                commands.push(e);
+                            }else{
+                                if(command[2] == e){
+                                    this.sayInChat(events[e].name+" | chat command: "+
+                                    (events[e].triggers.chat.enabled?events[e].triggers.chat.command:" No chat command")+
+                                    " | Reward: "+
+                                    (events[e].triggers.redemption.enabled?"It has a channel point reward":"No channel point reward")+
+                                    " | OSC: "+
+                                    (events[e].triggers.osc.enabled?"Triggered by OSC":"No OSC Trigger")+
+                                    " | Description: "+
+                                    events[e].description);
+                                    done = true;
+                                }
+                            }
+                        }
+                    }
+    
+                    if(command[1] == "plugin" || command[1] == "plugins"){
+                        for(let p in activePlugins){
+                            
+                            if(command.length == 2){
+                                commands.push(p);
+                            }else{
+                                if(command[2] == p && command.length == 3){
+                                    commands = Object.keys(activePlugins[p].commandList);
+                                }else if(command[2] == p){
+                                    if(activePlugins[p].commandList[command[3]] != null){
+                                        this.sayInChat(activePlugins[p].commandList[command[3]]);
+                                        done = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if(commands.length == 0 && done == false){
+                        this.sayInChat("I'm not sure what "+command[1]+" is (^_^;)");
+                    }else if(done == false){
+                        
+                        this.sayInChat(command[1]+" are: "+stringifyArray(commands));
+                    }
+                    
+                }else{
+                    this.sayInChat("Hi, I'm "+sconfig.bot.bot_name+". "+sconfig.bot.introduction);
+                }
+            }
+        }
+    
+        for(let e in events){
+            if(message.channel != this.homeChannel){
+                if(!shares[message.channel]?.commands.includes(e)){
+                    continue;
+                }
+            }
+            
+            if(modlocks.events[e] == 1){continue;}
+            if(events[e].triggers.chat.enabled && self == false){
+                if(events[e].triggers.chat.broadcaster == true ||
+                    events[e].triggers.chat.mod == true ||
+                    events[e].triggers.chat.sub == true ||
+                    events[e].triggers.chat.vip == true){
+                    let pass = false;
+                    if(events[e].triggers.chat.broadcaster == true && this.chatIsBroadcaster(message)){
+                        pass = true;
+                    }
+                    if(events[e].triggers.chat.mod == true && this.chatIsMod(message)){
+                        pass = true;
+                    }
+                    if(events[e].triggers.chat.sub == true && this.chatIsSubscriber(message)){
+                        pass = true;
+                    }
+                    if(events[e].triggers.chat.vip == true && this.chatIsVIP(message)){
+                        pass = true;
+                    }
+                    if(pass == false){
+                        continue;
+                    }
+                }
+                
+                let check = checkResponseTrigger(events[e], message);
+                if(check != null){
+                    
+                    if(runCommands(check.message, e, check.extra) == "alreadyon"){
+                        this.sayAlreadyOn(e);
+                    }
+                }
+            }
+        }
+        
+        for(let p in activePlugins){
+            if(modlocks.plugins[p] != 1){
+                try{
+                    if(message.channel != this.homeChannel){
+                        if(shares[message.channel]?.plugins.includes(p)){
+                            if(activePlugins[p].onChat != null){
+                                activePlugins[p].onChat(message);
+                            }
+                        }
+                    }else{
+                        if(activePlugins[p].onChat != null){
+                            activePlugins[p].onChat(message);
+                        }
+                    }
+                }catch(e){
+                    twitchLog(e);
+                }
+            }
+        }
+    }
+    
+    checkForSpamming(viewername){
+            
+        if(modlocks.blacklist[viewername] == null){
+            modlocks.blacklist[viewername] = {
+                active:0,
+                timeout:null,
+                commandCount:1,
+                lastCommand:Date.now()
+            };
+            return false;
+        }
+    
+        if(modlocks.blacklist[viewername].active == 1){
+            if(Date.now() >= modlocks.blacklist[viewername].timeout){
+                modlocks.blacklist[viewername].active = 0;
+                modlocks.blacklist[viewername].commandCount = 1;
+            }else{
+                return true;
+            }
+        }
+    
+        if(Date.now()-modlocks.blacklist[viewername].lastCommand <= 2000){
+            modlocks.blacklist[viewername].commandCount++;
+        }else{
+            modlocks.blacklist[viewername].commandCount = 1;
+        }
+        modlocks.blacklist[viewername].lastCommand = Date.now();
+        if(modlocks.blacklist[viewername].commandCount >= 6){
+            this.sayInChat("Hey, cut that out "+viewername+", you're on cooldown for a minute.");
+            modlocks.blacklist[viewername].active = 1;
+            modlocks.blacklist[viewername].timeout = Date.now()+60000;
+            return true;
+        }
+        
+        return false;
+    }
+    
+    processCheer(channel, userstate, message){
+        twitchLog("CHEER", userstate);
+    }
+    
+    runChat = async(startCase) => {
+        twitchLog("Running chat...");
+        if(this.chat != null){
+            if(this.chat.readyState() == "OPEN" || this.chat.readyState() == "CONNECTING"){
+                await this.chat.disconnect();
+            }
+            this.chat.off("message", this.processMessage.bind(this));
+            this.chat.off("cheer", this.processCheer.bind(this));
+            this.chat.off("connectFailed", this.onAuthenticationFailure.bind(this));
+            this.chat.off("disconnect", this.restartChat.bind(this));
+        }
+    
+        this.chat = new tmi.Client({
+            options:{debug:true},
+            identity:{
+                username:this.botUsername,
+                password:this.oauth.token
+            }
+        });
+        
+        await this.chat.connect().catch(error=>{this.onAuthenticationFailure();});
+        this.chat.join(this.homeChannel).then(async ()=>{
+            if(startCase == "restart"){
+                this.sayInChat("chat restarted, I'm back :D");
+            }else if(startCase == "reconnect"){
+                this.sayInChat("Stream reconnected. I'm okay :)");
+            }else if(startCase == "disconnected"){
+                this.sayInChat("Stream disconnected. Hold on a sec...");
+            }else if(startCase != null){
+                this.sayInChat(startCase);
+            }
+
+            let subs = await this.getEventSubs();
             let subtype = "";
+            
             for(let s in subs.data){
                 subtype = subs.data[s].type;
                 let bid = subs.data[s].condition.broadcaster_user_id;
-                if(subs.data[s].type == "channel.raid"){
-                    if(subs.data[s].condition.to_broadcaster_user_id != ""){
-                        subtype += "-receive";
-                        bid = subs.data[s].condition.to_broadcaster_user_id;
-                    }else{
-                        subtype += "-send";
-                        bid = subs.data[s].condition.from_broadcaster_user_id;
-                    }
-                }
-                
-                await initEventSub(subtype, bid);
-            }
-        }
 
-        async function deleteEventSub(id){
-            await Axios({
-                url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+id,
-                method: 'DELETE',
-                headers:{
-                    "Client-Id": oauth["client-id"],
-                    "Authorization": " Bearer "+appToken,
-                    "Content-Type": "application/json"
-                }
-            }).catch(error=>{
-                console.error(error);
-                return;
-            });
-        }
-        
-        async function initEventSub(eventType, bid){
-            await getAppToken();
-            
-            if(bid == null){
-                await getBroadcasterID();
-                bid = broadcasterUserID;
-            }
-            
-            var condition = {};
-
-            if(!eventType.startsWith("channel.raid")){
-                condition = {"broadcaster_user_id":bid};
-                if(eventType == ("channel.follow") 
-                || eventType.startsWith("channel.guest_star") 
-                || eventType.startsWith("channel.shield_mode") 
-                || eventType.startsWith("channel.shoutout")){
-                    condition.moderator_user_id = botUserID;
-                }
-            }else{
-                if(eventType.split("-")[1] == "receive"){
-                    condition = {"to_broadcaster_user_id":bid};
-                }else{
-                    condition = {"from_broadcaster_user_id":bid};
-                }
-                eventType = eventType.split("-")[0];
-            }
-    
-            let version = "1";
-            if(eventType == "channel.update"){
-                version = "beta";
-            }else if(eventType == "channel.follow"){
-                version = "2";
-            }else if(eventType.startsWith("channel.guest_star")){
-                version = "beta";
-            }
-
-            return new Promise((res, rej)=>{
-                Axios({
-                    url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
-                    method: 'post',
-                    headers:{
-                        "Client-ID":oauth["client-id"],
-                        "Authorization":"Bearer "+appToken,
-                        "Content-Type":"application/json"
-                    },
-                    data:{
-                        "type":eventType,
-                        "version": version,
-                        "condition":condition,
-                        "transport":{
-                            "method": "webhook",
-                            "callback":sconfig.network.external_http_url+"/webhooks/eventsub",
-                            "secret":"imasecretboi"
+                if(subtype == "stream.online" && bid != this.broadcasterUserID){
+                    for(let s in shares){
+                        if(shares[s].twitchid == bid){
+                            this.isStreamerLive(s)
+                            .then(isLive=>{
+                                if(isLive == true){
+                                    webUI.setShare(s, true);
+                                }
+                            })
                         }
                     }
-                }).then(response => res("SUCCESS"))
-                .catch(error=>{
-                    console.error(error);
-                    res(error.response.data.message);
-                });
-            })
-            
-        };
-
-        global.sayInChat = async (message, chatChannel) =>{
-            if(chatChannel == null){chatChannel = homeChannel}
-            if(message == null || message == ""){
-                twitchLog("EMPTY MESSAGE");
-                return;
+                }
             }
-            if(message.length >= 490){
-                let limit = 490;
-                let totalMessages = Math.ceil(message.length/limit);
+        }).catch(error=>{console.error(error)});
+    
+        
+        this.chat.on("message", this.processMessage.bind(this));
+        this.chat.on("messagedeleted", this.processDeletedMessage.bind(this));
+        this.chat.on("cheer", this.processCheer.bind(this));
+        this.chat.on("connectFailed", this.onAuthenticationFailure.bind(this));
+        this.chat.on("disconnect", this.restartChat.bind(this));
+    };
+    
+    getChatCommands(shareChannel){
+        if(this.loggedIn == false){return;}
+        let commandsArray = [];
+        
+        for(let e in events){
+           //console.log("CHECKING ", e);
+            if(shareChannel != null && shareChannel != this.homeChannel){
+                if(!shares[shareChannel].commands.includes(e)){
+                    //console.log("Command skipped", e, shareChannel);
+                    continue;
+                }
+            }
+            if(events[e].triggers.chat.enabled == true){
+                if(events[e].triggers.chat.command.startsWith("!")){
+                    commandsArray.push(events[e].triggers.chat.command);
+                }
+            }
+        }
+        return commandsArray;
+    }
+    
+    onAuthenticationFailure(){
+        twitchLog("Authentication failed, refreshing...");
+        if(this.oauth.refreshToken == "" || this.oauth.refreshToken == null){
+            twitchLog("NO REFRESH TOKEN IN twitch.json");
+            return;}
+        
+        return new Promise((res, rej) => {
+            
+            var refreshParams = "?client_id="+this.oauth['client-id']+
+                "&client_secret="+this.oauth['client-secret']+
+                "&grant_type=refresh_token"+
+                "&refresh_token="+this.oauth.refreshToken;
                 
-                for(let stringpos=0; stringpos<message.length; stringpos+=limit){
+            Axios.post('https://id.twitch.tv/oauth2/token'+refreshParams)
+            .then((response)=>{
+                
+                if(typeof response.data.access_token != "undefined"){
+                    this.oauth.token = response.data.access_token;
+                    twitchLog("TOKEN REFRESHED");
+                    fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
+                        twitchLog("oauth saved!");
+                        res(this.oauth.token);
+                    });
+                }
+            }).catch(error=>{
+                rej(error);
+            });
+        });
+    };
+    
+    onBroadcasterAuthFailure(){
+        twitchLog("Broadcaster auth failed, refreshing...");
+        if(this.oauth.broadcaster_refreshToken == "" || this.oauth.broadcaster_refreshToken == null){return;}
+    
+        return new Promise((res, rej)=>{
+            var refreshParams = "?client_id="+this.oauth['client-id']+
+                "&client_secret="+this.oauth['client-secret']+
+                "&grant_type=refresh_token"+
+                "&refresh_token="+this.oauth.broadcaster_refreshToken;
+    
+            Axios.post('https://id.twitch.tv/oauth2/token'+refreshParams)
+            .then((response)=>{
+                
+                if(typeof response.data.access_token != "undefined"){
                     
-                    if(stringpos+limit > message.length){
-                        await chat.say(chatChannel, "["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
-                    }else{
-                        //twitchLog(stringpos, stringpos.limit);
-                        await chat.say(chatChannel, "["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+                    this.oauth.broadcaster_token = response.data.access_token;
+                    
+                    twitchLog("BROADCASTER TOKEN REFRESHED");
+                    fs.writeFile(backendDir+"/settings/twitch.json", JSON.stringify(this.oauth), "utf-8", (err, data)=>{
+                        twitchLog("broadcaster oauth saved!");
+                        res(this.oauth.broadcaster_token);
+                    });
+                }
+            }).catch(error=>{
+                rej(error);
+            });
+        })
+    };
+
+    async isStreamerLive(username){
+        if(this.loggedIn == false){return;}
+        if(username == null){username = this.homeChannel}
+        await this.getAppToken();
+
+        return new Promise((res, rej) => {
+            Axios({
+                url: "https://api.twitch.tv/helix/streams?user_login="+username,
+                method: 'GET',
+                headers:{
+                    "Authorization": "Bearer "+this.appToken,
+                    "Client-Id":this.oauth['client-id'],
+                    "user_login":username
+                }
+            })
+            .then((response)=>{
+                twitchLog(response.data.data[0] != null?username+" IS LIVE":username+" IS NOT LIVE");
+                if(response.data.data[0] != null){
+                    res(true);
+                }else{
+                    res(false);
+                }
+                
+            }).catch(error=>{
+                console.log(error);
+            });
+        })
+    }
+
+    startReoccuringMessage(){
+        if(this.loggedIn == false){return;}
+        let onlineEvent = this.getStreamOnlineEvent();
+        if(onlineEvent == null){twitchLog("No stream.online event for reoccuring mesage found."); return;}
+        if(onlineEvent.special.reoccuringmessage.message != "" ){
+            let reoccuringInterval = async function(){
+                try{
+                    let responseFunct = eval("() => {let count = "+JSON.stringify(this.reoccuringMessageCount)+"; "+onlineEvent.special.reoccuringmessage.message.replace(/\n/g, "")+"}");
+                    let response = await responseFunct();
+                    this.sayInChat(response);
+                    this.reoccuringMessageCount++;
+                }catch(e){
+                    this.sayInChat("The reoccuring message failed to send :( Check my logs to see what went wrong!");
+                    clearInterval(this.streamChatInterval);
+                }
+                
+            };
+            let reoccurTime = onlineEvent.special.reoccuringmessage.interval;
+            if(reoccurTime == null){reoccurTime = 15}
+
+            this.streamChatInterval = setInterval(reoccuringInterval.bind(this), reoccurTime*60*1000);
+        }
+    }
+
+    async getEventSubs(){
+        if(this.loggedIn == false){return;}
+        await this.getAppToken();
+        if(this.appToken ==""){
+            twitchLog("No app token found");
+            return;
+        }
+        let response = await Axios({
+            url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
+            method: 'GET',
+            headers:{
+                "Client-Id": this.oauth["client-id"],
+                "Authorization": " Bearer "+this.appToken,
+                "Content-Type": "application/json"
+            }
+        }).catch(error=>{
+            console.error(error);
+            return;
+        });
+        return response.data;
+    }
+
+    refreshEventSubs = async() =>{
+        if(this.loggedIn == false){return;}
+        let subs = await this.getEventSubs();
+        for(let s in subs.data){
+            await this.deleteEventSub(subs.data[s].id);
+        }
+        this.onEventFileSaved();
+    }
+
+    async deleteEventSub(id){
+        if(this.loggedIn == false){return;}
+        await Axios({
+            url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+id,
+            method: 'DELETE',
+            headers:{
+                "Client-Id": this.oauth["client-id"],
+                "Authorization": " Bearer "+this.appToken,
+                "Content-Type": "application/json"
+            }
+        }).catch(error=>{
+            console.error(error);
+            return;
+        });
+    }
+    
+    async initEventSub(eventType, bid){
+        if(this.loggedIn == false){return;}
+        
+        await this.getAppToken();
+        
+        if(bid == null){
+            await this.getBroadcasterID();
+            bid = this.broadcasterUserID;
+        }
+        
+        var condition = {};
+
+        if(!eventType.startsWith("channel.raid")){
+            condition = {"broadcaster_user_id":bid};
+            if(eventType == ("channel.follow") 
+            || eventType.startsWith("channel.guest_star") 
+            || eventType.startsWith("channel.shield_mode") 
+            || eventType.startsWith("channel.shoutout")){
+                condition.moderator_user_id = this.botUserID;
+            }
+        }else{
+            if(eventType.split("-")[1] == "receive"){
+                condition = {"to_broadcaster_user_id":bid};
+            }else{
+                condition = {"from_broadcaster_user_id":bid};
+            }
+            eventType = eventType.split("-")[0];
+        }
+
+        let version = "1";
+        if(eventType == "channel.follow" || eventType == "channel.update"){
+            version = "2";
+        }else if(eventType.startsWith("channel.guest_star")){
+            version = "beta";
+        }
+        
+        return new Promise((res, rej)=>{
+            
+            Axios({
+                url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
+                method: 'post',
+                headers:{
+                    "Client-ID":this.oauth["client-id"],
+                    "Authorization":"Bearer "+this.appToken,
+                    "Content-Type":"application/json"
+                },
+                data:{
+                    "type":eventType,
+                    "version": version,
+                    "condition":condition,
+                    "transport":{
+                        "method": "webhook",
+                        "callback":sconfig.network.external_http_url+"/webhooks/eventsub",
+                        "secret":"imasecretboi"
                     }
                 }
-            }else{
-                await chat.say(chatChannel,message)
-                .catch(e=>{
-                    twitchLog("CHAT ERROR", e);
-                    restartChat(message);
-                });
-            }
-        }
+            }).then(response => res("SUCCESS"))
+            .catch(error=>{
+                console.error(error);
+                res(error.response.data.message);
+            });
+        })
+        
+    };
     
-        global.chatSwitchChannels = async (newChannel, leaveMessage, joinMessage) => {
-            await this.validateChatbot();
-            if(leaveMessage != null && leaveMessage != ""){sayInChat(leaveMessage);}
-            await chat.disconnect();
-            homeChannel = newChannel;
-            if(joinMessage != null && joinMessage != ""){
-                runChat(joinMessage);
-            }else{
-                runChat();
-            }
-            
-        }
-    
-        global.disconnectChat = () => {
-            chat.disconnect();
-        }
+    streamChatInterval = null;
+    reoccuringMessageCount = Math.round(Math.random()*10);
 
-        global.joinChannel = async (channelname, joinmsg)=>{
-            await chat.join(channelname).catch(e=>{console.log(e)});
-            sayInChat(joinmsg, channelname);
-        }
-
-        global.leaveChannel = async (channelname, partmsg)=>{
-            sayInChat(partmsg, channelname);
-            await chat.part(channelname).catch(e=>{console.log(e)})
-        }
-    
-        global.restartChat = async (message) => {
-            twitchLog("Restarting Chat");
-            await this.validateChatbot();
-            runChat(message);
-        }
-    
-        global.chatIsFirstMessage = (message) => {
-            return message.tags["first-msg"] == true;
-        }
-    
-        global.chatIsReturningChatter = (message) => {
-            return message.tags["returning-chatter"] == true;
-        }
-    
-        global.chatIsMod = (message) => {
-            return message.tags.mod == true;
-        }
-    
-        global.chatIsSubscriber = (message) => {
-            return message.tags.subscriber == true;
-        }
-    
-        global.chatIsBroadcaster = (message) => {
-            return message.tags.badges?.broadcaster == true;
-        }
-
-        global.chatIsVIP = (message) => {
-            return message.tags.badges?.vip == true;
-        }
-    
-        global.getChatters = async (type) => {
-            const axios = require("axios");
-            let response = await axios.get("https://tmi.twitch.tv/group/user/"+homeChannel.substr(1)+"/chatters");
-            let chArray = [];
-            if(type == "all"){
-                for(let c in response.data.chatters){chArray = chArray.concat(response.data.chatters[c]);}
-            }else{
-                if(response.data.chatters[type] != null){
-                    chArray = response.data.chatters[type];
-                }
-            }
-            return chArray;
-        }
-    }
-
-    callBotAPI(url){
+    callBotAPI(url, postBody){
+        let method = postBody==null?"GET":"POST";
+        if(postBody == "DELETE"){method = "DELETE"}
+        if(postBody == "PATCH"){method = "PATCH"}
+        if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
                 url: url,
-                method: 'GET',
+                method: method,
                 headers:{
-                    "Client-Id":oauth["client-id"],
-                    "Authorization":"Bearer "+token,
+                    "Client-Id":this.oauth["client-id"],
+                    "Authorization":"Bearer "+this.oauth.token,
                     "Content-Type":"application/json"
-                }
+                },
+                body:postBody
             })
             .then(data => res(data))
             .catch(error=>{
@@ -1394,18 +1659,26 @@ class STwitch{
         })
     }
 
-    callAppAPI(url){
+    callAppAPI(url, postBody){
+        let method = postBody==null?"GET":"POST";
+        if(postBody == "DELETE"){method = "DELETE"}
+        if(postBody == "PATCH"){method = "PATCH"}
+        if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
                 url: url,
-                method: 'GET',
+                method: method,
                 headers:{
-                    "Client-Id":oauth["client-id"],
-                    "Authorization":"Bearer "+appToken,
+                    "Client-Id":this.oauth["client-id"],
+                    "Authorization":"Bearer "+this.appToken,
                     "Content-Type":"application/json"
-                }
+                },
+                body:postBody
             })
-            .then(data => res(data))
+            .then(data => {
+                console.log(data.data);
+                res(data.data)}
+                )
             .catch(error=>{
                 console.error(error);
                 rej(error);
@@ -1413,16 +1686,21 @@ class STwitch{
         })
     }
 
-    callBroadcasterAPI(url){
+    callBroadcasterAPI(url, postBody){
+        let method = postBody==null?"GET":"POST";
+        if(postBody == "DELETE"){method = "DELETE"}
+        if(postBody == "PATCH"){method = "PATCH"}
+        if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
                 url: url,
-                method: 'GET',
+                method: method,
                 headers:{
-                    "Client-Id":oauth["client-id"],
-                    "Authorization":"Bearer "+oauth.broadcaster_token,
+                    "Client-Id":this.oauth["client-id"],
+                    "Authorization":"Bearer "+this.oauth.broadcaster_token,
                     "Content-Type":"application/json"
-                }
+                },
+                body:postBody
             })
             .then(data => res(data))
             .catch(error=>{
@@ -1467,50 +1745,15 @@ class STwitch{
         }
     };
 
-	autoLogin(){
-        return new Promise(async (res, rej)=>{
-            if(token == "" || token == null){
-                twitchLog("No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens.");
-                rej("notoken");
-                return;
-            }
-            let botStatus = await this.validateChatbot();
-            
-            if(botStatus.status == "newtoken"){
-                oauth["token"] = botStatus.newtoken;
-            }else if(botStatus.status == "error"){
-                twitchLog("CHATBOT ERROR", botStatus.error);
-                return;
-            }
-    
-            if(oauth.broadcaster_refreshToken != "" && oauth.broadcaster_refreshToken != null){
-                let broadcasterStatus = await this.validateBroadcaster();
-                if(broadcasterStatus.status == "newtoken"){
-                    oauth["broadcaster_token"] = broadcasterStatus.newtoken;
-                }else if(broadcasterStatus.status == "error"){
-                    twitchLog("BROADCASTER ERROR", broadcasterStatus.error);
-                    return;
-                }
-            }
-
-            await getBotID();
-            await getBroadcasterID();
-            await getAppToken();
-    
-            runChat();
-            res("success");
-        })
-        
-	}
-
     async getChannelInfo(){
+        if(this.loggedIn == false){return;}
         return new Promise((res, rej) => {
             Axios({
-                url: "https://api.twitch.tv/helix/channels?broadcaster_id="+broadcasterUserID,
+                url: "https://api.twitch.tv/helix/channels?broadcaster_id="+this.broadcasterUserID,
                 method: 'GET',
                 headers:{
-                    "Authorization": "Bearer "+appToken,
-                    "Client-Id":clientId,
+                    "Authorization": "Bearer "+this.appToken,
+                    "Client-Id":this.oauth['client-id'],
                 }
             })
             .then((response)=>{
@@ -1526,23 +1769,26 @@ class STwitch{
         })
     }
 
-    getChannels(){
-        if(chat == null){return null;}
-        if(chat.readyState() == "OPEN"){
-            return chat.getChannels();
+    async getChannels(){
+        if(this.loggedIn == false){return;}
+        if(this.chat == null){return null;}
+        await this.validateChatbot();
+        if(this.chat.readyState() == "OPEN"){
+            
+            return this.chat.getChannels();
         }else{
             return null;
         }
     }
 
     getUserInfo(user){
-
+        if(this.loggedIn == false){return;}
 		return new Promise(async (res, rej)=>{
 			fetch("https://api.twitch.tv/helix/users?login="+user, {
 				method: 'GET',
 				headers:{
-					"Client-Id": oauth["client-id"],
-					"Authorization": " Bearer "+appToken,
+					"Client-Id": this.oauth["client-id"],
+					"Authorization": " Bearer "+this.appToken,
 					"Content-Type": "application/json"
 				}
 			})
@@ -1558,7 +1804,7 @@ class STwitch{
 	}
 
 	async validateBroadcaster(){
-		if(oauth.broadcaster_token == "" || oauth.broadcaster_token == null){
+		if(this.oauth.broadcaster_token == "" || this.oauth.broadcaster_token == null){
             twitchLog("No broadcaster auth saved. Authorizing on the Web UI saves your auth tokens for chat. If that's your broadcasting account, then go to the EventSub tab and click 'Save Current Oauth as Broadcaster'. You can have both pairs of tokens be the same. If you want a separate account for chat. Log in to twitch.tv as your bot account and authorize on the Web UI.");
             return;
         }
@@ -1568,17 +1814,17 @@ class STwitch{
                 url: 'https://id.twitch.tv/oauth2/validate',
                 method: 'get',
                 headers:{
-                    "Authorization": "Bearer "+oauth.broadcaster_token
+                    "Authorization": "Bearer "+this.oauth.broadcaster_token
                 }
             })
             .then((response)=>{
-                
+                this.homeChannel = response.data.login;
                 twitchLog("Validated broadcaster: "+response.data.login+"!");
                 res("OK");
             }).catch(async error=>{
                 
                 if(error.response?.status == 401){
-                    onBroadcasterAuthFailure().then(async newtoken=>{
+                    this.onBroadcasterAuthFailure().then(async newtoken=>{
                         await this.validateBroadcaster();
                         res({status:"newtoken",newtoken:newtoken});
                     });
@@ -1591,7 +1837,7 @@ class STwitch{
 	}
 
     async validateChatbot(){
-        if(oauth.refreshToken == "" || oauth.refreshToken == null){
+        if(this.oauth.refreshToken == "" || this.oauth.refreshToken == null){
             twitchLog("No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens. If this is a fresh Spooder, you'll want to log in to twitch.tv as the account you use to broadcast first. Then go to the EventSub tab to copy your auth tokens to broadcaster.");
             return;
         }
@@ -1600,17 +1846,17 @@ class STwitch{
                 url: 'https://id.twitch.tv/oauth2/validate',
                 method: 'get',
                 headers:{
-                    "Authorization": "Bearer "+oauth.token
+                    "Authorization": "Bearer "+this.oauth.token
                 }
             })
             .then((response)=>{
-                botUsername = response.data.login;
+                this.botUsername = response.data.login;
                 twitchLog("Validated Chatbot: "+response.data.login+"!");
                 res({status:"OK"});
             }).catch(error=>{
                 console.error("ERROR",error);
                 if(error.response?.status == 401){
-                    onAuthenticationFailure().then(async newtoken=>{
+                    this.onAuthenticationFailure().then(async newtoken=>{
                         await this.validateChatbot();
                         res({status:"newtoken",newtoken:newtoken});
                     });

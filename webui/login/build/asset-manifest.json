@@ -1,0 +1,18 @@
+{
+  "files": {
+    "main.css": "/login/static/css/main.832bfec5.css",
+    "main.js": "/login/static/js/main.5296699c.js",
+    "static/js/787.0228418a.chunk.js": "/login/static/js/787.0228418a.chunk.js",
+    "static/media/discord-icon.svg": "/login/static/media/discord-icon.6de625625a9a4cb4795c3e286d55d56f.svg",
+    "static/media/DashedCircle.svg": "/login/static/media/DashedCircle.4a4f7572a9622f85d384c399cf6d9622.svg",
+    "static/media/twitch-icon.svg": "/login/static/media/twitch-icon.7075e9e05e6411561593feea5a0bb505.svg",
+    "index.html": "/login/index.html",
+    "main.832bfec5.css.map": "/login/static/css/main.832bfec5.css.map",
+    "main.5296699c.js.map": "/login/static/js/main.5296699c.js.map",
+    "787.0228418a.chunk.js.map": "/login/static/js/787.0228418a.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.832bfec5.css",
+    "static/js/main.5296699c.js"
+  ]
+}

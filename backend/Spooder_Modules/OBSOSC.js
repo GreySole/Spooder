@@ -305,13 +305,13 @@ class OBSOSC{
                                     if(objects[o] == "stream"){
                                         finalStatusObj[objects[o]] = await obsClient.call("GetStreamStatus");
                                         if(finalStatusObj[objects[o]].outputReconnecting == true && this.streamReconnecting == false){
-                                            restartChat(this.settings.disconnectAlert?"disconnected":null);
+                                            twitch.restartChat(this.settings.disconnectAlert?"disconnected":null);
                                             this.streamReconnecting = true;
                                             this.streamBleeding = false;
                                             this.skippedFrames = 0;
                                         }else if(finalStatusObj[objects[o]].outputReconnecting == false && this.streamReconnecting == true){
                                             this.streamReconnecting = false;
-                                            restartChat(this.settings.disconnectAlert?"reconnect":null);
+                                            twitch.restartChat(this.settings.disconnectAlert?"reconnect":null);
                                         }
 
                                         if(this.settings.frameDropAlert){

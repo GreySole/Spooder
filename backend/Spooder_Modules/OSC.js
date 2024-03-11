@@ -106,7 +106,7 @@ class SOSC {
         }else if(Array.isArray(oscValue)){
             valueType = "array";
         }
-        //console.log(valueType, oscValue);
+        
         this.sendToMonitor("udp", "send", {dest:dest, types:valueType, address:address, data:oscValue});
         if(dest == -1){return;}
         else if(dest == -2){
@@ -222,12 +222,6 @@ class SOSC {
         osc.on("*", message =>{
             this.sendToMonitor("udp", "receive", {types:message.types, address:message.address, data:message.args});
 
-            /*for(let o in osctunnels){
-                if(message.address.startsWith(osctunnels[o]["addressFrom"].replace("*",""))){
-                    return;
-                }
-            }*/
-
             for(let e in events){
                 if(events[e].triggers.osc?.enabled == true){
                     message.eventType = "osc";
@@ -240,7 +234,7 @@ class SOSC {
                             
                             if(check != null){
                                 if(runCommands(check.message, e, check.extra) == "alreadyon"){
-                                    sayAlreadyOn(e);
+                                    twitch.sayAlreadyOn(e);
                                 }
                             }
                         }
@@ -331,16 +325,30 @@ class SOSC {
             }
 
             if(address[1] == "mod"){
+                if(activeUsers[message.args[0]] != "local"){
+                    if(activeUsers[message.args[0]] == null 
+                        || activeUsers[message.args[0]] != address[2]
+                        || (!users.trusted_users.permissions[activeUsers[message.args[0]]]?.includes("m")
+                        && !users.trusted_users.permissions[activeUsers[message.args[0]]]?.includes("a"))){
+                        console.log("Unauthorized mod OSC!", address[2], message.args[0]);
+                        return;
+                    }
+                }
                 if(address[3] == "lock"){
+                    let lockString = message.args[1] === true ? "lock":"unlock";
                     if(address[4] == "event"){
-                        lockEvent(address[2], message.args[0], address[5]);
-                        
+                        lockEvent(message.args[1], address[5]);
+                        sayInChat(address[2]+ " "+lockString+"ed "+address[5]);
                     }else if(address[4] == "plugin"){
+
+                        let pluginName = activePlugins[address[5]]?.name;
                         
                         if(address[6] == null){
-                            lockPlugin(address[2], message.args[0], address[5])
+                            lockPlugin(message.args[1], address[5])
+                            sayInChat(address[2]+ " "+lockString+"ed "+pluginName);
                         }else{
-                            lockPlugin(address[2], message.args[0], address[5], address[6]);
+                            lockPlugin(message.args[1], address[5], address[6]);
+                            sayInChat(address[2]+ " "+lockString+"ed "+address[6]+" in "+apluginName);
                         }
                         
                     }
@@ -349,11 +357,11 @@ class SOSC {
                     fs.writeFile(backendDir+"/settings/mod-blacklist.json", JSON.stringify(modlocks.blacklist), "utf-8", (err, data)=>{
 						oscLog("Mod file saved!");
 					});
-                    sayInChat(address[2]+(message.args[0]==1?" blacklisted ":" unblacklisted ")+address[4]);
+                    sayInChat(address[2]+(message.args[1]==1?" blacklisted ":" unblacklisted ")+address[4]);
                 }else if(address[3] == "spamguard"){
                     setSpamGuard(address[4]);
                     
-                    sayInChat(address[2]+" turned "+(message.args[0]==1?" on ":" off ")+"Spam Guard");
+                    sayInChat(address[2]+" turned "+(message.args[1]==1?" on ":" off ")+"Spam Guard");
                 }else if(address[3] == "get"){
                     if(address[4] == "all"){
                         sendToTCP("/mod/"+address[2]+"/get", 
@@ -366,14 +374,14 @@ class SOSC {
                 }else if(address[3] == "save"){
                     if(address[4] == "theme"){
                         if(themes.modui[address[2]] == null){themes.modui[address[2]] = {}}
-                        themes.modui[address[2]] = JSON.parse(message.args[0]);
+                        themes.modui[address[2]] = JSON.parse(message.args[1]);
                         fs.writeFile(backendDir+"/settings/themes.json", JSON.stringify(themes), "utf-8", (err, data)=>{
                             oscLog("Themes saved!");
                         });
-                        sendToTCP("/mod/"+address[2]+"/save/theme", message.args[0]);
+                        sendToTCP("/mod/"+address[2]+"/save/theme", message.args[1]);
                     }
                 }
-                sendToTCP(message.address, message.args[0]);
+                sendToTCP(message.address, message.args[1]);
                 return;
             }
 

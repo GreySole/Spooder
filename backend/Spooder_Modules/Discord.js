@@ -9,7 +9,9 @@ class SDiscord{
 
     constructor(router){
         router.post("/discord/saveDiscordConfig", async(req, res) => {
-            fs.writeFile(backendDir+"/settings/discord.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
+            
+            Object.assign(this.config, req.body);
+            fs.writeFile(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8", (err, data)=>{
                 if(this.loggedIn == false && req.body.token != null && req.body.token != ""){
                     this.autoLogin();
                     res.send({status:"SAVED! Logging into Discord..."});
@@ -21,6 +23,7 @@ class SDiscord{
         });
 
         router.get("/discord/get_channels", async(req, res) => {
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             let guilds = this.getGuilds();
             res.send(guilds);
         });
@@ -36,7 +39,22 @@ class SDiscord{
                 res.send({userInfo:user});
             }
         })
-        this.config = fs.existsSync(backendDir+"/settings/discord.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/discord.json",{encoding:"utf-8"})):null;
+        this.config = fs.existsSync(backendDir+"/settings/discord.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/discord.json",{encoding:"utf-8"}))
+        :{
+            "master": "",
+            "token": "",
+            "clientId": "",
+            "autosendngrok": {
+                "enabled": false,
+                "destguild": "",
+                "destchannel": ""
+            },
+            "handlers": {
+            },
+            "commands": [],
+            "sharenotif": false,
+            "crashreport": false
+        };
     }
     config = null;
     client = null;
@@ -46,43 +64,54 @@ class SDiscord{
     audioPlayer = null;
     audioReceiver = null;
     commands = null;
+    lastMessage = null;
 
     autoLogin(){
         
-        const {SlashCommandBuilder, Collection, REST, Routes} = require("discord.js");
+        const {Collection} = require("discord.js");
         this.commands = new Collection();
         
         return new Promise(async (res, rej) => {
 
             let discordInfo = this.config;
             
-            if(discordInfo == null){
-                discordLog("No Discord token. You can set this in the Config tab.");
-                rej("notoken");
-                return;
-            }
-        
-            if(discordInfo.commands){
-                discordLog("FOUND COMMANDS");
-                let dCommands = discordInfo.commands;
-                for(let d in dCommands){
-                    this.commands.set(dCommands[d].name, dCommands[d]);
-                }
-
-                console.log(`Started refreshing ${this.commands.length} application (/) commands.`);
-                const rest = new REST({version:"10"}).setToken(discordInfo.token);
-                const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:this.commands});
-
-                discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
-            }
-            
             if(discordInfo.token != "" && discordInfo.token != null){
                 discordLog("STARTING DISCORD CLIENT");
                 await this.startClient(discordInfo.token).catch(e=>{rej(e)});
                 res("success");
+            }else{
+                discordLog("No Discord token. You can set this in the Config tab.");
+                rej("notoken");
+                return;
             }
-        })
-        
+        });
+    }
+
+    async getCommands(){
+        const {REST, Routes} = require("discord.js");
+        let discordInfo = this.config;
+        if(discordInfo.commands){
+            discordLog("FOUND COMMANDS");
+            let dCommands = discordInfo.commands;
+            for(let d in dCommands){
+                this.commands.set(dCommands[d].name, dCommands[d]);
+            }   
+        }
+        for(let p in activePlugins){
+            if(activePlugins[p].dSlashCommands != null){
+                for(let d in activePlugins[p].dSlashCommands){
+                    console.log("FOUND COMMAND", activePlugins[p].dSlashCommands[d].name);
+                    this.commands.set(activePlugins[p].dSlashCommands[d].name, activePlugins[p].dSlashCommands[d]);
+                }
+            }
+        }
+        if(this.commands.size > 0){
+            console.log(`Started refreshing ${this.commands.length} application (/) commands.`);
+            const rest = new REST({version:"10"}).setToken(discordInfo.token);
+            const data = await rest.put(Routes.applicationCommands(discordInfo.clientId), {body:this.commands});
+
+            discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
+        }
     }
 
     startClient(token){
@@ -107,70 +136,134 @@ class SDiscord{
                 
                 res("success");
             });
-            client.on(Events.InteractionCreate, async interaction => {
-                //discordLog("DISCORD INTERACTION", interaction);
-                if(!interaction.isChatInputCommand()){return;}
-    
-                let command = this.commands.get(interaction.commandName);
-    
-                if(!command){
-                    console.error("Not a valid command");
-                    return;
-                }
-    
-                try{
-                    this.callPlugins("interaction", interaction);
-                }catch(error){
-                    console.error(error);
-                    await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
-                }
-            });
-            client.on(Events.MessageCreate, async message=>{
-                if(message.author.id == client.user.id){return;}
-                
-                if(message.guildId == null){
-                    discordLog("Discord PM", message.author.username, message.content, message.attachments);
-                }else{
-                    discordLog("Discord", this.getGuild(message.guildId).name, message.author.username, message.content);
-
-                    if(message.mentions.users.first()?.id == this.client.user.id || message.mentions.roles.first()?.tags?.botId == this.client.user.id){
-                        let command = message.content.toLowerCase().split(" ");
-                        if(command.length >= 2){
-                            if(command[1] == "trust"){
-                                if(message.author.id == this.config.master){
-                                    console.log(message.mentions.users.at(1));
-                                    let trustUser = message.mentions.users.at(1);
-                                    if(this.config.handlers == null){this.config.handlers = {}}
-                                    this.config.handlers[trustUser.id] = {id:trustUser.id};
-                                    fs.writeFileSync(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8");
-                                    message.react("👍");
-                                    this.sendDM(trustUser.id, "My master has entrusted you to handle me. That means you can use my moderation commands in any server I'm in!");
-                                }else{
-                                    let masterUser = await this.findUser(this.config.master);
-                                    message.reply("Only my master "+masterUser.username+" can assign trusted handlers");
-                                }
-                            }
-                        }
+            if(initMode == false){
+                client.on(Events.InteractionCreate, async interaction => {
+                    //discordLog("DISCORD INTERACTION", interaction);
+                    if(!interaction.isChatInputCommand()){return;}
+        
+                    let command = this.commands.get(interaction.commandName);
+        
+                    if(!command){
+                        console.error("Not a valid command");
+                        return;
+                    }
+        
+                    try{
+                        this.callPlugins("interaction", interaction);
+                    }catch(error){
+                        console.error(error);
+                        await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+                    }
+                });
+                client.on(Events.MessageCreate, async message=>{
+                    if(message.author.id == client.user.id){return;}
+                    this.lastMessage = {
+                        author: {
+                            username: message.author.username,
+                            id:message.author.id,
+                            guild:message.guildId!=null?this.getGuild(message.guildId)?.name:"DM",
+                            channel:message.guildId!=null?this.getChannel(message.channelId, message.guildId)?.name:"DM"
+                        },
+                        content:message.content
                     }
 
-                    if(message.content.toLowerCase() == "!join"){
-                        if(message.channel.type == ChannelType.GuildVoice){
-                            this.joinVoiceChannel(message.guildId, message.channelId);
+                    if(message.guildId == null){
+                        discordLog("Discord PM", message.author.username, message.content, message.attachments);
+                        message.isMentioned = true;
+                        if(message.mentions.users.first()?.id != this.client.user.id && message.mentions.roles.first()?.tags?.botId != this.client.user.id){
+                            message.content = "DM "+message.content;
+                        }
+                        this.processTagCommand(message);
+                    }else{
+                        discordLog("Discord", this.getGuild(message.guildId).name, this.getChannel(message.channelId, message.guildId).name, message.author.username, message.content);
+
+                        if(message.content.startsWith("<@"+this.client.user.id+">")){
+                            message.isMentioned = true;
+                            this.processTagCommand(message);
+                        }
+
+                        if(message.content.toLowerCase() == "!join"){
+                            if(message.channel.type == ChannelType.GuildVoice){
+                                this.joinVoiceChannel(message.guildId, message.channelId);
+                                return;
+                            }
+                        }
+
+                        if(message.content.toLowerCase() == "!leave"){
+                            this.leaveVoiceChannel();
                             return;
                         }
                     }
 
-                    if(message.content.toLowerCase() == "!leave"){
-                        this.leaveVoiceChannel();
-                        return;
-                    }
-                }
-
-                this.callPlugins("message", message);
-            })
+                    this.callPlugins("message", message);
+                    
+                })
+            }
             client.login(token);
         })
         
+    }
+
+    async processTagCommand(message){
+        let command = message.content.toLowerCase().split(" ");
+        if(command.length >= 2){
+            if(command[1] == "trust"){
+                if(message.author.id == this.config.master){
+                    console.log(message.mentions.users.at(1));
+                    let trustUser = message.mentions.users.at(1);
+                    if(this.config.handlers == null){this.config.handlers = {}}
+                    this.config.handlers[trustUser.id] = {id:trustUser.id};
+                    fs.writeFileSync(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8");
+                    message.react("👍");
+                    this.sendDM(trustUser.id, "My master has entrusted you to handle me. That means you can use my moderation commands in any server I'm in!");
+                }else{
+                    let masterUser = await this.findUser(this.config.master);
+                    message.reply("Only my master "+masterUser.username+" can assign trusted handlers");
+                }
+            }else if(command[1] == "tell"){
+                if(message.author.id == this.config.master){
+                    let channels = await twitch.getChannels();
+
+                    if(shares[command?.[2]] != null){
+                        if(channels.includes("#"+command[2])){
+                            sayInChat(message.content.substring((command[0]+" "+command[1]+" "+command[2]+" ").length), "twitch", command[2]);
+                        }else{
+                            message.reply(command[2]+"'s share isn't active.");
+                        }
+                    }else{
+                        message.reply(command[2]+" is not a shared Twitch user.");
+                    }
+                }
+            }else if(command[1] == "share"){
+                
+                if(message.author.id == this.config.master){
+                    let channels = await twitch.getChannels();
+                    if(shares[command?.[2]] != null){
+                        let isSharing = channels.includes("#"+command[2]);
+                        if(command?.[3] == "start"){
+                            if(isSharing == true){
+                                message.reply("Share is already running.");
+                                return;
+                            }
+                            webUI.setShare(command[2], true);
+                            message.reply("Share started for "+command[2]+"!");
+                        }else if(command?.[3] == "stop"){
+                            if(isSharing == false){
+                                message.reply("Share is not running.");
+                                return;
+                            }
+                            webUI.setShare(command[2], false);
+                            message.reply("Share stopped for "+command[2]+"!");
+                        }else{
+                            message.reply(command[2]+"'s share is "+(isSharing==true?"running":"not running")+".");
+                        }
+                        
+                    }else{
+                        message.reply(command[2]+" is not a shared Twitch user.");
+                    }
+                }
+            }
+        }
     }
 
     callPlugins(type, data){
@@ -209,7 +302,7 @@ class SDiscord{
             adapterCreator: targetServer.voiceAdapterCreator //voice adapter creator
         });
         
-        this.callPlugins("voice", {event:"join", members:this.getChannel(channelId, guildId).members});
+        this.callPlugins("voice", {event:"join", guildId:guildId, channelId:channelId, members:this.getChannel(channelId, guildId).members});
 
         this.voiceChannel.receiver.speaking.on('start', (userId) => {
             //actions here
@@ -334,11 +427,50 @@ class SDiscord{
         return this.client.users.fetch(userId);
     }
 
+    chopMessage(message){
+        let returnArray = [];
+        if(message.length >= 2000){
+            let limit = 2000;
+            let totalMessages = Math.ceil(message.length/limit);
+            
+            for(let stringpos=0; stringpos<message.length; stringpos+=limit){
+                
+                if(stringpos+limit > message.length){
+                    returnArray.push("["+totalMessages+"/"+totalMessages+"] "+message.substring(stringpos, message.length));
+                }else{
+                    returnArray.push("["+(Math.round((stringpos+limit)/limit)+"/"+totalMessages+"] "+message.substring(stringpos, stringpos+limit)));
+                }
+            }
+        }else{
+            returnArray.push(message);
+        }
+        return returnArray;
+    }
+
     sendDM(userId, message){
         if(!this.loggedIn){return null;}
-        this.findUser(userId)
-        .then(user => {
-            user.send(message);
+        let msgs = this.chopMessage(message);
+        return new Promise((res, rej) => {
+            this.findUser(userId)
+            .then(user => {
+                for(let m in msgs){
+                    user.send(msgs[m])
+                }
+                res("OK");
+            }).catch(e=>{
+                rej(e);
+            })
+        })
+    }
+
+    sendInteraction(userId, message){
+        return new Promise((res, rej) => {
+            if(!this.loggedIn){return null;}
+            this.findUser(userId)
+            .then(user => {
+                res(user.send(message));
+            })
+            .catch(e=>rej(e))
         })
     }
 
@@ -400,6 +532,10 @@ class SDiscord{
         targetChannel.send(message);
     }
 
+    makeUserMentionString(id){
+        return "<@" + id + "> ";
+    }
+
     makeLinkButton(label, url){
         const {ButtonStyle, ButtonBuilder, ActionRowBuilder} = require("discord.js");
         const button = new ButtonBuilder()
@@ -408,6 +544,21 @@ class SDiscord{
         .setStyle(ButtonStyle.Link);
         const row = new ActionRowBuilder()
 			.addComponents(button);
+        return row;
+    }
+
+    makeConfirmCancelButtons(confirmLabel, cancelLabel){
+        const {ButtonStyle, ButtonBuilder, ActionRowBuilder} = require("discord.js");
+        const confirmButton = new ButtonBuilder()
+        .setCustomId('confirm')
+        .setLabel(confirmLabel)
+        .setStyle(ButtonStyle.Primary);
+        const cancelButton = new ButtonBuilder()
+        .setCustomId('cancel')
+        .setLabel(cancelLabel)
+        .setStyle(ButtonStyle.Danger);
+        const row = new ActionRowBuilder()
+			.addComponents(confirmButton, cancelButton);
         return row;
     }
 }

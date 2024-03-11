@@ -2,8 +2,10 @@ const Initializer = require("./backend/Spooder_Modules/Init.js");
 const WebUI = require("./backend/Spooder_Modules/WebUI.js");
 const SOSC = require("./backend/Spooder_Modules/OSC.js");
 
+global.newVersionAvailable = false;
 global.devMode = process.argv.length>2?process.argv[2] == "-d":false;
-var initMode = process.argv.length>2?process.argv[2] == "-i":false;
+global.initMode = process.argv.length>2?process.argv[2] == "-i":false;
+global.safeMode = process.argv.length>2?process.argv[2] == "-e":false;
 var noAutoLogin = process.argv.length>2?process.argv[2] == "-a":false;
 
 var spooderLog = (...content) => {
@@ -19,6 +21,68 @@ global.frontendDir = __dirname+"/webui";
 const fs = require('fs-extra');
 const path = require('path');
 
+let logDir = path.join(backendDir, "log");
+
+if(!fs.existsSync(logDir)){
+	fs.mkdirSync(logDir);
+}
+
+if(!fs.existsSync(path.join(backendDir, "settings", "config.json"))){
+	initMode = true;
+}
+
+
+let errorLogPath = path.join(logDir, "error.json");
+let errorLog = fs.existsSync(errorLogPath)?JSON.parse(fs.readFileSync(errorLogPath, {encoding:"utf-8"})):{
+	crashed:false,
+	log:null
+};
+
+global.twitch = null;
+global.discord = null;
+global.youtube = null;
+
+process.on('uncaughtException', function(err){
+	let lastTwitch = null;
+	let lastDiscord = null;
+	if(twitch != null){
+		lastTwitch = twitch.lastMesage;
+	}
+	if(discord != null){
+		lastDiscord = discord.lastMessage;
+	}
+	errorLog.log = {
+		time:Date.now(),
+		stack:err.stack,
+		lastTwitch:lastTwitch,
+		lastDiscord:lastDiscord
+	}
+	console.error(err);
+	process.exit(1);
+});
+
+process.on('exit', function(){
+	if(process.exitCode == 1){
+		errorLog.crashed = true;
+		fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
+	}
+});
+
+global.logToFile = (filename, message, maxlines) => {
+	let logDir = path.join(backendDir, "log");
+	let filePath = path.join(logDir, filename);
+
+	if(!fs.existsSync(logDir)){
+		fs.mkdirSync(logDir);
+	}
+
+	let logFile = fs.existsSync(filePath)?fs.readFileSync(filePath, {encoding:"utf-8"}):"";
+	if(logFile.split("\n").length >= maxlines){
+		logFile = logFile.substring(logFile.indexOf("\n", 1));
+	}
+	logFile += message+"\n";
+	fs.writeFileSync(filePath, logFile);
+}
 
 let settingsDir = path.join(backendDir, "settings");
 
@@ -26,13 +90,12 @@ if(!fs.existsSync(settingsDir)){
 	fs.mkdirSync(settingsDir);
 }
 
-global.oauth = {};
 global.sconfig = {};
 global.osctunnels = {};
 global.eventsubs = {};
 global.events = {};
 global.eventGroups = ["Default"];
-global.modData = {};
+global.users = {};
 global.modlocks = {
 	lockdown:0,
 	spamguard:0,
@@ -68,20 +131,19 @@ global.shares = {};
 global.refreshFiles = () => {
 
 	let settingsFiles = {
-		"oauth":"oauth.json",
 		"sconfig":"config.json",
 		"events":"commands.json",
-		"eventsubs":"eventsub.json",
-		"modData":"mod.json",
 		"osctunnels":"osc-tunnels.json",
 		"themes":"themes.json",
 		"eventstorage":"eventstorage.json",
-		"shares":"shares.json"
+		"plugins":"plugins.json",
+		"shares":"shares.json",
+		"users":"users.json"
 	};
 
 	for(let s in settingsFiles){
 		try{
-			var settingFile = fs.readFileSync(backendDir+"/settings/"+settingsFiles[s],{encoding:'utf8'});
+			let settingFile = fs.readFileSync(backendDir+"/settings/"+settingsFiles[s],{encoding:'utf8'});
 			switch(s){
 				case "events":
 					let eventsObj = JSON.parse(settingFile);
@@ -100,9 +162,13 @@ global.refreshFiles = () => {
 				let newFile = {};
 				if(s == "events"){
 					newFile = {events:{}, groups:["Default"]};
-				}else if(s == "modData"){
+				}else if(s == "users"){
 					newFile = {
-						"trusted_users": {},
+						"trusted_users": {
+							"permissions":{},
+							"twitch":{},
+							"discord":{}
+						},
 						"trusted_users_pw": {}
 					};
 				}else if(s == "themes"){
@@ -116,34 +182,51 @@ global.refreshFiles = () => {
 							"fangleft": " ",
 							"fangright": " ",
 							"mouth": "\u03c9",
+							"bodyleft":"(",
+							"bodyright":")",
+							"shortlegleft":"/\\",
+							"longlegleft":"/╲",
+							"shortlegright":"/\\",
+							"longlegright":"╱\\",
 							"colors": {
-								"bigeyeleft": "white",
-								"bigeyeright": "white",
-								"littleeyeleft": "white",
-								"littleeyeright": "white",
-								"fangleft": "white",
-								"fangright": "white",
-								"mouth": "white"
+								"bigeyeleft": "#FFFFFF",
+								"bigeyeright": "#FFFFFF",
+								"littleeyeleft": "#FFFFFF",
+								"littleeyeright": "#FFFFFF",
+								"fangleft": "#FFFFFF",
+								"fangright": "#FFFFFF",
+								"mouth": "#FFFFFF",
+								"bodyleft":"#FFFFFF",
+								"bodyright":"#FFFFFF",
+								"shortlegleft":"#FFFFFF",
+								"shortlegright":"#FFFFFF",
+								"longlegleft":"#FFFFFF",
+								"longlegright":"#FFFFFF"
 							}
 						},
 						modui:{}
 					};
 				}
-				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], JSON.stringify(newFile), "utf-8", 
+
+				let newFileString = JSON.stringify(newFile);
+				if(newFileString == ""){
+					newFileString = "{}";
+				}
+				if(s == "events"){
+					events = newFile.events;
+					eventGroups = newFile.groups;
+				}else{
+					global[s] = JSON.parse(newFileString);
+				}
+				
+				fs.writeFile(backendDir+"/settings/"+settingsFiles[s], newFileString, "utf-8", 
 				(err, data)=>{
-					spooderLog(settingsFiles[s]+" not found. New file created.");
+					spooderLog(settingsFiles[s]+" not found. New file created.", global.s);
 				});
 			}else{
 				console.error(e);
 				console.error("There's a problem with the "+s+" file.");
 			}
-		}
-
-		if(oauth['client-id'] == "editme" || oauth['client-secret'] == "editme" ||
-			oauth['client-id'] == "" || oauth['client-secret'] == "" ||
-			oauth['client-id'] == null || oauth['client-secret'] == null){
-				console.error("No Twitch authentication credentials found. \n\
-				Create an app on dev.twitch.tv and run 'npm run init' to fill in your client id and secret.");
 		}
 	}
 
@@ -219,25 +302,31 @@ if(initMode){
 	
 	activeEvents = {};
 
-	global.activeMods = {};
+	global.activeUsers = {
+		pending:{}
+	};
+
+	global.activePlatforms = {};
 
 	global.udpClients = sconfig.network["udp_clients"];
 	global.activePlugins = {};
 
 	const Discord = require("./backend/Spooder_Modules/Discord");
 	const Twitch = require("./backend/Spooder_Modules/Twitch");
+	const YouTube = require("./backend/Spooder_Modules/YouTube");
 	const OBS = require("./backend/Spooder_Modules/OBSOSC");
 
 	global.webUI = new WebUI();
 	
 	webUI.startServer(devMode);
 	global.twitch = new Twitch(webUI.router, webUI.publicRouter);
+	global.youtube = new YouTube(webUI.router, webUI.publicRouter);
 	global.discord = new Discord(webUI.router);
 	global.obs = new OBS(webUI.router);
 	webUI.onNgrokStart = function(){
 		twitch.refreshEventSubs();
 		
-		if(discord.loggedIn && discord.config?.autosendngrok.enabled){
+		if(discord.loggedIn && discord.config.autosendngrok?.enabled){
 			spooderLog("SENDING NGROK TO MODS");
 			discord.sendToChannel(discord.config.autosendngrok.destguild, discord.config.autosendngrok.destchannel, sconfig.network.external_http_url+"/mod");
 		}
@@ -250,17 +339,46 @@ if(initMode){
 		global.sendToTCP = (address, oscValue, log)=>{sosc.sendToTCP(address, oscValue, log)};
 		global.sendToUDP = (dest, address, oscValue)=>{sosc.sendToUDP(dest, address, oscValue)};
 		if(!noAutoLogin){
-			twitch.autoLogin().catch(e=>{});
+			twitch.autoLogin()
+			.then(status => {
+				if(status == "success"){
+					activePlatforms["twitch"] = twitch;
+				}
+			})
+			.catch(e=>{});
+
+			/*youtube.autoLogin()
+			.then(status => {
+				if(status == "success"){
+					activePlatforms["youtube"] = youtube;
+				}
+			})
+			.catch(e=>{});*/
 			
         	obs.autoLogin().catch(e=>{});
 			await discord.autoLogin().catch(e=>{});
+
+			if(discord.loggedIn == true){
+				console.log("SET ON PLUGINS LOADED");
+				webUI.onPluginsLoaded = ()=>{discord.getCommands();}
+			
+				if(errorLog.crashed == true && discord.config.crashreport == true){
+					discord.sendDM(discord.config.master, "I died, this is what happened: \n"
+					+errorLog.log.stack
+					+"\n Last Twitch Message: "+errorLog.log.lastTwitch?.username+": "+errorLog.log.lastTwitch?.message
+					+"\n Last Discord Message: "+errorLog.log.lastDiscord?.author.username+": "+errorLog.log.lastDiscord?.content);
+					errorLog.crashed = false;
+					fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
+				}
+			}
 		}
 		
 		if(sconfig.network.externalhandle == "ngrok" && sconfig.network.ngrokauthtoken != ""){
 			webUI.startNgrok();
 		}
-
-		webUI.getPlugins();
+		if(safeMode == false){
+			webUI.getPlugins();
+		}
 	}
 
 	
@@ -277,7 +395,15 @@ if(initMode){
 		}
 	}
 
-	global.lockEvent = (moduser, modCommand, target) =>{
+	global.isEventLocked = (target) => {
+		return modlocks.events[target] == 1;
+	}
+
+	global.isPluginLocked = (target) => {
+		return modlocks.plugins[target] == 1;
+	}
+
+	global.lockEvent = (modCommand, target) =>{
 		if(typeof modCommand == "number"){
 			modCommand = modCommand == 1?"lock":"unlock";
 		}else if(typeof modCommand == "boolean"){
@@ -287,12 +413,11 @@ if(initMode){
 		for(let e in events){
 			if(target == "all"){
 				modlocks.events[e] = modCommand=="lock"?1:0;
-				sendToTCP("/mod/"+moduser+"/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
+				sendToTCP("/mod/local/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
 				eventLocked = true;
 			}else if(e==target){
 				modlocks.events[e] = modCommand=="lock"?1:0;
-				sendToTCP("/mod/"+moduser+"/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
-				sayInChat(moduser+" "+(modCommand=="lock"?"locked":"unlocked")+" "+target);
+				sendToTCP("/mod/local/"+modCommand+"/event/"+e, modCommand=="lock"?1:0);
 				eventLocked = true;
 				break;
 			}
@@ -300,7 +425,7 @@ if(initMode){
 		return eventLocked;
 	}
 
-	global.lockPlugin = (moduser, modCommand, plugin, target)=>{
+	global.lockPlugin = (modCommand, plugin, target)=>{
 		if(typeof modCommand == "number"){
 			modCommand = modCommand == 1?"lock":"unlock";
 		}else if(typeof modCommand == "boolean"){
@@ -311,22 +436,20 @@ if(initMode){
 			if(plugin == "all"){
 				
 				modlocks.plugins[p] = modCommand=="lock"?1:0;
-				sendToTCP("/mod/"+moduser+"/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
+				sendToTCP("/mod/local/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
 				pluginLocked = true;
 			}else if(p == plugin){
 				if(modlocks.plugins[p] == null){modlocks.plugins[p] = {}}
 				if(target == null){
 					modlocks.plugins[p] = modCommand=="lock"?1:0;
-					sendToTCP("/mod/"+moduser+"/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
-					sayInChat(moduser+" "+(modCommand=="lock"?"locked":"unlocked")+" "+plugin);
+					sendToTCP("/mod/local/"+modCommand+"/plugin/"+p, modCommand=="lock"?1:0);
 					pluginLocked = true;
 					break;
 				}else{
 					if(activePlugins[p].modmap){
 						if(activePlugins[p].modmap.locks){
 							activePlugins[p].modmap.locks[target] = modCommand=="lock"?1:0;
-							sendToTCP("/mod/"+moduser+"/"+modCommand+"/plugin/"+p+"/"+target, modCommand=="lock"?1:0);
-							sayInChat(moduser+" "+(modCommand=="lock"?"locked":"unlocked")+" "+target+" in "+plugin);
+							sendToTCP("/mod/local/"+modCommand+"/plugin/"+p+"/"+target, modCommand=="lock"?1:0);
 							pluginLocked = true;
 							break;
 						}
@@ -351,7 +474,7 @@ if(initMode){
 				eventCount++;
 			}
 
-			sayInChat(eventCount+" events have been stopped!");
+			return eventCount+" events have been stopped!";
 		}else if(typeof activeEvents[cEvent] != "undefined"){
 			for(e in activeEvents[cEvent]){
 				if(activeEvents[cEvent][e] != "event"){
@@ -360,9 +483,10 @@ if(initMode){
 				}
 			}
 			delete activeEvents[cEvent];
-			sayInChat(events[cEvent].name+" has been stopped!");
+			
+			return events[cEvent].name+" has been stopped!";
 		}else{
-			sayInChat("I can't stop "+cEvent+"!");
+			return "I can't stop "+cEvent+"!";
 		}
 	}
 
@@ -377,11 +501,10 @@ if(initMode){
 			modlocks.spamguard = modlocks.spamguard==1?0:1;
 		}
 		if(modlocks.spamguard==1){
-			sayInChat("Spam Guard is on! Command spammers will be locked out for a short time.")
+			return "Spam guard is ON";
 		}else{
-			sayInChat("Spam Guard is off!");
+			return "Spam guard is OFF";
 		}
-		return;
 	}
 
 	/*global.runCommercial = (howLong) => {
@@ -396,6 +519,54 @@ if(initMode){
 
 		return obs.call(command,data);
 	}
+
+	global.chatIsBroadcaster = (message) => {
+		if(message.platform == "twitch"){
+			return twitch.chatIsBroadcaster(message);
+		}else if(message.platform == "youtube"){
+			return youtube.chatIsBroadcaster(message);
+		}
+	}
+
+	global.chatIsFirstMessage = (message) => {
+        if(message.platform == "twitch"){
+			return twitch.chatIsFirstMessage(message);
+		}else if(message.platform == "youtube"){
+			return false;
+		}
+    }
+
+    global.chatIsReturningChatter = (message) => {
+        if(message.platform == "twitch"){
+			return twitch.chatIsReturningChatter(message);
+		}else if(message.platform == "youtube"){
+			return false;
+		}
+    }
+
+    global.chatIsMod = (message) => {
+        if(message.platform == "twitch"){
+			return twitch.chatIsMod(message);
+		}else if(message.platform == "youtube"){
+			return youtube.chatIsMod(message);
+		}
+    }
+
+    global.chatIsSubscriber = (message) => {
+        if(message.platform == "twitch"){
+			return twitch.chatIsSubscriber(message);
+		}else if(message.platform == "youtube"){
+			return youtube.chatIsSubscriber(message);
+		}
+    }
+
+    global.chatIsVIP = (message) => {
+        if(message.platform == "twitch"){
+			return twitch.chatIsVIP(message);
+		}else if(message.platform == "youtube"){
+			return false;
+		}
+    }
 
 	function convertDuration(numSeconds){
 		let timeTerm = "seconds";
@@ -508,6 +679,7 @@ if(initMode){
 				};
 			}
 		}else{
+			
 			if(message.message.toLowerCase().startsWith(command)){
 				return {
 					message:message,
@@ -518,38 +690,68 @@ if(initMode){
 		return null;
 	}
 
-	global.verifyResponseScript = async (message, extra, script) => {
+	global.verifyResponseScript = async (eventName, message, extra, script) => {
+		message.eventType = "chat";
 		try{
-			let responseFunct = await eval("async () => { let event = "+JSON.stringify(message)+"; let extra = "+JSON.stringify(extra)+"; "
-															+"let eventstorage = "+JSON.stringify(eventstorage)+"; "
-															+script.replace(/\n/g, "")+"}");
+			let responseScript = "async () => { let event = "+JSON.stringify(message)
+			+"; let extra = "+JSON.stringify(extra)
+			+"; function say(txt){sayInChat(txt,"+JSON.stringify(message.platform)+","+JSON.stringify(message.channel)+");}"
+			+"; let toUser = "+JSON.stringify(message.message.split(" ")[1])+""
+			+"; let command = "+JSON.stringify(message.message.toLowerCase().split(" "))+""
+			+"; function getVar(key,defaultVal=0){return eventstorage["+JSON.stringify(eventName)+"]?.[key]??defaultVal;}"
+			+"; function setVar(key, value, save=true){eventstorage["+JSON.stringify(eventName)+"]??={}; eventstorage[eventname][key] = value;}"
+			+"; function getSharedVar(eventname, key,defaultVal=0){return eventstorage[eventname]?.[key]??defaultVal;}"
+			+"; function setSharedVar(eventname, key, value, save=true){eventstorage[eventname]??={}; eventstorage[eventname][key] = value;}"
+			+"; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
+			+"; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
+			+"; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?~]/,\"\",'');}"
+			+"; function runEvent(eName){runCommands(event, eName)}"
+			+"let eventstorage = "+JSON.stringify(eventstorage)+"; "
+			+script.replace(/\n/g, "")+"}";
+			let responseFunct = await eval(responseScript);
 			let response = await responseFunct();
 			return {
 				status:"ok",
 				response:response
 			};
 		}catch(e){
+			console.log(e);
 			return {
 				status:"error",
-				response:e
+				response:typeof e == "object" ? e.stack:e
+			}
+		}
+	}
+
+	global.sayInChat = (message, platform, channel) => {
+		if(platform == "twitch"){
+			if(channel == null){
+				channel = twitch.homeChannel;
+			}
+			twitch.sayInChat(message, channel);
+		}else if(platform == "youtube"){
+			if(channel == null){
+				channel = youtube.chatId;
+			}
+			youtube.sayInChat(message, channel);
+		}else{
+			for(let p in activePlatforms){
+				activePlatforms[p].sayInChat(message, activePlatforms[p].homeChannel);
 			}
 		}
 	}
 
 	global.runCommands = (eventData, eventName, extra) => {
+		extra ??= {};
 		//console.log("RUNNING COMMANDS", eventData);
 		let isChat = eventData.eventType.includes("chat");
-		let isReward = eventData.eventType.includes("redeem");
+		let isEvent = eventData.eventType.includes("event");
 		let isOSC = eventData.eventType.includes("osc");
-		if(isReward){
-			eventData.username = eventData.user_name.toLowerCase();
-			eventData.displayName = eventData.user_name;
-		}else if(isOSC){
-			eventData.username = botUsername;
-			eventData.displayName = botUsername;
+		if(isOSC){
+			eventData.username = twitch.botUsername;
+			eventData.displayName = twitch.botUsername;
+			eventData.message ?? "";
 		}
-
-		eventData.user_name = eventData.username;
 
 		let event = events[eventName];
 
@@ -588,12 +790,14 @@ if(initMode){
 		}
 		
 		if(isChat && event.chatnotification == true){
-			sayInChat(eventData.displayName+" has activated "+event.name+"!", eventData.channel);
+			sayInChat(eventData.displayName+" has activated "+event.name+"!", eventData.platform, eventData.channel);
 			sendToTCP("/events/start/"+eventName, eventData.username+" has activated "+event.name+"!");
-			createTimeout(eventName, null, "event", function(){
-				sayInChat(event.name+" has been deactivated!");
-				sendToTCP("/events/end/"+eventName, event.name+" has been deactivated!");
-			}, event.cooldown);
+			if(event.cooldown != 0){
+				createTimeout(eventName, null, "event", function(){
+					sayInChat(event.name+" has been deactivated!", eventData.platform, eventData.channel);
+					sendToTCP("/events/end/"+eventName, event.name+" has been deactivated!");
+				}, event.cooldown);
+			}
 		}else if(isChat || isOSC){
 			if(event.cooldown != 0){
 				createTimeout(eventName, null, "event", function(){
@@ -610,14 +814,28 @@ if(initMode){
 				case 'response':
 					thisCommand = async () =>{
 						try{
-							if(eventstorage.eventName == null){
-								eventstorage.eventName = {};
+							if(eventstorage[eventName] == null){
+								eventstorage[eventName] = {};
 							}
 							
-							let responseFunct = await eval("async () => { let event = "+JSON.stringify(eventData)+"; let extra = "+JSON.stringify(extra)+"; "
-														+eCommand.message.replace(/\n/g, "")+"}");
+							let responseFunct = await eval("async () => { let event = "+JSON.stringify(eventData)
+							+"; let extra = "+JSON.stringify(extra)
+							+"; function say(txt){sayInChat(txt,"+JSON.stringify(eventData.platform)+","+JSON.stringify(eventData.channel)+");}"
+							+"; let toUser = "+JSON.stringify(eventData.message.split(" ")[1])+""
+							+"; let command = "+JSON.stringify(eventData.message.toLowerCase().split(" "))+""
+							+"; function getVar(key,defaultVal=0){return eventstorage["+JSON.stringify(eventName)+"]?.[key]??defaultVal;}"
+							+"; function setVar(key, value, save=true){eventstorage["+JSON.stringify(eventName)+"]??={}; eventstorage["+JSON.stringify(eventName)+"][key] = value; if(save==true){saveEventStorage();}}"
+							+"; function getSharedVar(eventname, key,defaultVal=0){return eventstorage[eventname]?.[key]??defaultVal;}"
+							+"; function setSharedVar(eventname, key, value, save=true){eventstorage[eventname]??={}; eventstorage[eventname][key] = value; if(save==true){saveEventStorage();}}"
+							+"; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
+							+"; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}"
+							+"; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?~]/,\"\",'');}"
+							+"; function runEvent(eName){runCommands(event, eName)}"
+							+"; "
+							+eCommand.message.replace(/\n/g, "")+"}"
+							);
 							let response = await responseFunct();
-							sayInChat(response, eventData.channel);
+							sayInChat(response, eventData.platform, eventData.channel);
 							
 						}catch(e){
 							spooderLog("Failed to run response script. Check the event settings to verify it.", e)
@@ -641,6 +859,11 @@ if(initMode){
 						}
 						eventData.eventInfo = event;
 						if(activePlugins[eCommand.pluginname]?.onEvent != null){
+							if(eCommand.stop_eventname){
+								createTimeout(eventName, eCommand, "timed", function(){
+									activePlugins[eCommand.pluginname].onEvent(eCommand.stop_eventname, eventData);
+								}, commandDuration);
+							}
 							activePlugins[eCommand.pluginname].onEvent(eCommand.eventname, eventData);
 						}
 					};
@@ -797,51 +1020,54 @@ if(initMode){
 								
 								if(eCommand.etype == "toggle"){
 									modlocks.lockdown = modlocks.lockdown==1?0:1;
-									lockEvent(botUsername, modlocks.lockdown==1?"unlock":"lock", "all");
-									lockPlugin(botUsername, modlocks.lockdown==1?"unlock":"lock", "all");
-									sayInChat(modlocks.lockdown==0?"Lockdown initiated! All commands are blocked.":"Lockdown lifted!", eventData.channel);
+									lockEvent(modlocks.lockdown==1?"unlock":"lock", "all");
+									lockPlugin(modlocks.lockdown==1?"unlock":"lock", "all");
+									sayInChat(modlocks.lockdown==0?"Lockdown initiated! All commands are blocked.":"Lockdown lifted!", eventData.platform, eventData.channel);
 								}else if(eCommand.etype == "timed"){
 									modlocks.lockdown = 1;
-									lockEvent(botUsername, "lock", "all");
-									lockPlugin(botUsername, "lock", "all");
-									sayInChat("Lockdown initiated for "+convertDuration(commandDuration)+"! All commands are blocked until then.", eventData.channel);
+									lockEvent("lock", "all");
+									lockPlugin("lock", "all");
+									sayInChat("Lockdown initiated for "+convertDuration(commandDuration)+"! All commands are blocked until then.", eventData.platform, eventData.channel);
 									createTimeout(eventName, eCommand, eCommand.type, function(){
-										lockEvent(botUsername, "unlock", "all");
-										lockPlugin(botUsername, "unlock", "all");
-										sayInChat("Lockdown lifted!");
+										lockEvent("unlock", "all");
+										lockPlugin("unlock", "all");
+										sayInChat("Lockdown lifted!", eventData.platform, eventData.channel);
 									}, commandDuration);
 								}
 								
 							}else if(eCommand.targettype == "event"){
 								
 								if(eCommand.etype == "toggle"){
-									lockEvent(botUsername, modlocks.events[eCommand.target]==1?"unlock":"lock", eCommand.target);
+									lockEvent(isEventLocked(eCommand.target)?"unlock":"lock", eCommand.target);
 								}else if(eCommand.etype == "timed"){
-									lockEvent(botUsername, "lock", eCommand.target);
+									lockEvent("lock", eCommand.target);
 									createTimeout(eventName, eCommand, eCommand.type, function(){
-										lockEvent(botUsername, "unlock", eCommand.target)
+										lockEvent("unlock", eCommand.target)
 									}, commandDuration)
 									
 								}
+								extra[eCommand.target] = isEventLocked(eCommand.target);
 							}else if(eCommand.targettype == "plugin"){
 								
 								if(eCommand.etype == "toggle"){
-									lockPlugin(botUsername, modlocks.plugins[eCommand.target]==1?"unlock":"lock", eCommand.target);
+									lockPlugin(isPluginLocked(eCommand.target)?"unlock":"lock", eCommand.target);
 								}else if(eCommand.etype == "timed"){
-									lockPlugin(botUsername, "lock", eCommand.target);
+									lockPlugin("lock", eCommand.target);
 									
 									createTimeout(eventName, eCommand, eCommand.type, function(){
-										lockPlugin(botUsername, "unlock", eCommand.target)
+										lockPlugin("unlock", eCommand.target)
 									}, commandDuration)
 								}
+								extra[eCommand.target] = isPluginLocked(eCommand.target);
 							}
 						}else if(eCommand.function == "spamguard"){
-							setSpamGuard(modlocks.spamguard==1?"off":"on");
+							sayInChat(setSpamGuard(modlocks.spamguard==1?"off":"on"), eventData.platform, eventData.channel);
+							extra["_spamguard"] = modlocks.spamguard==1;
 						}else if(eCommand.function == "stop"){
 							if(eCommand.targettype == "all"){
-								stopEvent(eCommand.targettype);
+								sayInChat(stopEvent(eCommand.targettype), eventData.platform, eventData.channel)
 							}else{
-								stopEvent(eCommand.target);
+								sayInChat(stopEvent(eCommand.target), eventData.platform, eventData.channel);
 							}
 							
 						}
@@ -855,9 +1081,10 @@ if(initMode){
 			}
 		}
 	}
-
+	
 	runInterval = () => {
 		uptime = Math.floor(Date.now()/1000);
+		//console.log(activeEvents);
 		for(let e in activeEvents){
 			
 			//Loop 1 for action
@@ -886,6 +1113,8 @@ if(initMode){
 			}
 		}
 	};
+
+	const upInterval = setInterval(runInterval, 1000);
 
 	function createTimeout(name, command, etype, funct, seconds){
 		if(activeEvents[name] == null){

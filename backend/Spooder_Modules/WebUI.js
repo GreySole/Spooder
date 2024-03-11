@@ -30,6 +30,7 @@ const ngrok = require("ngrok");
 
 const express = require('express');
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
 const AdmZip = require('adm-zip');
 const fileUpload = require('express-fileupload');
 const path = require("path");
@@ -40,12 +41,15 @@ var webLog = (...content) => {
 }
 
 function isLocal(req){
-    const remoteAddressRaw = req.socket.remoteAddress.split(":");
+    const remoteAddressRaw = req.ip.split(":");
     const remoteAddress = remoteAddressRaw[remoteAddressRaw.length-1];
     const isLocal = remoteAddress.startsWith('192.168.') ||
                     remoteAddress.startsWith('10.') ||
                     (remoteAddress == 1 && devMode == true) ||
                     req.headers.host.startsWith("localhost")
+    if(isLocal == false){
+        logToFile("external_connections", `IP: ${remoteAddress} Path: ${req.path} Cookie: ${req.cookies?.access != null ? "PRESENT" : "NONE"}`, 300);
+    }
     return isLocal;
 }
 
@@ -57,8 +61,34 @@ class WebUI {
 
     router = null;
     publicRouter = null;
+    pluginApi = {
+        local:{
+            get:{},
+            post:{}
+        },
+        public:{
+            get:{},
+            post:{}
+        }
+    }
 
-    
+    registerPluginApi(context, router, method, address, funct){
+        if(router === "local"){
+            if(method.toLowerCase() === "get"){
+                this.pluginApi.local.get[path.join(context.dirname, address)] = funct.bind(context);
+            }else if(method.toLowerCase() === "post"){
+                this.pluginApi.local.post[path.join(context.dirname, address)] = funct.bind(context);
+            }
+        }else if(router === "public"){
+            if(method.toLowerCase() === "get"){
+                this.pluginApi.public.get[path.join(context.dirname, address)] = funct.bind(context);
+            }else if(method.toLowerCase() === "post"){
+                this.pluginApi.public.post[path.join(context.dirname, address)] = funct.bind(context);
+            }
+        }else{
+            throw new Error(`Unknown router: ${router}. There's only local and public routers.`);
+        }
+    }
 
     startServer(devMode){
 
@@ -101,42 +131,54 @@ class WebUI {
         this.router = router;
         this.publicRouter = publicRouter;
 
-        homeChannel = sconfig.broadcaster.username;
         expressPort = sconfig.network.host_port;
+        if(initMode == true){
+            router.use("/", express.static(frontendDir+'/init/build'));
+            router.use(bodyParser.urlencoded({extended:true}));
+            router.use(bodyParser.json({limit:"100mb"}));
+            router.use("/restore_settings", fileUpload());
+            router.use("/restore_plugins", fileUpload());
+        }else{
+            router.use("/", express.static(frontendDir+'/main/build'));
+            router.use("/mod", express.static(frontendDir+'/mod/build'));
+            router.use("/public", express.static(frontendDir+'/public/build'));
 
-        router.use("/", express.static(frontendDir+'/main/build'));
-        router.use("/mod", express.static(frontendDir+'/mod/build'));
+            router.use("/overlay", express.static(backendDir+'/web/overlay'));
+            router.use("/utility", express.static(backendDir+'/web/utility'));
+            router.use("/plugin", express.static(backendDir+"/web/public"));
+            router.use("/settings", express.static(backendDir+'/web/settings'));
+            router.use("/assets", express.static(backendDir+'/web/assets'));
+            router.use("/icons", express.static(backendDir+'/web/icons'));
 
-        router.use("/overlay", express.static(backendDir+'/web/overlay'));
-        router.use("/utility", express.static(backendDir+'/web/utility'));
-        router.use("/settings", express.static(backendDir+'/web/settings'));
-        router.use("/assets", express.static(backendDir+'/web/assets'));
-        router.use("/icons", express.static(backendDir+'/web/icons'));
+            router.use(bodyParser.urlencoded({extended:true}));
+            router.use(bodyParser.json({limit:"100mb"}));
+            router.use("/install_plugin",fileUpload());
+            router.use("/upload_plugin_asset/*",fileUpload());
+            router.use("/upload_plugin_icon/*",fileUpload());
+            router.use("/checkin_settings", fileUpload());
+            router.use("/checkin_plugins", fileUpload());
+            router.use(express.json({verify: this.verifyTwitchSignature}));
+            router.use(cookieParser());
+            
+            publicRouter.use("/", express.static(frontendDir+'/public/build'));
+            publicRouter.use("/login", express.static(frontendDir+'/login/build'));
+            publicRouter.use("/mod", express.static(frontendDir+'/mod/build'));
 
-        router.use(bodyParser.urlencoded({extended:true}));
-        router.use(bodyParser.json());
-        router.use("/install_plugin",fileUpload());
-        router.use("/upload_plugin_asset/*",fileUpload());
-        router.use("/checkin_settings", fileUpload());
-        router.use("/checkin_plugins", fileUpload());
-        router.use(express.json({verify: this.verifyTwitchSignature}));
+            publicRouter.use("/overlay", express.static(backendDir+'/web/overlay'));
+            publicRouter.use("/utility", express.static(backendDir+'/web/utility'));
+            publicRouter.use("/plugin", express.static(backendDir+"/web/public"));
+            publicRouter.use("/settings", express.static(backendDir+'/web/settings'));
+            publicRouter.use("/assets", express.static(backendDir+'/web/assets'));
+            publicRouter.use("/icons", express.static(backendDir+'/web/icons'));
 
-        //publicRouter.use("/", express.static(frontendDir+'/public/build'));
-        publicRouter.use("/mod", express.static(frontendDir+'/mod/build'));
-
-        publicRouter.use("/overlay", express.static(backendDir+'/web/overlay'));
-        publicRouter.use("/utility", express.static(backendDir+'/web/utility'));
-        publicRouter.use("/settings", express.static(backendDir+'/web/settings'));
-        publicRouter.use("/assets", express.static(backendDir+'/web/assets'));
-        publicRouter.use("/icons", express.static(backendDir+'/web/icons'));
-
-        publicRouter.use(bodyParser.urlencoded({extended:true}));
-        publicRouter.use(bodyParser.json());
-        publicRouter.use(express.json({verify: this.verifyTwitchSignature}));
+            publicRouter.use(bodyParser.urlencoded({extended:true}));
+            publicRouter.use(bodyParser.json());
+            publicRouter.use(cookieParser());
+            publicRouter.use(express.json({verify: this.verifyTwitchSignature}));
+        }
+        
 
         app.use('/', (req, res, next) => {
-            
-            
             if (isLocal(req)) {
                 router(req, res, next);
               } else {
@@ -152,8 +194,7 @@ class WebUI {
 
         async function pluginGet(req, res){
 
-            let isExternal = req.query.external;
-            
+            let isExternal = isLocal(req);
             var pluginName = req.query.plugin;
             var pluginSettings = null;
 
@@ -166,7 +207,7 @@ class WebUI {
             
             let oscInfo = null;
 
-            if(isExternal == "true"){
+            if(isExternal == false){
                 oscInfo = {
                     host: sconfig.network.external_tcp_url,
                     name:pluginName,
@@ -188,35 +229,71 @@ class WebUI {
         router.get("/plugin/get", pluginGet);
         publicRouter.get("/plugin/get", pluginGet);
 
+        publicRouter.get("/plugin/public", (req, res) => {
+            let publicPlugins = [];
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins.push(p);
+                }
+            }
+            res.send({data:publicPlugins});
+        });
+
+        router.get("/plugin/public", (req, res) => {
+            let publicPlugins = [];
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins.push(p);
+                }
+            }
+            res.send({data:publicPlugins});
+        });
+
         router.get('/command_table', async (req, res) => {
             
             let props = {
                 "events":events,
                 "groups":eventGroups,
-                "plugins":Object.keys(activePlugins),
-                "obs":obs
+                "plugins":Object.keys(activePlugins)
             };
             res.send({express: JSON.stringify(props)});
+        });
+        router.get("/public/data", (req, res) => {
+            let publicPlugins = {};
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins[p] = activePlugins[p].name;
+                }
+            }
+            res.send({
+                botName:twitch.botUsername,
+                homeChannel:twitch.homeChannel,
+                theme:themes.public,
+                plugins:publicPlugins
+            });
+        });
+        publicRouter.get("/public/data", (req, res) => {
+            let publicPlugins = {};
+            for(let p in activePlugins){
+                if(activePlugins[p].hasPublic){
+                    publicPlugins[p] = activePlugins[p].name;
+                }
+            }
+            res.send({
+                botName:twitch.botUsername,
+                homeChannel:twitch.homeChannel,
+                theme:themes.public,
+                plugins:publicPlugins
+            });
         });
 
         router.get('/server_config', (req, res) => {
             let backupSettingsDir = path.join(backendDir, "backup", "settings");
             let backupPluginsDir = path.join(backendDir, "backup", "plugins");
-            let discordSettingsDir = path.join(backendDir, "settings", "discord.json");
             let backups = {
                 settings:fs.existsSync(backupSettingsDir)?fs.readdirSync(backupSettingsDir):{},
                 plugins:fs.existsSync(backupPluginsDir)?fs.readdirSync(backupPluginsDir):{}
             }
-            let discordData = fs.existsSync(discordSettingsDir)?JSON.parse(fs.readFileSync(discordSettingsDir, {encoding:"utf-8"})):{
-                token:"",
-                autosendngrok:{
-                    enabled:false,
-                    destguild:"",
-                    destchannel:""
-                }
-            }
-            
-            //console.log({config:sconfig, discord:discordData, backups:backups});
             res.send({config:sconfig, backups:backups});
         });
 
@@ -225,25 +302,15 @@ class WebUI {
         });
 
         router.get('/server_state', async (req, res) => {
-            var oscReturn = {
-                host:sconfig.network.host,
-                port:sconfig.network.osc_tcp_port,
-                udp_clients:sconfig.network["udp_clients"],
-                plugins:Object.keys(activePlugins)
-            }
 
-            var hostReturn = {
-                port:expressPort
-            }
-            
+            let activeShares = await twitch.getChannels();
             res.send({
-                "user":botUsername,
-                "homeChannel":homeChannel,
-                "clientID": oauth["client-id"],
-                "osc":oscReturn,
-                "host":hostReturn,
+                "host":sconfig.network.host,
+                "port":sconfig.network.osc_tcp_port,
+                "udp_clients":sconfig.network["udp_clients"],
+                "plugins":Object.keys(activePlugins),
                 "themes":themes,
-                "activeShares":twitch.getChannels(),
+                "activeShares":activeShares,
                 "shares":Object.keys(shares)
             });
         });
@@ -252,8 +319,14 @@ class WebUI {
             
             fs.writeFile(backendDir+"/settings/commands.json", JSON.stringify(req.body), "utf-8", (err, data)=>{
                 events = req.body.events;
+                
                 eventGroups = req.body.groups;
                 res.send({status:"SAVE SUCCESS"});
+                for(let p in activePlatforms){
+                    if(activePlatforms[p].onEventFileSaved){
+                        activePlatforms[p].onEventFileSaved();
+                    }
+                }
                 webLog("SAVED COMMANDS");
             });
         });
@@ -311,7 +384,7 @@ class WebUI {
         router.post("/verifyResponseScript", async(req, res) => {
             let check = checkResponseTrigger(req.body.event, req.body.message);
             if(check != null){
-                let response = await verifyResponseScript(check.message, check.extra, req.body.script);
+                let response = await verifyResponseScript(req.body.eventName, check.message, check.extra, req.body.script);
                 res.send(response);
             }else{
                 res.send({
@@ -321,9 +394,10 @@ class WebUI {
             }
         })
 
-        router.get("/shares", (req,res) => {
+        router.get("/shares", async (req,res) => {
             let chatCommands = {};
-            let activeShares = twitch.getChannels();
+            let activeShares = await twitch.getChannels();
+            
             for(let e in events){
                 if(events[e].triggers.chat.enabled){
                     chatCommands[e] = events[e].triggers.chat.command;
@@ -399,25 +473,41 @@ class WebUI {
             }else{
                 fs.rmSync(pluginPath, {recursive:true});
             }
-            
-            const childProcess = require("child_process");
-            childProcess.exec("git clone https://github.com/GreySole/Spooder-Sample-Plugin "+pluginPath,{
-                cwd: './'
-              }, async (error, out, err)=>{
-                if(error){
-                    console.log(err);
-                    res.send({
-                        status:"error",
-                        error:err
-                    });
-                }else{
-                    res.send({
-                        status:"OK",
-                        pluginName:pluginName
-                    });
-                    
-                    await this.installPluginFromTemp(pluginDirName, options);
+
+            fetch("https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/main")
+            .then(response => response.arrayBuffer())
+            .then(async data => {
+                const tempDir = path.join(backendDir, "tmp", pluginDirName);
+                const tempFile = path.join(backendDir, "tmp", pluginDirName, pluginDirName+".zip");
+                if(fs.existsSync(tempDir)){
+                    fs.rmSync(tempDir, {recursive:true});
                 }
+                
+                fs.mkdirSync(tempDir, {recursive:true});
+                fs.writeFileSync(tempFile, Buffer.from(data));
+                
+                let zip = new AdmZip(tempFile);
+                zip.extractEntryTo(zip.getEntries()[0], tempDir);
+
+                const fileDir = path.join(tempDir, zip.getEntries()[0].entryName)
+
+                const files = fs.readdirSync(fileDir);
+
+                for (const file of files) {
+                    const currentFilePath = path.join(fileDir, file);
+                    const newFilePath = path.join(tempDir, file); 
+
+                    fs.renameSync(currentFilePath, newFilePath);
+                }
+                
+                fs.rmSync(tempFile);
+                fs.rmdirSync(path.join(tempDir, zip.getEntries()[0].entryName));
+
+                res.send({
+                    status:"OK",
+                    pluginName:pluginName
+                });
+                await this.installPluginFromTemp(pluginDirName, options);
             })
         });
 
@@ -610,8 +700,13 @@ class WebUI {
         router.post("/backup_plugins", async(req, res)=>{
 
             let zip = new AdmZip();
+            zip.on('zip:error', (e) => {
+                console.log("Zip error");
+            })
 
-            zip.addLocalFolder(backendDir+"/plugins", "/plugins", (filename)=>{return !filename.includes("node_modules")});
+            zip.addLocalFolder(backendDir+"/plugins", "/plugins", (entry)=>{
+                return !entry.isDirectory || !entry.name.endsWith('/node_modules');
+            });
             
             zip.addLocalFolder(backendDir+"/web", "/web");
 
@@ -674,12 +769,14 @@ class WebUI {
 
         router.post("/restore_settings", async(req, res) => {
             let fileName = null;
-            let selections = req.body.selections;
+            let selections = req.body.selections ?? {everything:true};
+            
             if(!fs.existsSync(backendDir+"/tmp")){
                 fs.mkdirSync(backendDir+"/tmp");
             }
 
             if(req.files){
+                console.log("FILE FOUND", req.files);
                 fileName = req.files.file.name;
                 if(fs.existsSync(path.join(backendDir, "tmp", fileName))){
                     await fs.rm(path.join(backendDir, "tmp", fileName));
@@ -728,9 +825,9 @@ class WebUI {
                 await fs.rm(path.join(backendDir, "tmp", fileName));
             }
 
-            let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
+            //let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
             webLog("COMPLETE");
-            res.send({status:"SUCCESS",newbackups:newPluginBackups});
+            res.send({status:"SUCCESS"});
         });
 
         router.post("/restore_plugins", async(req, res) => {
@@ -821,15 +918,20 @@ class WebUI {
                 await fs.rm(path.join(backendDir, "tmp", fileName));
             }
             this.getPlugins();
-            let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
+            //let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
             webLog("COMPLETE");
-            res.send({status:"SUCCESS",newbackups:newPluginBackups});
+            res.send({status:"SUCCESS"});
         });
 
         router.get("/refresh_plugins", async (req, res) => {
-            this.getPlugins();
+            await this.getPlugins();
             res.send({"status":"Refresh Success!"});
         });
+
+        router.get("/refresh_plugin", async(req, res) => {
+            await this.refreshPlugin(req.query.pluginname);
+            res.send({"status":"success"});
+        })
 
         router.post('/delete_plugin_asset', async(req, res) =>{
 
@@ -861,7 +963,8 @@ class WebUI {
                     if(foldername == ""){foldername="root";}
                   if (!pending) return done(null, results);
                   list.forEach(function(file) {
-                    file = path.resolve(dir, file);
+                    //file = path.resolve(dir, file); <-- Makes double backslash paths on Windows >.<
+                    file = dir+"/"+file;
                     fs.stat(file, function(err, stat) {
                         let filename = file.substring(mainDir.length+1);
                       if (stat && stat.isDirectory()) {
@@ -949,6 +1052,44 @@ class WebUI {
             }
         });
 
+        router.post('/upload_plugin_icon/*', async(req, res) => {
+            try{
+                if(!req.files){
+                    webLog("NO FILES FOUND");
+                    res.send({
+                        status: false,
+                        message: 'No file uploaded'
+                    })
+                }else{
+                    let pluginAsset = req.files.file;
+                    let pluginName = req.params['0'];
+
+                    let iconDir = path.join(backendDir,"web", "icons");
+                    let iconFile = path.join(iconDir, pluginName+".png");
+                    
+                    if(!fs.existsSync(iconDir)){
+                        fs.mkdirSync(iconDir);
+                    }
+                    await pluginAsset.mv(iconFile);
+                    
+                    chmodr(iconFile,0o777, (err) => {
+                        if(err) throw err;
+                        
+                    });
+                    webLog("COMPLETE!");
+                    
+                    //this.getPlugins();
+
+                    res.send({
+                        status:true,
+                        message: "File Upload Success"
+                    });
+                }
+            }catch(e){
+                console.error(e);
+            }
+        });
+
         router.post('/delete_plugin', async(req, res) => {
             
             let thisBody = req.body;
@@ -1000,7 +1141,6 @@ class WebUI {
             let pluginPacks = {};
             for(let a in activePlugins){
                 
-                let thisPluginPath = "http://"+sconfig.network.host+":"+expressPort;
                 let settingsFile = path.join(backendDir, "plugins", a, "settings.json");
                 let thisPlugin = fs.existsSync(settingsFile)==true ?
                                 JSON.parse(fs.readFileSync(settingsFile, {encoding:'utf8'})):null;
@@ -1008,11 +1148,6 @@ class WebUI {
                 let settingsForm = path.join(backendDir, "plugins", a, "settings-form.json");
                 let thisPluginForm = fs.existsSync(settingsForm)==true ?
                                 JSON.parse(fs.readFileSync(settingsForm, {encoding:'utf8'})):null;
-
-                let assetDir = path.join(backendDir, "web", "assets", a);
-                
-                let thisPluginAssets = fs.existsSync(assetDir)==true ?
-                                    fs.readdirSync(assetDir):null;
 
                 let overlayDir = path.join(backendDir, "web", "overlay", a);
                 let utilityDir = path.join(backendDir, "web", "utility", a);
@@ -1061,114 +1196,318 @@ class WebUI {
             res.send(plugin);
         });
 
-        async function modAuth(req,res){
-            //let modlist = await chat.mods(channel);
-            
+        router.get("/users", (req, res) => {
+            let returnUsers = Object.assign({}, users.trusted_users);
+            returnUsers._hasPassword = {};
+            for(let u in users.trusted_users.permissions){
+                returnUsers._hasPassword[u] = users.trusted_users_pw[u] != null;
+            }
+            res.send(returnUsers);
+        });
 
-            if(isLocal(req)){
-                activeMods[botUsername] = "active";
-                res.send({status:"active", localUser:botUsername});
+        router.get("/users/resetPassword", (req, res) => {
+            let username = req.query.username;
+            delete users.trusted_users_pw[username];
+            fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+            res.send({status:"SUCCESS"});
+        })
+
+        router.post("/saveUsers", async (req, res) => {
+            let newList = req.body.users;
+            let nameChanges = req.body.nameChanges;
+            if(discord.loggedIn == true){
+                for(let d in newList.discord){
+                    if(newList.discord[d] != "" && !isNaN(newList.discord[d])){
+                        let thisUser = await discord.findUser(newList.discord[d]);
+                        nameChanges[d] = thisUser.username;
+                    }
+                }
+            }
+            
+            for(let n in nameChanges){
+                if(nameChanges[n] == n){continue;}
+                if(nameChanges[n] != null){
+                    newList.permissions[nameChanges[n]] = newList.permissions[n].slice();
+                    newList.discord[nameChanges[n]] = newList.discord[n].slice();
+                    newList.twitch[nameChanges[n]] = newList.twitch[n].slice();
+                }
+                delete newList.permissions[n];
+                delete newList.discord[n];
+                delete newList.twitch[n];
+                
+                if(users.trusted_users_pw[n] != null){
+                    if(nameChanges[n] != null){
+                        users.trusted_users_pw[nameChanges[n]] = Object.assign({},users.trusted_users_pw[n]);
+                    }
+                    
+                    delete users.trusted_users_pw[n];
+                }
+            }
+            Object.assign(users.trusted_users, newList);
+            fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+            console.log("USERS", users);
+            res.send({status:"SUCCESS"});
+        })
+
+        async function userVerify(req, res){
+            let vType = req.body.vtype;
+            let username = req.body.username;
+
+            if(vType == "twitch"){
+                if(Object.values(users["trusted_users"].twitch).includes(username)){
+                    let sUsername = Object.keys(users["trusted_users"].twitch)[Object.values(users["trusted_users"].twitch).indexOf(username)];
+                    
+                    res.send({status:"found"});
+                    activeUsers.pending[username.toLowerCase()] = {
+                        vtype:vType,
+                        sUsername: sUsername.toLowerCase(),
+                        verified:false
+                    };
+                    sayInChat(username+" it looks like you're trying to set a login for me. If this is you, please call '!verify'", "twitch");
+                }else{
+                    res.send({status:"notfound"});
+                }
+            }else if(vType == "discord"){
+                
+                if(Object.keys(users["trusted_users"].discord).includes(username)){
+                    res.send({status:"found"});
+                    let sUsername = username;
+                    activeUsers.pending[username.toLowerCase()] = {
+                        vtype:vType,
+                        sUsername: sUsername.toLowerCase(),
+                        verified:false
+                    };
+                    
+                    let response = await discord.sendInteraction(users["trusted_users"].discord[username], {
+                        content:"Hi, it looks like you're creating a login for me. If this is you, click confirm.",
+                        components:[discord.makeConfirmCancelButtons("Yes :D", "No D:")],
+                        fetchReply: true
+                    });
+
+                    const collectorFilter = i => i.user.id === users["trusted_users"].discord[username];
+
+                    try {
+                        const confirmation = await response.awaitMessageComponent({ filter: collectorFilter, time: 60000 });
+                        if (confirmation.customId === 'confirm') {
+                            activeUsers.pending[username].verified = true;
+                            await confirmation.update({ content: 'Verified!', components: [] });
+                        } else if (confirmation.customId === 'cancel') {
+                            delete activeUsers.pending[username];
+                            await confirmation.update({ content: 'Declined!', components: [] });
+                        }
+                    } catch (e) {
+                        console.log(e);
+                        delete activeUsers.pending[username];
+                    }
+                }else{
+                    res.send({status:"notfound"});
+                }
+            }
+        }
+        router.post("/user/verify", userVerify);
+        publicRouter.post("/user/verify", userVerify);
+
+        function verifyCheck(req, res) {
+            if(activeUsers.pending[req.query.username] == null){
+                console.log("NULL PENDING");
+                res.send("verify-cancelled");
                 return;
             }
+            if(activeUsers.pending[req.query.username].verified == true){
+                res.send("verify-complete");
+            }else{
+                res.send("verify-waiting");
+            }
+        }
+        router.get("/user/verifycheck", verifyCheck)
+        publicRouter.get("/user/verifycheck", verifyCheck)
 
-            let moduser = req.body.moduser;
-            let modcode = req.body.code;
-            
-            if(modData["trusted_users"][moduser]?.includes("m")){
-                if(modData["trusted_users_pw"][moduser] == null){
+        async function userLogin(req,res){
+
+            let username = req.body.username.toLowerCase();
+            let password = req.body.password;
+            if(username == "local"){
+                res.send({status:"nolocal"});
+                return;
+            }
+            if(users["trusted_users_pw"][username] == null){
+                let vusername = req.body.vusername;
+                if(vusername == null){
+                    res.send({status:"nologin"});
+                    return;
+                }
+                if(activeUsers.pending[vusername].verified == true){
+                    if(vusername !== activeUsers.pending[vusername].sUsername){
+                        users["trusted_users"].permissions[vusername] = users["trusted_users"].permissions[activeUsers.pending[vusername].sUsername].slice();
+                        users["trusted_users"].twitch[vusername] = users["trusted_users"].twitch[activeUsers.pending[vusername].sUsername].slice();
+                        users["trusted_users"].discord[vusername] = users["trusted_users"].discord[activeUsers.pending[vusername].sUsername].slice();
+                        delete users["trusted_users"].permissions[activeUsers.pending[vusername].sUsername];
+                        delete users["trusted_users"].twitch[activeUsers.pending[vusername].sUsername];
+                        delete users["trusted_users"].discord[activeUsers.pending[vusername].sUsername];
+                    }
+                    
+                    delete activeUsers.pending[vusername];
                     let newSalt = crypto.randomBytes(16).toString('hex');
-                    let newHash = crypto.pbkdf2Sync(modcode, newSalt, 1000, 64, `sha512`).toString('hex');
-                    activeMods[moduser] = "pending";
-                    modData["trusted_users_pw"][moduser] = {
+                    let newHash = crypto.pbkdf2Sync(password, newSalt, 1000, 64, `sha512`).toString('hex');
+
+                    users["trusted_users_pw"][username] = {
                         salt:newSalt,
                         hash:newHash
                     };
-                    sayInChat(moduser+" if you're trying to access the Mod UI, please call '!mod verify' to authenticate your device.");
-                    res.send({status:"new"});
-                }else{
-                    if(activeMods[moduser] != "pending"){
-                        if(crypto.pbkdf2Sync(modcode, modData["trusted_users_pw"][moduser].salt, 1000, 64, `sha512`).toString(`hex`) === modData["trusted_users_pw"][moduser].hash){
-                            webLog("Welcome back, "+moduser+"!");
-                            activeMods[moduser] = "active";
-                            res.send({status:"active"});
-                        }else{
-                            res.send({status:"badpassword"});
-                        }
-                    }else{
-                        res.send({status:"stillpending"});
-                    }
+                    let browserToken = crypto.randomBytes(48).toString('hex');
+                    activeUsers[browserToken] = username;
+                    fs.writeFileSync(backendDir+"/settings/users.json", JSON.stringify(users));
+                    res.cookie('access', browserToken, {
+                        maxAge: 86400*1000,
+                        httpOnly:true,
+                        secure:true
+                    });
+                    res.send({status:"active"});
                 }
+                
             }else{
-                res.send({status:"untrusted"});
+                if(crypto.pbkdf2Sync(password, users["trusted_users_pw"][username].salt, 1000, 64, `sha512`).toString(`hex`) === users["trusted_users_pw"][username].hash){
+                    webLog("Welcome back, "+username+"!");
+                    let browserToken = crypto.randomBytes(48).toString('hex');
+                    activeUsers[browserToken] = username;
+                    res.cookie('access', browserToken, {
+                        maxAge: 86400*1000,
+                        httpOnly:true,
+                        secure:true
+                    });
+                    res.send({status:"active"});
+                }else{
+                    res.send({status:"badpassword"});
+                }
             }
         }
 
-        router.post("/mod/authentication", modAuth);
-        publicRouter.post("/mod/authentication", modAuth);
+        router.post("/user/authentication", (req, res) => {
+            
+            let browserToken = crypto.randomBytes(48).toString('hex');
+            activeUsers[browserToken] = "local";
+            res.cookie('access', browserToken, {
+                maxAge: 86400*1000,
+                httpOnly:true,
+                secure:true
+            });
+            res.send({status:"active"});
+        });
+        publicRouter.post("/user/authentication", userLogin);
 
         async function modUtil(req, res){
             let isLocalHost = isLocal(req);
-            if(activeMods[req.query.moduser] == "active" || isLocalHost){
-                let modevents = {};
-                for(let e in events){
-                    if(events[e].triggers.chat.enabled){
-                        modevents[e] = {
-                            name:events[e].name,
-                            group:events[e].group,
-                            description:events[e].description
-                        }
+            let accessCookie = req.cookies["access"];
+            //console.log("ACCESS COOKIE", req.cookies);
+            let moduser = null;
+            if(!isLocalHost){
+                if(activeUsers[accessCookie] == null){
+                    res.send({status:"notactive"});
+                    return;
+                }else{
+                    if(!users.trusted_users.permissions[activeUsers[accessCookie]]?.includes("m") &&
+                    !users.trusted_users.permissions[activeUsers[accessCookie]]?.includes("a") ){
+                        res.send({status:"nopermission"});
+                        return;
                     }
+                    moduser = activeUsers[accessCookie];
                 }
-                let modplugins = {};
-                for(let p in activePlugins){
-                    let hasUtility = fs.existsSync(path.join(backendDir, "web", "utility", p));
-                    modplugins[p] = {
-                        name:p,
-                        modmap:activePlugins[p].modmap,
-                        utility:hasUtility
-                    }
-                }
-                let modTheme = null;
-                if(themes.modui[req.query.moduser] != null){
-                    modTheme = themes.modui[req.query.moduser];
-                }
-                let oscURL = null;
-                let oscPort = null;
-                if(isLocalHost){
-                    oscURL = sconfig.network.host;
-                    oscPort = sconfig.network.osc_tcp_port;
+                
+            }else{
+                if(activeUsers[accessCookie] == null){
+                    
+                    moduser = "local";
+                    let browserToken = crypto.randomBytes(48).toString('hex');
+                    activeUsers[browserToken] = moduser;
+                    res.cookie('access', browserToken, {
+                        maxAge: 86400*1000,
+                        httpOnly:true,
+                        secure:false
+                    });
                     
                 }else{
-                    oscURL = sconfig.network.external_tcp_url;
+                    moduser = activeUsers[accessCookie];
                 }
-    
-                res.send(JSON.stringify({
-                    status:"ok",
-                    oscURL:oscURL,
-                    oscPort:oscPort,
-                    modmap:{
-                        events:modevents,
-                        plugins:modplugins,
-                        modlocks:modlocks,
-                    },
-                    theme:modTheme
-                }));
-            }else{
-                res.send(JSON.stringify({
-                    status:"notmod",
-                }));
             }
+            
+            let modevents = {};
+            for(let e in events){
+                if(events[e].triggers.chat.enabled){
+                    modevents[e] = {
+                        name:events[e].name,
+                        group:events[e].group,
+                        description:events[e].description
+                    }
+                }
+            }
+            let modplugins = {};
+            for(let p in activePlugins){
+                let hasUtility = fs.existsSync(path.join(backendDir, "web", "utility", p));
+                modplugins[p] = {
+                    name:p,
+                    modmap:activePlugins[p].modmap,
+                    utility:hasUtility
+                }
+            }
+            let modTheme = null;
+            if(themes.modui[req.query.moduser] != null){
+                modTheme = themes.modui[req.query.moduser];
+            }
+            let oscURL = null;
+            let oscPort = null;
+            if(isLocalHost){
+                oscURL = sconfig.network.host;
+                oscPort = sconfig.network.osc_tcp_port;
+                
+            }else{
+                oscURL = sconfig.network.external_tcp_url;
+            }
+
+            res.send(JSON.stringify({
+                status:"ok",
+                oscURL:oscURL,
+                oscPort:oscPort,
+                moduser:moduser,
+                token:req.cookies["access"],
+                modmap:{
+                    events:modevents,
+                    plugins:modplugins,
+                    modlocks:modlocks,
+                },
+                theme:modTheme
+            }));
         }
 
         router.get("/mod/utilities", modUtil);
         publicRouter.get("/mod/utilities", modUtil);
 
-        publicRouter.post("/webhooks/caption", (req, res)=>{
-            console.log("I HEAR VOICE", req.body);
+        router.get("/plugin/*", (req, res) => {
+            if(this.pluginApi.local.get[`${req.params[0]}`] != null){
+                this.pluginApi.local.get[`${req.params[0]}`](req, res);
+            }
             res.status(200).end();
         })
 
-        
+        router.post("/plugin/*", (req, res) => {
+            if(this.pluginApi.local.post[`${req.params[0]}`] != null){
+                this.pluginApi.local.post[`${req.params[0]}`](req, res);
+            }
+            res.status(200).end();
+        })
+
+        publicRouter.get("/plugin/*", (req, res) => {
+            if(this.pluginApi.public.get[`${req.params[0]}`] != null){
+                this.pluginApi.public.get[`${req.params[0]}`](req, res);
+            }
+            res.status(200).end();
+        })
+
+        publicRouter.post("/plugin/*", (req, res) => {
+            if(this.pluginApi.public.post[`${req.params[0]}`] != null){
+                this.pluginApi.public.post[`${req.params[0]}`](req, res);
+            }
+            res.status(200).end();
+        })
 
         app.listen(expressPort);
 
@@ -1178,12 +1517,59 @@ class WebUI {
         return router;
     }
 
+    async refreshPlugin(pluginName){
+        try{
+            if(activePlugins[pluginName].onClose != null){
+                await activePlugins[pluginName].onClose();
+            }
+
+            delete require.cache[require.resolve(backendDir+'/plugins/'+pluginName)];
+            try{
+                activePlugins[pluginName] = new (require(backendDir+'/plugins/'+pluginName))();
+                if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/package.json")){
+                    let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/package.json",{encoding:'utf8'}));
+                    activePlugins[pluginName].name = pluginMeta.name;
+                    activePlugins[pluginName].dirname = pluginName;
+                    activePlugins[pluginName].author = pluginMeta.author;
+                    activePlugins[pluginName].version = pluginMeta.version;
+                    activePlugins[pluginName].description = pluginMeta.description;
+                    activePlugins[pluginName].dependencies = pluginMeta.dependencies;
+                    let overlayDir = path.join(backendDir, "web", "overlay", pluginName);
+                    let utilityDir = path.join(backendDir, "web", "utility", pluginName);
+                    let publicDir = path.join(backendDir, "web", "public", pluginName);
+                    activePlugins[pluginName].hasOverlay = fs.existsSync(overlayDir);
+                    activePlugins[pluginName].hasUtility = fs.existsSync(utilityDir);
+                    activePlugins[pluginName].hasPublic = fs.existsSync(publicDir);
+                    activePlugins[pluginName].status = "ok";
+                }
+                if(fs.existsSync(backendDir+"/plugins/"+pluginName+"/settings.json")){
+                    activePlugins[pluginName].settings = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/settings.json",{encoding:'utf8'}));
+                    
+                    if(activePlugins[pluginName].onSettings != null){
+                        activePlugins[pluginName].onSettings(activePlugins[pluginName].settings);
+                    }
+                }
+            }catch(e){
+                let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+pluginName+"/package.json",{encoding:'utf8'}));
+                activePlugins[pluginName] = {};
+                activePlugins[pluginName].name = pluginName;
+                activePlugins[pluginName].dirname = pluginName;
+                activePlugins[pluginName].status = "failed";
+                activePlugins[pluginName].description = e.code+" - "+e.message;
+                activePlugins[pluginName].dependencies = pluginMeta.dependencies;
+                console.log("Refresh Failed", e);
+            }
+        }catch(e){
+            console.error(e);
+        }
+    }
+
     async getPlugins(){
         try {
           const dir = await fsPromises.opendir(backendDir+'/plugins');
           for(let p in activePlugins){
-            if(activePlugins[p].onClose != null){
-                activePlugins[p].onClose();
+            if(activePlugins[p].onStop != null){
+                await activePlugins[p].onStop();
             }
           }
           activePlugins = {};
@@ -1195,6 +1581,7 @@ class WebUI {
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
                 activePlugins[dirent.name] = {};
                 activePlugins[dirent.name].name = dirent.name;
+                activePlugins[dirent.name].dirname = dirent.name;
                 activePlugins[dirent.name].status = "failed";
                 activePlugins[dirent.name].description = e.code+" - "+e.message;
                 activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
@@ -1205,15 +1592,17 @@ class WebUI {
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/package.json")){
                 let pluginMeta = JSON.parse(fs.readFileSync(backendDir+"/plugins/"+dirent.name+"/package.json",{encoding:'utf8'}));
                 activePlugins[dirent.name].name = pluginMeta.name;
+                activePlugins[dirent.name].dirname = dirent.name;
                 activePlugins[dirent.name].author = pluginMeta.author;
                 activePlugins[dirent.name].version = pluginMeta.version;
                 activePlugins[dirent.name].description = pluginMeta.description;
                 activePlugins[dirent.name].dependencies = pluginMeta.dependencies;
                 let overlayDir = path.join(backendDir, "web", "overlay", dirent.name);
                 let utilityDir = path.join(backendDir, "web", "utility", dirent.name);
+                let publicDir = path.join(backendDir, "web", "public", dirent.name);
                 activePlugins[dirent.name].hasOverlay = fs.existsSync(overlayDir);
                 activePlugins[dirent.name].hasUtility = fs.existsSync(utilityDir);
-                //console.log(activePlugins[dirent.name].name, activePlugins[dirent.name].author, activePlugins[dirent.name].version, activePlugins[dirent.name].description, activePlugins[dirent.name].dependencies)
+                activePlugins[dirent.name].hasPublic = fs.existsSync(publicDir);
                 activePlugins[dirent.name].status = "ok";
             }
             if(fs.existsSync(backendDir+"/plugins/"+dirent.name+"/settings.json")){
@@ -1225,6 +1614,9 @@ class WebUI {
             }
         }
           webLog("Plugins Refreshed!");
+          if(this.onPluginsLoaded != null){
+            this.onPluginsLoaded();
+          }
         } catch (err) {
           console.error(err);
         }
@@ -1246,6 +1638,7 @@ class WebUI {
         let pluginDir = path.join(backendDir,"plugins", pluginDirName);
         let overlayDir = path.join(backendDir,"web", "overlay", pluginDirName);
         let utilityDir = path.join(backendDir, "web", "utility", pluginDirName);
+        let publicDir = path.join(backendDir, "web", "public", pluginDirName);
         let settingsDir = path.join(backendDir, "web", "settings", pluginDirName);
         let assetsDir = path.join(backendDir, "web", "assets", pluginDirName);
         let iconDir = path.join(backendDir, "web", "icons", pluginDirName+".png");
@@ -1301,6 +1694,15 @@ class WebUI {
             await fs.move(tempDir+"/utility", utilityDir, {overwrite:true});
 
             chmodr(utilityDir,0o777, (err) => {
+                if(err) throw err;
+                
+            });
+        }
+
+        if(fs.existsSync(tempDir+"/public") && options.public == true){
+            await fs.move(tempDir+"/public", publicDir, {overwrite:true});
+
+            chmodr(publicDir,0o777, (err) => {
                 if(err) throw err;
                 
             });
@@ -1386,15 +1788,20 @@ class WebUI {
         })
     }
 
-
     async startNgrok(){
         if(maintainenceMode == true || devMode == true){
             return;
         }
         
-        await ngrok.connect({
-            authtoken:sconfig.network.ngrokauthtoken,
-        });
+        try{
+            await ngrok.connect({
+                authtoken:sconfig.network.ngrokauthtoken,
+            });
+        }catch(e){
+            console.log("Error creating Ngrok tunnel",e);
+            return;
+        }
+        
         let napi = ngrok.getApi();
         
         let tunnels = await napi.listTunnels();
@@ -1455,7 +1862,7 @@ class WebUI {
         
         //shares[shareUser].enabled = isEnabled;
         if(isEnabled){
-            joinChannel(shareUser, message);
+            twitch.joinChannel(shareUser, message);
             sendToTCP("/share/activate", shareUser);
             if(shares[shareUser].discordId != null){
                 
@@ -1464,25 +1871,23 @@ class WebUI {
                 for(let p in sharedPlugins){
                     if(activePlugins[sharedPlugins[p]].hasOverlay){
                         sharedPluginMessage.push(
-                            activePlugins[sharedPlugins[p]].name+": "+sconfig.network.external_http_url+"/"+path.join("overlay", sharedPlugins[p])+"?channel="+shareUser
+                            activePlugins[sharedPlugins[p]].name+": "+path.join(sconfig.network.external_http_url, "overlay", sharedPlugins[p])+"?channel="+shareUser
                         );
                     }
                 }
                 if(sharedPluginMessage.length>0){
                     discord.findUser(shares[shareUser].discordId)
                     .then(user=>{
-                        user.send(homeChannel+" shared a plugin with you! \n"+sharedPluginMessage.join("\n"));
+                        user.send(sconfig.bot.owner_name+" shared a plugin with you! \n"+sharedPluginMessage.join("\n"));
                     })
                 }
                 
             }
         }else{
-            leaveChannel(shareUser, message);
+            twitch.leaveChannel(shareUser, message);
             sendToTCP("/share/deactivate", shareUser);
         }
     }
-
-    
 }
 
 //Contribution by ChatGPT :3
