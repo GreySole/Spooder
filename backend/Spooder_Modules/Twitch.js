@@ -440,7 +440,7 @@ class STwitch{
                 if(type == "stream.online"){
                     await this.validateChatbot();
                     webUI.setShare(event.broadcaster_user_login, true);
-                    if(discord.loggedIn == true && discord.sharenotif == true){
+                    if(discord.loggedIn == true && discord.config.sharenotif == true){
                         discord.findUser(discord.config.master)
                         .then(user => {
                             let watchButton = discord.makeLinkButton("Watch", "https://twitch.tv/"+event.broadcaster_user_login)

@@ -530,7 +530,7 @@ if(initMode){
 
 	global.chatIsFirstMessage = (message) => {
         if(message.platform == "twitch"){
-			return twitch.chatIsBroadcaster(message);
+			return twitch.chatIsFirstMessage(message);
 		}else if(message.platform == "youtube"){
 			return false;
 		}
@@ -538,7 +538,7 @@ if(initMode){
 
     global.chatIsReturningChatter = (message) => {
         if(message.platform == "twitch"){
-			return twitch.chatIsBroadcaster(message);
+			return twitch.chatIsReturningChatter(message);
 		}else if(message.platform == "youtube"){
 			return false;
 		}

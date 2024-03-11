@@ -9,7 +9,7 @@ class SDiscord{
 
     constructor(router){
         router.post("/discord/saveDiscordConfig", async(req, res) => {
-            console.log(req.body);
+            
             Object.assign(this.config, req.body);
             fs.writeFile(backendDir+"/settings/discord.json", JSON.stringify(this.config), "utf-8", (err, data)=>{
                 if(this.loggedIn == false && req.body.token != null && req.body.token != ""){
@@ -51,7 +51,9 @@ class SDiscord{
             },
             "handlers": {
             },
-            "commands": []
+            "commands": [],
+            "sharenotif": false,
+            "crashreport": false
         };
     }
     config = null;
