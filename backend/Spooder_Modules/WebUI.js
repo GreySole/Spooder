@@ -1871,14 +1871,14 @@ class WebUI {
                 for(let p in sharedPlugins){
                     if(activePlugins[sharedPlugins[p]].hasOverlay){
                         sharedPluginMessage.push(
-                            activePlugins[sharedPlugins[p]].name+": "+sconfig.network.external_http_url+"/"+path.join("overlay", sharedPlugins[p])+"?channel="+shareUser
+                            activePlugins[sharedPlugins[p]].name+": "+path.join(sconfig.network.external_http_url, "overlay", sharedPlugins[p])+"?channel="+shareUser
                         );
                     }
                 }
                 if(sharedPluginMessage.length>0){
                     discord.findUser(shares[shareUser].discordId)
                     .then(user=>{
-                        user.send(twitch.homeChannel+" shared a plugin with you! \n"+sharedPluginMessage.join("\n"));
+                        user.send(sconfig.bot.owner_name+" shared a plugin with you! \n"+sharedPluginMessage.join("\n"));
                     })
                 }
                 

@@ -23,6 +23,7 @@ class SDiscord{
         });
 
         router.get("/discord/get_channels", async(req, res) => {
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             let guilds = this.getGuilds();
             res.send(guilds);
         });

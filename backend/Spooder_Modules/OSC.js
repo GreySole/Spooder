@@ -335,17 +335,20 @@ class SOSC {
                     }
                 }
                 if(address[3] == "lock"){
+                    let lockString = message.args[1] === true ? "lock":"unlock";
                     if(address[4] == "event"){
                         lockEvent(message.args[1], address[5]);
-                        sayInChat(address[2]+ " "+message.args[1]+"ed "+address[5]);
+                        sayInChat(address[2]+ " "+lockString+"ed "+address[5]);
                     }else if(address[4] == "plugin"){
+
+                        let pluginName = activePlugins[address[5]]?.name;
                         
                         if(address[6] == null){
                             lockPlugin(message.args[1], address[5])
-                            sayInChat(address[2]+ " "+message.args[1]+"ed "+address[5]);
+                            sayInChat(address[2]+ " "+lockString+"ed "+pluginName);
                         }else{
                             lockPlugin(message.args[1], address[5], address[6]);
-                            sayInChat(address[2]+ " "+message.args[1]+"ed "+address[6]+" in "+address[5]);
+                            sayInChat(address[2]+ " "+lockString+"ed "+address[6]+" in "+apluginName);
                         }
                         
                     }

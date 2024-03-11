@@ -264,6 +264,7 @@ class STwitch{
         });
 
         router.get("/twitch/get_eventsubs", async(req,res) => {
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             await this.getAppToken();
             if(this.appToken ==""){
                 twitchLog("NO APP TOKEN");
@@ -288,6 +289,7 @@ class STwitch{
         });
 
         router.get("/twitch/get_channelpoint_rewards", async(req, res) => {
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             if(this.oauth.broadcaster_token=="" || this.oauth.broadcaster_token == null){
                 res.send({status:"NO BROADCASTER TOKEN"});
                 return;
@@ -320,7 +322,7 @@ class STwitch{
         });
 
         router.get("/twitch/delete_eventsub", async(req,res) => {
-            
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             await Axios({
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+req.query.id,
                 method: 'DELETE',
@@ -339,6 +341,7 @@ class STwitch{
         });
 
         router.get("/twitch/refresh_eventsubs", async(req,res)=>{
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             await this.refreshEventSubs();
             res.send({status:"SUCCESS"});
         })
@@ -351,6 +354,7 @@ class STwitch{
         });
 
         router.get("/twitch/get_eventsubs_by_user", async(req,res) => {
+            if(this.loggedIn === false){res.send({error:"nologin"})}
             let twitchid = req.query.twitchid;
             
             if(twitchid == null){
@@ -556,6 +560,7 @@ class STwitch{
 
         this.isStreamerLive()
         .then(isLive =>{
+            if(this.loggedIn === false){return;}
             if(isLive == true){
                 this.startReoccuringMessage();
             }
@@ -1079,7 +1084,8 @@ class STwitch{
             if(command[0] == "mod" && (this.chatIsMod(message) || this.chatIsBroadcaster(message))){
                 let modCommand = command[1];
                 if(modCommand == "spamguard"){
-                    setSpamGuard(command[2]);
+                    let response = setSpamGuard(command[2]);
+                    this.sayInChat(response);
                 }else if(modCommand == "lock" || modCommand == "unlock"){
                     let eventtarget = command[2];
                     let plugin = command[2];
@@ -1109,7 +1115,8 @@ class STwitch{
                 }else if(modCommand == "trust" && this.chatIsBroadcaster(message)){
                     if(command.length>2){
                         let trustedUser = command[2].startsWith("@")?command[2].substring(1).trim():command[2].trim();
-                        modData["trusted_users"][trustedUser] = "m";
+                        modData["trusted_users"].permissions[trustedUser] = "m";
+                        modData["trusted_users"].twitch[trustedUser] = trustedUser;
                         fs.writeFile(backendDir+"/settings/mod.json", JSON.stringify(modData), "utf-8", (err, data)=>{
                             twitchLog("Mod file saved!");
                             this.sayInChat(trustedUser+" has been added as a trustworthy user for the Mod UI!");
@@ -1484,7 +1491,7 @@ class STwitch{
                 }
                 
             }).catch(error=>{
-                rej(error);
+                console.log(error);
             });
         })
     }
