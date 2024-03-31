@@ -124,7 +124,8 @@ class SDiscord{
                     GatewayIntentBits.GuildMessages,
                     GatewayIntentBits.GuildIntegrations,
                     GatewayIntentBits.MessageContent,
-                    GatewayIntentBits.GuildVoiceStates
+                    GatewayIntentBits.GuildVoiceStates,
+                    GatewayIntentBits.GuildModeration
                 ],
                 partials: [Partials.Channel]
             })
@@ -279,8 +280,21 @@ class SDiscord{
         }
     }
 
+    isSelf(userid){
+        if(this.client.user.id == userid){
+            return true;
+        }
+        return false;
+    }
+
+    isMaster(userid){
+        if(this.config.master == userid){
+            return true;
+        }
+        return false;
+    }
+
     isHandler(userid){
-        console.log(userid, this.config.master, this.config.handlers);
         if(this.config.master == userid){
             return true;
         }
@@ -425,6 +439,14 @@ class SDiscord{
     findUser(userId){
         if(!this.loggedIn){return null;}
         return this.client.users.fetch(userId);
+    }
+
+    getMember(guildId, userId){
+        let guild = this.client.guilds.cache.get(guildId);
+        if(guild){
+            const member = guild.members.cache.get(userId);
+            return member;
+        }else{return null}
     }
 
     chopMessage(message){

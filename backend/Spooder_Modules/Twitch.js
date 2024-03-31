@@ -704,7 +704,10 @@ class STwitch{
     autoLogin(startChat=true){
         
         return new Promise(async (res, rej)=>{
-            if(this.oauth.token == "" || this.oauth.token == null){
+            
+            if(this.oauth.token == "" || this.oauth.token == null
+            || this.oauth["client-id"] == "" || this.oauth["client-id"] == null
+            || this.oauth["client-secret"] == "" || this.oauth["client-secret"] == null){
                 twitchLog("No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens.");
                 rej("notoken");
                 return;
@@ -1635,10 +1638,8 @@ class STwitch{
     streamChatInterval = null;
     reoccuringMessageCount = Math.round(Math.random()*10);
 
-    callBotAPI(url, postBody){
-        let method = postBody==null?"GET":"POST";
-        if(postBody == "DELETE"){method = "DELETE"}
-        if(postBody == "PATCH"){method = "PATCH"}
+    callBotAPI(url, postBody, method){
+        method = method == null ? (postBody==null?"GET":"POST"):method;
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
@@ -1649,7 +1650,7 @@ class STwitch{
                     "Authorization":"Bearer "+this.oauth.token,
                     "Content-Type":"application/json"
                 },
-                body:postBody
+                data:postBody
             })
             .then(data => res(data))
             .catch(error=>{
@@ -1659,10 +1660,8 @@ class STwitch{
         })
     }
 
-    callAppAPI(url, postBody){
-        let method = postBody==null?"GET":"POST";
-        if(postBody == "DELETE"){method = "DELETE"}
-        if(postBody == "PATCH"){method = "PATCH"}
+    callAppAPI(url, postBod, method){
+        method = method == null ? (postBody==null?"GET":"POST"):method;
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
@@ -1673,7 +1672,7 @@ class STwitch{
                     "Authorization":"Bearer "+this.appToken,
                     "Content-Type":"application/json"
                 },
-                body:postBody
+                data:postBody
             })
             .then(data => {
                 console.log(data.data);
@@ -1686,10 +1685,9 @@ class STwitch{
         })
     }
 
-    callBroadcasterAPI(url, postBody){
-        let method = postBody==null?"GET":"POST";
-        if(postBody == "DELETE"){method = "DELETE"}
-        if(postBody == "PATCH"){method = "PATCH"}
+    callBroadcasterAPI(url, postBody, method){
+        method = method == null ? (postBody==null?"GET":"POST"):method;
+        
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
             Axios({
@@ -1700,7 +1698,7 @@ class STwitch{
                     "Authorization":"Bearer "+this.oauth.broadcaster_token,
                     "Content-Type":"application/json"
                 },
-                body:postBody
+                data:postBody
             })
             .then(data => res(data))
             .catch(error=>{
