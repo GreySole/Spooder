@@ -264,7 +264,7 @@ class STwitch{
         });
 
         router.get("/twitch/get_eventsubs", async(req,res) => {
-            if(this.loggedIn === false){res.send({error:"nologin"})}
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             await this.getAppToken();
             if(this.appToken ==""){
                 twitchLog("NO APP TOKEN");
@@ -289,7 +289,7 @@ class STwitch{
         });
 
         router.get("/twitch/get_channelpoint_rewards", async(req, res) => {
-            if(this.loggedIn === false){res.send({error:"nologin"})}
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             if(this.oauth.broadcaster_token=="" || this.oauth.broadcaster_token == null){
                 res.send({status:"NO BROADCASTER TOKEN"});
                 return;
@@ -322,7 +322,7 @@ class STwitch{
         });
 
         router.get("/twitch/delete_eventsub", async(req,res) => {
-            if(this.loggedIn === false){res.send({error:"nologin"})}
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             await Axios({
                 url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id='+req.query.id,
                 method: 'DELETE',
@@ -341,7 +341,7 @@ class STwitch{
         });
 
         router.get("/twitch/refresh_eventsubs", async(req,res)=>{
-            if(this.loggedIn === false){res.send({error:"nologin"})}
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             await this.refreshEventSubs();
             res.send({status:"SUCCESS"});
         })
@@ -354,7 +354,7 @@ class STwitch{
         });
 
         router.get("/twitch/get_eventsubs_by_user", async(req,res) => {
-            if(this.loggedIn === false){res.send({error:"nologin"})}
+            if(this.loggedIn === false){res.send({error:"nologin"}); return;}
             let twitchid = req.query.twitchid;
             
             if(twitchid == null){
