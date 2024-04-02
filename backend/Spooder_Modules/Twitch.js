@@ -1660,7 +1660,7 @@ class STwitch{
         })
     }
 
-    callAppAPI(url, postBod, method){
+    callAppAPI(url, postBody, method){
         method = method == null ? (postBody==null?"GET":"POST"):method;
         if(this.loggedIn == false){return;}
         return new Promise((res, rej)=>{
