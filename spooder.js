@@ -344,13 +344,15 @@ if(initMode){
 		global.sendToUDP = (dest, address, oscValue)=>{sosc.sendToUDP(dest, address, oscValue)};
 		
 		if(!noAutoLogin){
-			twitch.autoLogin()
+			await twitch.autoLogin()
 			.then(status => {
 				if(status == "success"){
 					activePlatforms["twitch"] = twitch;
 				}
 			})
-			.catch(e=>{});
+			.catch(e=>{
+				spooderLog("Twitch auto start fail", e);
+			});
 
 			/*youtube.autoLogin()
 			.then(status => {
@@ -358,10 +360,17 @@ if(initMode){
 					activePlatforms["youtube"] = youtube;
 				}
 			})
-			.catch(e=>{});*/
+			.catch(e=>{
+				console.log("YouTube auto start fail", e.message);
+			});*/
 			
-        	obs.autoLogin().catch(e=>{});
-			await discord.autoLogin().catch(e=>{});
+        	obs.autoLogin().catch(e=>{
+				spooderLog("OBS auto start fail", e.message);
+			});
+			
+			await discord.autoLogin().catch(e=>{
+				spooderLog("Discord auto start fail", e);
+			});
 
 			if(discord.loggedIn == true){
 				console.log("SET ON PLUGINS LOADED");
