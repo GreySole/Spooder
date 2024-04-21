@@ -33,10 +33,17 @@ if(!fs.existsSync(path.join(backendDir, "settings", "config.json"))){
 
 
 let errorLogPath = path.join(logDir, "error.json");
-let errorLog = fs.existsSync(errorLogPath)?JSON.parse(fs.readFileSync(errorLogPath, {encoding:"utf-8"})):{
+let errorLog = {
 	crashed:false,
 	log:null
 };
+
+if(fs.existsSync(errorLogPath)){
+	try{
+		let errorFile = JSON.parse(fs.readFileSync(errorLogPath, {encoding:"utf-8"}));
+		errorLog = errorFile;
+	}catch(e){}
+}
 
 global.twitch = null;
 global.discord = null;
