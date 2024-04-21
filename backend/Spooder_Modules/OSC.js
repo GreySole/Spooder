@@ -265,6 +265,9 @@ class SOSC {
         osc.on("open", () =>{
             oscLog("OSC UDP OPEN");
         });
+        osc.on("error", (e)=>{
+            oscLog("OSC Error: ", e);
+        })
         osc.open();
 
         this.oscTCP = new OSC({plugin: new OSC.WebsocketServerPlugin({host:"0.0.0.0",port:sconfig.network.osc_tcp_port})});
@@ -274,6 +277,9 @@ class SOSC {
             oscLog("OSC TCP OPEN");
             
         });
+        oscTCP.on("error", (e)=>{
+            oscLog("OSC Error: ", e);
+        })
 
         oscTCP.on("*", message => {
             if(!message.address.startsWith("/frontend/monitor")){

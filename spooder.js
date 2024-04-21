@@ -42,6 +42,14 @@ global.twitch = null;
 global.discord = null;
 global.youtube = null;
 
+global.sendToApp = (type, message, args) => {
+	try{
+		process.send({type:type, message:message, args:args});
+	}catch(e){
+
+	}
+}
+
 process.on('uncaughtException', function(err){
 	let lastTwitch = null;
 	let lastDiscord = null;
@@ -58,14 +66,10 @@ process.on('uncaughtException', function(err){
 		lastDiscord:lastDiscord
 	}
 	console.error(err);
+	sendToApp("crash", err.message);
+	errorLog.crashed = true;
+	fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
 	process.exit(1);
-});
-
-process.on('exit', function(){
-	if(process.exitCode == 1){
-		errorLog.crashed = true;
-		fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
-	}
 });
 
 global.logToFile = (filename, message, maxlines) => {
@@ -338,6 +342,7 @@ if(initMode){
 		global.sosc = new SOSC();
 		global.sendToTCP = (address, oscValue, log)=>{sosc.sendToTCP(address, oscValue, log)};
 		global.sendToUDP = (dest, address, oscValue)=>{sosc.sendToUDP(dest, address, oscValue)};
+		
 		if(!noAutoLogin){
 			twitch.autoLogin()
 			.then(status => {
@@ -999,7 +1004,7 @@ if(initMode){
 								
 								callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOn==1});
 								createTimeout(eventName, eCommand, eCommand.type, function(){
-									callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOff==1});
+									callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOff==0});
 								},commandDuration);
 							}else{
 								callOBS("SetSceneItemEnabled", {sceneName:eCommand.scene, sceneItemId:parseInt(eCommand.item), sceneItemEnabled:eCommand.valueOn==1});

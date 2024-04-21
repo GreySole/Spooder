@@ -72,7 +72,7 @@ class STwitch{
                     });
                 }
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Twitch auth error: ", error.message);
                 res.send({status:"error", error:error});
                 return;
             });
@@ -115,7 +115,7 @@ class STwitch{
                 });
 
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Twitch revoke error: ", error.message);
                 return;
             });
         });
@@ -283,7 +283,7 @@ class STwitch{
                 
                 res.send(JSON.stringify(response.data));
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Eventsub get error: ", error.message);
                 return;
             });
         });
@@ -315,8 +315,9 @@ class STwitch{
             .then((response)=>{
                 res.send(JSON.stringify(response.data));
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Channel point get error: ", error.message);
                 this.onBroadcasterAuthFailure();
+                res.send(JSON.stringify({error:error.message}));
                 return;
             });
         });
@@ -335,7 +336,7 @@ class STwitch{
             .then((response)=>{
                 res.send(JSON.stringify({status:"SUCCESS"}));
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Eventsub delete error: ", error.message);
                 return;
             });
         });
@@ -379,7 +380,7 @@ class STwitch{
                 
                 res.send(JSON.stringify(response.data));
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Eventsub get error: ", error.message);
 
                 return;
             });
@@ -401,7 +402,7 @@ class STwitch{
                 res.send(JSON.stringify(response.data));
                 
             }).catch(error=>{
-                console.error("ERROR",error);
+                twitchLog("Chat restart error: ", error.message);
             });
             
         });
@@ -790,14 +791,14 @@ class STwitch{
 
     joinChannel = async (channelname, joinmsg)=>{
         if(this.loggedIn == false){return;}
-        await this.chat.join(channelname).catch(e=>{console.log(e)});
+        await this.chat.join(channelname).catch(e=>{twitchLog("Twitch chat join fail",e.message)});
         this.sayInChat(joinmsg, channelname);
     }
 
     leaveChannel = async (channelname, partmsg)=>{
         if(this.loggedIn == false){return;}
         this.sayInChat(partmsg, channelname);
-        await this.chat.part(channelname).catch(e=>{console.log(e)})
+        await this.chat.part(channelname).catch(e=>{twitchLog("Twitch chat leave fail",e.message)})
     }
 
     restartChat = async (message) => {
@@ -875,7 +876,7 @@ class STwitch{
             .then((response)=>{
                 this.broadcasterUserID = response.data.data[0].id;
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Broadcaster auth error: ", error.message);
                 if(error.response?.status == 401){
                     this.onAuthenticationFailure();
                 }
@@ -897,7 +898,7 @@ class STwitch{
             .then((response)=>{
                 this.botUserID = response.data.data[0].id;
             }).catch(error=>{
-                console.error(error);
+                twitchLog("Bot auth error: ", error.message);
                 if(error.response?.status == 401){
                     this.onAuthenticationFailure();
                 }
@@ -990,7 +991,7 @@ class STwitch{
                             this.appToken = response.data.access_token;
                         }
                     }).catch(error=>{
-                        console.error(error);
+                        twitchLog("App token get error: ", error.message);
                         return;
                     });
         }
@@ -1380,7 +1381,7 @@ class STwitch{
                     }
                 }
             }
-        }).catch(error=>{console.error(error)});
+        }).catch(error=>{twitchLog("Chat join error: ", error.message)});
     
         
         this.chat.on("message", this.processMessage.bind(this));
@@ -1494,7 +1495,7 @@ class STwitch{
                 }
                 
             }).catch(error=>{
-                console.log(error);
+                twitchLog("isStreamerLive fail",error.message)
             });
         })
     }
@@ -1539,7 +1540,7 @@ class STwitch{
                 "Content-Type": "application/json"
             }
         }).catch(error=>{
-            console.error(error);
+            twitchLog("Eventsub get error: ", error.message);
             return;
         });
         return response.data;
@@ -1565,7 +1566,7 @@ class STwitch{
                 "Content-Type": "application/json"
             }
         }).catch(error=>{
-            console.error(error);
+            twitchLog("Eventsub delete error: ", error.message);
             return;
         });
     }
@@ -1628,7 +1629,7 @@ class STwitch{
                 }
             }).then(response => res("SUCCESS"))
             .catch(error=>{
-                console.error(error);
+                twitchLog("Eventsub init error: ", error.message);
                 res(error.response.data.message);
             });
         })
@@ -1652,9 +1653,9 @@ class STwitch{
                 },
                 data:postBody
             })
-            .then(data => res(data))
+            .then(data => res(data.data))
             .catch(error=>{
-                console.error(error);
+                twitchLog("Bot API use error: ", error.message);
                 rej(error);
             });
         })
@@ -1674,12 +1675,9 @@ class STwitch{
                 },
                 data:postBody
             })
-            .then(data => {
-                console.log(data.data);
-                res(data.data)}
-                )
+            .then(data => res(data.data))
             .catch(error=>{
-                console.error(error);
+                twitchLog("App API use error: ", error.message);
                 rej(error);
             });
         })
@@ -1700,9 +1698,9 @@ class STwitch{
                 },
                 data:postBody
             })
-            .then(data => res(data))
+            .then(data => res(data.data))
             .catch(error=>{
-                console.error(error);
+                twitchLog("Broadcaster API use error: ", error.message);
                 rej(error);
             });
         })
@@ -1852,7 +1850,7 @@ class STwitch{
                 twitchLog("Validated Chatbot: "+response.data.login+"!");
                 res({status:"OK"});
             }).catch(error=>{
-                console.error("ERROR",error);
+                twitchLog("Bot validate error: ", error.message);
                 if(error.response?.status == 401){
                     this.onAuthenticationFailure().then(async newtoken=>{
                         await this.validateChatbot();

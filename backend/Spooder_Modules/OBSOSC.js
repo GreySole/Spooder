@@ -99,6 +99,9 @@ class OBSOSC{
         try{
             await obsClient.connect("ws://"+url+":"+port, password, {
                 eventSubscriptions: EventSubscription.All | EventSubscription.InputVolumeMeters | EventSubscription.Ui
+            }).catch(error => {
+                console.log("OBS Connect Failed", error.message);
+                return;
             });
             
             this.connected = true;
