@@ -95,12 +95,24 @@ class OBSOSC{
     skippedFrames = 0;
     
     async connect(url, port, password){
-        console.log("CONNECTING TO OBS...");
+        if(this.connected){
+            return;
+        }
+        if(url == null && port == null && password == null){
+            if(this.settings.url != null && this.settings.port != null && this.settings.password != null){
+                url = this.settings.url;
+                port = this.settings.port;
+                password = this.settings.password;
+            }else{
+                return;
+            }
+        }
         try{
+            console.log("CONNECTING TO OBS...");
             await obsClient.connect("ws://"+url+":"+port, password, {
                 eventSubscriptions: EventSubscription.All | EventSubscription.InputVolumeMeters | EventSubscription.Ui
             });
-            
+            console.log("OBS CONNECT SUCCESS");
             this.connected = true;
             sendToTCP("/obs/status/connection", 1);
             
@@ -135,22 +147,22 @@ class OBSOSC{
             obsClient.on("SceneItemEnableStateChanged", (data) => {
                 sendToTCP("/obs/event/SceneItemEnableStateChanged", JSON.stringify(data));
             })
-            obsClient.on("ExitStarted", () => {
-                obs.disconnect();
+            obsClient.on("ConnectionClosed", () => {
+                obsClient.disconnect();
                 this.connected = false;
                 sendToTCP("/obs/status/shutdown", "OBS has shutdown");
-            })
-            console.log("OBS CONNECT SUCCESS");
+            });
 
         }catch(error){
             console.log("OBS ERROR", error.message);
+            this.connected = false;
         }
         
     }
 
     setRecordingNameToStream(){
         return new Promise(async (res, rej)=>{
-            let defaultFileName = await obsClient.call("GetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting"});
+            let defaultFileName = await this.call("GetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting"});
 
             let channelInfo = await twitch.getChannelInfo();
             //console.log(channelInfo);
@@ -166,7 +178,7 @@ class OBSOSC{
             let recordingTitle = defaultFileName.defaultParameterValue.split(" ")[0] + "_" + splitTitle;
             
             if(channelInfo){
-                await obsClient.call("SetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting", parameterValue:recordingTitle});
+                await this.call("SetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting", parameterValue:recordingTitle});
                 res(recordingTitle);
             }
         });
@@ -174,8 +186,8 @@ class OBSOSC{
 
     setRecordingNameToDefault(){
         return new Promise(async (res, rej) => {
-            let defaultFileName = await obsClient.call("GetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting"});
-            await obsClient.call("SetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting", parameterValue:defaultFileName.defaultParameterValue});
+            let defaultFileName = await this.call("GetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting"});
+            await this.call("SetProfileParameter",{parameterCategory:"Output",parameterName:"FilenameFormatting", parameterValue:defaultFileName.defaultParameterValue});
             res(defaultFileName.defaultParameterValue);
         })
         
@@ -183,7 +195,7 @@ class OBSOSC{
 
     async getInputList(){
         return new Promise((res, rej) => {
-            obsClient.call("GetInputList")
+            this.call("GetInputList")
             .then(data=>{
                 res(data.inputs);
             }).catch(e=>rej(e));
@@ -192,11 +204,12 @@ class OBSOSC{
 
     setInputMute(iName, iMute){
         
-        obsClient.call("SetInputMute", {inputName:iName, inputMuted:iMute});
+        this.call("SetInputMute", {inputName:iName, inputMuted:iMute});
     }
 
     async call(name, data){
-        if(obsClient.socket == null || obsClient.socket?.readyState==0){
+        await this.connect();
+        if(!this.connected){
             console.log("OBS Not connected for ", name);
             return;
         }
@@ -244,11 +257,11 @@ class OBSOSC{
         if(address[1] == "obs"){
             if(address[2] == "stream"){
                 if(message.args[0] == "start"){
-                    obsClient.call("StartStream");
+                    this.call("StartStream");
                 }else if(message.args[0] == "stop"){
-                    obsClient.call("StopStream");
+                    this.call("StopStream");
                 }else if(message.args[0] == "toggle"){
-                    obsClient.call("ToggleStream");
+                    this.call("ToggleStream");
                 }
             }else if(address[2] == "record"){
                 if(message.args[0] == "start"){
@@ -256,32 +269,32 @@ class OBSOSC{
                         await this.setRecordingNameToStream();
                     }
                     
-                    obsClient.call("StartRecord");
+                    this.call("StartRecord");
                 }else if(message.args[0] == "stop"){
                     if(this.settings.recordRename){
                         await this.setRecordingNameToDefault();
                     }
-                    obsClient.call("StopRecord");
+                    this.call("StopRecord");
                 }else if(message.args[0] == "pause"){
-                    obsClient.call("PauseRecord");
+                    this.call("PauseRecord");
                 }else if(message.args[0] == "resume"){
-                    obsClient.call("ResumeRecord");
+                    this.call("ResumeRecord");
                 }else if(message.args[0] == "toggle"){
                     if(this.settings.recordRename){
-                        let recordStatus = await obsClient.call("GetRecordStatus");
+                        let recordStatus = await this.call("GetRecordStatus");
                         if(!recordStatus.outputActive){
                             await this.setRecordingNameToStream();
                         }else{
                             await this.setRecordingNameToDefault();
                         }
                     }
-                    obsClient.call("ToggleRecord");
+                    this.call("ToggleRecord");
                 }
             }else if(address[2] == "transition"){
                 if(address[3] == "Trigger"){
-                    obsClient.call("TriggerStudioModeTransition");
+                    this.call("TriggerStudioModeTransition");
                 }else if(address[3] == "SetTBar"){
-                    obsClient.call("SetTBarPosition", message.args[0]);
+                    this.call("SetTBarPosition", message.args[0]);
                 }
             }else if(address[2] == "event"){
                 if(address[3] == "InputVolumeMeters"){
@@ -303,7 +316,7 @@ class OBSOSC{
                                 let finalStatusObj = {};
                                 for(let o in objects){
                                     if(objects[o] == "stream"){
-                                        finalStatusObj[objects[o]] = await obsClient.call("GetStreamStatus");
+                                        finalStatusObj[objects[o]] = await this.call("GetStreamStatus");
                                         if(finalStatusObj[objects[o]].outputReconnecting == true && this.streamReconnecting == false){
                                             twitch.restartChat(this.settings.disconnectAlert?"disconnected":null);
                                             this.streamReconnecting = true;
@@ -340,9 +353,9 @@ class OBSOSC{
                                         }
                                         
                                     }else if(objects[o] == "record"){
-                                        finalStatusObj[objects[o]] = await obsClient.call("GetRecordStatus");
+                                        finalStatusObj[objects[o]] = await this.call("GetRecordStatus");
                                     }else if(objects[o] == "obs"){
-                                        finalStatusObj[objects[o]] = await obsClient.call("GetStats");
+                                        finalStatusObj[objects[o]] = await this.call("GetStats");
                                     }
                                 }
                                 if(finalStatusObj["stream"].outputActive == false && finalStatusObj["record"].outputActive == false){
@@ -361,19 +374,19 @@ class OBSOSC{
             }else if(address[2] == "get"){
                 if(address[3] == "input"){
                     if(address[4] == "mute"){
-                        obsClient.call("GetInputMute", {inputName:message.args[0]})
+                        this.call("GetInputMute", {inputName:message.args[0]})
                         .then(data=>{
                             data.inputName = message.args[0];
                             sendToTCP("/obs/get/input/mute", JSON.stringify(data));
                         }).catch(e=>{});
                     }else if(address[4] == "volume"){
-                        obsClient.call("GetInputVolume", {inputName:message.args[0]})
+                        this.call("GetInputVolume", {inputName:message.args[0]})
                         .then(data=>{
                             data.inputName = message.args[0];
                             sendToTCP("/obs/get/input/volume", JSON.stringify(data));
                         }).catch(e=>{});
                     }else if(address[4] == "list"){
-                        obsClient.call("GetInputList")
+                        this.call("GetInputList")
                         .then(data=>{
                             sendToTCP("/obs/get/input/list", JSON.stringify(data));
                         })
@@ -383,10 +396,10 @@ class OBSOSC{
                             groups:{}
                         };
     
-                        obsClient.call("GetCurrentProgramScene")
+                        this.call("GetCurrentProgramScene")
                         .then(programScene=>{
                             finalInputList.currentProgramSceneName = programScene.currentProgramSceneName;
-                            obsClient.call("GetSceneItemList", {sceneName:programScene.currentProgramSceneName})
+                            this.call("GetSceneItemList", {sceneName:programScene.currentProgramSceneName})
                             .then(async sceneItemListRaw=>{
                                 
                                 let sceneItemList = sceneItemListRaw.sceneItems;
@@ -399,8 +412,8 @@ class OBSOSC{
                                         enabled:sceneItemList[item].sceneItemEnabled,
                                     }
 
-                                    let volumeData = await obsClient.call("GetInputVolume", {inputName:sceneItemList[item].sourceName}).catch(e=>{});
-                                    let volumeMuteData = await obsClient.call("GetInputMute", {inputName:sceneItemList[item].sourceName}).catch(e=>{});
+                                    let volumeData = await this.call("GetInputVolume", {inputName:sceneItemList[item].sourceName}).catch(e=>{});
+                                    let volumeMuteData = await this.call("GetInputMute", {inputName:sceneItemList[item].sourceName}).catch(e=>{});
                                     if(volumeData != null){
                                         
                                         finalInputList.items[sceneItemList[item].sceneItemId].volumeData = volumeData;
@@ -408,12 +421,12 @@ class OBSOSC{
                                     }
 
                                     if(sceneItemList[item].isGroup == true){
-                                        let thisGroupItems = await obsClient.call("GetGroupSceneItemList", {sceneName:sceneItemList[item].sourceName})
+                                        let thisGroupItems = await this.call("GetGroupSceneItemList", {sceneName:sceneItemList[item].sourceName})
                                         .then(groupItemData=>groupItemData.sceneItems);
                                         finalInputList.groups[sceneItemList[item].sourceName] = thisGroupItems;
                                         for(let gi in thisGroupItems){
-                                            let thisVolumeData = await obsClient.call("GetInputVolume", {inputName:thisGroupItems[gi].sourceName}).catch(e=>{});
-                                            let thisVolumeMuteData = await obsClient.call("GetInputMute", {inputName:thisGroupItems[gi].sourceName}).catch(e=>{});
+                                            let thisVolumeData = await this.call("GetInputVolume", {inputName:thisGroupItems[gi].sourceName}).catch(e=>{});
+                                            let thisVolumeMuteData = await this.call("GetInputMute", {inputName:thisGroupItems[gi].sourceName}).catch(e=>{});
                                             finalInputList.items[gi+thisGroupItems[gi].sceneItemId] = {
                                                 name:thisGroupItems[gi].sourceName,
                                                 id:thisGroupItems[gi].sceneItemId,
@@ -435,17 +448,17 @@ class OBSOSC{
                     let finalStatusObj = {};
                     for(let o in objects){
                         if(objects[o] == "stream"){
-                            finalStatusObj[objects[o]] = await obsClient.call("GetStreamStatus");
+                            finalStatusObj[objects[o]] = await this.call("GetStreamStatus");
                         }else if(objects[o] == "record"){
-                            finalStatusObj[objects[o]] = await obsClient.call("GetRecordStatus");
+                            finalStatusObj[objects[o]] = await this.call("GetRecordStatus");
                         }else if(objects[o] == "obs"){
-                            finalStatusObj[objects[o]] = await obsClient.call("GetStats");
+                            finalStatusObj[objects[o]] = await this.call("GetStats");
                         }
                     }
                     sendToTCP("/obs/get/status", JSON.stringify(finalStatusObj));
                 }else if(address[3] == "scene"){
                     if(address[4] == "list"){
-                        obsClient.call("GetSceneList")
+                        this.call("GetSceneList")
                         .then(sceneData=>{
                             sendToTCP("/obs/get/scene/list", JSON.stringify(sceneData));
                         });
@@ -456,10 +469,10 @@ class OBSOSC{
                             groups:{}
                         };
     
-                        obsClient.call("GetCurrentProgramScene")
+                        this.call("GetCurrentProgramScene")
                         .then(programScene=>{
                             finalInputList.currentProgramSceneName = programScene.currentProgramSceneName;
-                            obsClient.call("GetSceneItemList", {sceneName:programScene.currentProgramSceneName})
+                            this.call("GetSceneItemList", {sceneName:programScene.currentProgramSceneName})
                             .then(async sceneItemListRaw=>{
                                 
                                 let sceneItemList = sceneItemListRaw.sceneItems;
@@ -471,7 +484,7 @@ class OBSOSC{
                                         locked:sceneItemList[item].sceneItemLocked,
                                     }
                                     if(sceneItemList[item].isGroup == true){
-                                        finalInputList.groups[sceneItemList[item].sourceName] = await obsClient.call("GetGroupSceneItemList", {sceneName:sceneItemList[item].sourceName})
+                                        finalInputList.groups[sceneItemList[item].sourceName] = await this.call("GetGroupSceneItemList", {sceneName:sceneItemList[item].sourceName})
                                     .then(groupItemData=>groupItemData.sceneItems);
                                     }
                                 }
@@ -480,29 +493,29 @@ class OBSOSC{
                             });
                         });
                     }else if(address[4] == "preview"){
-                        obsClient.call("GetCurrentPreviewScene")
+                        this.call("GetCurrentPreviewScene")
                         .then(sceneData=>{
                             sendToTCP("/obs/get/scene/preview", JSON.stringify(sceneData));
                         });
                     }else if(address[4] == "program"){
-                        obsClient.call("GetCurrentProgramScene")
+                        this.call("GetCurrentProgramScene")
                         .then(sceneData=>{
                             sendToTCP("/obs/get/scene/program", JSON.stringify(sceneData));
                         });
                     }
                 }else if(address[3] == "studiomode"){
-                    obsClient.call("GetStudioModeEnabled")
+                    this.call("GetStudioModeEnabled")
                     .then(studioData=>{
                         sendToTCP("/obs/get/studiomode", studioData.studioModeEnabled)
                     })
                 }else if(address[3] == "group"){
                     if(address[4] == "list"){
-                        obsClient.call("GetGroupList")
+                        this.call("GetGroupList")
                         .then(sceneData=>{
                             sendToTCP("/obs/get/group/list", JSON.stringify(sceneData));
                         });
                     }else if(address[4] == "sceneitems"){
-                        obsClient.call("GetGroupSceneItemList", {sceneName:message.args[0]})
+                        this.call("GetGroupSceneItemList", {sceneName:message.args[0]})
                         .then(sceneData=>{
                             sceneData.groupName = message.args[0];
                             sendToTCP("/obs/get/group/sceneitems", JSON.stringify(sceneData));
@@ -514,23 +527,23 @@ class OBSOSC{
                 if(address[3] == "input"){
                     if(address[4] == "mute"){
                         let vObj = JSON.parse(message.args[0]);
-                        obsClient.call("SetInputMute", {inputName:vObj.inputName, inputMuted:vObj.inputMuted});
+                        this.call("SetInputMute", {inputName:vObj.inputName, inputMuted:vObj.inputMuted});
                     }else if(address[4] == "volume"){
                         let vObj = JSON.parse(message.args[0]);
-                        obsClient.call("SetInputVolume", {inputName:vObj.inputName, inputVolumeMul:vObj.value});
+                        this.call("SetInputVolume", {inputName:vObj.inputName, inputVolumeMul:vObj.value});
                     }
                 }else if(address[3] == "scene"){
                     if(address[4] == "preview"){
-                        obsClient.call("SetCurrentPreviewScene", {sceneName:message.args[0]})
+                        this.call("SetCurrentPreviewScene", {sceneName:message.args[0]})
                     }else if(address[4] == "program"){
-                        obsClient.call("SetCurrentProgramScene", {sceneName:message.args[0]})
+                        this.call("SetCurrentProgramScene", {sceneName:message.args[0]})
                     }
                 }else if(address[3] == "studiomode"){
-                    obsClient.call("SetStudioModeEnabled", {studioModeEnabled:message.args[0]});
+                    this.call("SetStudioModeEnabled", {studioModeEnabled:message.args[0]});
                 }else if(address[3] == "source"){
                     if(address[4] == "enabled"){
                         let eObj = JSON.parse(message.args[0]);
-                        obsClient.call("SetSceneItemEnabled", {sceneName:eObj.sceneName, sceneItemId:eObj.sceneItemId, sceneItemEnabled:eObj.sceneItemEnabled});
+                        this.call("SetSceneItemEnabled", {sceneName:eObj.sceneName, sceneItemId:eObj.sceneItemId, sceneItemEnabled:eObj.sceneItemEnabled});
                     }
                 }
             }

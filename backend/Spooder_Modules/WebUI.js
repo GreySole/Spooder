@@ -43,6 +43,10 @@ var webLog = (...content) => {
 function isLocal(req){
     const remoteAddressRaw = req.ip.split(":");
     const remoteAddress = remoteAddressRaw[remoteAddressRaw.length-1];
+    if(remoteAddress == null){
+        console.log("Remote adderess null", req.ip);
+        return false;
+    }
     const isLocal = remoteAddress.startsWith('192.168.') ||
                     remoteAddress.startsWith('10.') ||
                     (remoteAddress == 1 && devMode == true) ||
