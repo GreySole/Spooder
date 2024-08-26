@@ -1,3 +1,7 @@
+/*import { sayInChat, checkResponseTrigger } from "@manager/EventManager.ts";
+import { logEffects } from "src/core/Logging.ts";
+import { backendDir } from "src/Types.ts";
+
 const fs = require("fs");
 const Axios = require("axios");
 
@@ -232,4 +236,4 @@ class SYouTube{
     }
 }
 
-module.exports = SYouTube;
+module.exports = SYouTube;*/
