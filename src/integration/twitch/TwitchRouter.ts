@@ -9,7 +9,7 @@ import { EventManager, sayInChat } from '../../core/manager/EventManager.ts';
 import { ModerationManager } from '../../core/manager/ModerationManager.ts';
 import ModuleManager from '../../core/manager/ModuleManager.ts';
 import ShareManager from '../../core/manager/ShareManager.ts';
-import { backendDir } from '../../Types.ts';
+import { backendDir, KeyedObject } from '../../Types.ts';
 import Discord from '../discord/main.ts';
 
 export default function getTwitchRouters() {
@@ -70,20 +70,21 @@ export default function getTwitchRouters() {
 
   router.get('/revoke', async (req, res) => {
     let cid = oauth['client-id'];
-    const revokeToken = req.body.revokeToken;
-    if (revokeToken == oauth.broadcaster_token) {
-      await Axios({
-        url:
-          'https://id.twitch.tv/oauth2/revoke?client_id=' +
-          cid +
-          '&token=' +
-          oauth.broadcaster_token,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }).then((response: AxiosResponse) => {});
-    }
+
+    await Axios({
+      url:
+        'https://id.twitch.tv/oauth2/revoke?client_id=' + cid + '&token=' + oauth.broadcaster_token,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+      .then((response: AxiosResponse) => {})
+      .catch((error: AxiosError) => {
+        twitchLog('Twitch revoke error: ', error.message);
+        return;
+      });
+
     twitchLog('Revoking: ' + cid);
     await Axios({
       url: 'https://id.twitch.tv/oauth2/revoke?client_id=' + cid + '&token=' + oauth.token,
@@ -92,22 +93,22 @@ export default function getTwitchRouters() {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
     })
-      .then((response: AxiosResponse) => {
-        oauth.broadcaster_token = '';
-        oauth.broadcaster_refreshToken = '';
-        oauth.token = '';
-        oauth.refreshToken = '';
-        twitchLog('Both oauth revoked');
-        res.send({ status: 'Both oauth revoked' });
-
-        fs.writeFile(backendDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
-          twitchLog('oauth saved!');
-        });
-      })
+      .then((response: AxiosResponse) => {})
       .catch((error: AxiosError) => {
         twitchLog('Twitch revoke error: ', error.message);
         return;
       });
+
+    oauth.broadcaster_token = '';
+    oauth.broadcaster_refreshToken = '';
+    oauth.token = '';
+    oauth.refreshToken = '';
+    twitchLog('Both oauth revoked');
+    res.send({ status: 'Both oauth revoked' });
+
+    fs.writeFile(backendDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
+      twitchLog('oauth saved!');
+    });
   });
 
   router.get('/save_auth_to_broadcaster', async (req, res) => {
@@ -120,7 +121,6 @@ export default function getTwitchRouters() {
   });
 
   router.post('/saveConfig', async (req, res) => {
-    console.log(oauth);
     oauth['client-id'] = req.body['client-id'];
     oauth['client-secret'] = req.body['client-secret'];
     fs.writeFile(backendDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
@@ -240,60 +240,30 @@ export default function getTwitchRouters() {
     res.send({ status: 'ok' });
   });
 
-  router.get('/eventsubs', async (req, res) => {
-    const events = EventManager.getEvents();
-    let sendSubs = Object.assign(eventsubs);
-    sendSubs.callback_url = sconfig.network.external_http_url;
-    sendSubs.spooderevents = Object.keys(events);
-    res.send(JSON.stringify(sendSubs));
+  router.get('/get_config', async (req, res) => {
+    res.send({
+      'client-id': oauth['client-id'],
+      'client-secret': oauth['client-secret'],
+    });
   });
 
-  router.get('/eventsubs/list', (req, res) => {
-    res.send(twitchModule.eventsub.getEventSubs());
+  router.get('/get_available_eventsubs', (req, res) => {
+    res.send(eventsubs);
   });
 
-  router.get('/config', async (req, res) => {
-    const events = EventManager.getEvents();
-    let sendSubs = Object.assign({}, oauth);
-    let twitchBotUser = await twitchModule.api.getUserInfo(twitchModule.api.botUsername);
-    let twitchBroadcasterUser = await twitchModule.api.getUserInfo(twitchModule.api.homeChannel);
-    sendSubs.botUser = twitchBotUser;
-    sendSubs.broadcasterUser = twitchBroadcasterUser;
-    sendSubs.host_port = sconfig.network.host_port;
-    sendSubs.callback_url = sconfig.network.external_http_url;
-    sendSubs.spooderevents = Object.keys(events);
-    sendSubs.oldEventsubFile = fs.existsSync(path.join(backendDir, 'settings', 'eventsub.json'));
-    sendSubs.eventsubList = twitchModule.eventsub.getEventSubs();
-    sendSubs.scopeList = scopes;
-    res.send(sendSubs);
+  router.get('/get_available_scopes', (req, res) => {
+    res.send(scopes);
+  });
+
+  router.get('/get_linked_accounts', async (req, res) => {
+    const twitchBotUser = await twitchModule.api.getUserInfo(twitchModule.api.botUsername);
+    const twitchBroadcasterUser = await twitchModule.api.getUserInfo(twitchModule.api.homeChannel);
+
+    res.send({ botUser: twitchBotUser.data[0], broadcasterUser: twitchBroadcasterUser.data[0] });
   });
 
   router.get('/get_eventsubs', async (req, res) => {
-    if (twitchModule.loggedIn === false) {
-      res.send({ error: 'nologin' });
-      return;
-    }
-    await twitchModule.api.getAppToken();
-    if (twitchModule.api.appToken == '') {
-      twitchLog('NO APP TOKEN');
-      return;
-    }
-    await Axios({
-      url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
-      method: 'GET',
-      headers: {
-        'Client-Id': oauth['client-id'],
-        Authorization: ' Bearer ' + twitchModule.api.appToken,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((response: AxiosResponse) => {
-        res.send(JSON.stringify(response.data));
-      })
-      .catch((error: AxiosError) => {
-        twitchLog('Eventsub get error: ', error.message);
-        return;
-      });
+    res.send(twitchModule.eventsub.getEventSubs());
   });
 
   router.get('/get_channelpoint_rewards', async (req, res) => {

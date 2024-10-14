@@ -33,21 +33,35 @@ export default class ConfigManager {
       webui: {},
       modui: {},
       spooderpet: {
-        bigeyeleft: 'o',
-        bigeyeright: 'o',
-        littleeyeleft: '\u00ba',
-        littleeyeright: '\u00ba',
-        fangleft: ' ',
-        fangright: ' ',
-        mouth: '\u03c9',
+        parts: {
+          bigeyeleft: 'o',
+          bigeyeright: 'o',
+          littleeyeleft: 'º',
+          littleeyeright: 'º',
+          fangleft: ' ',
+          fangright: ' ',
+          mouth: 'ω',
+          bodyleft: '(',
+          bodyright: ')',
+          shortlegleft: '/\\',
+          longlegleft: '/╲',
+          shortlegright: '/\\',
+          longlegright: '╱\\',
+        },
         colors: {
-          bigeyeleft: 'white',
-          bigeyeright: 'white',
-          littleeyeleft: 'white',
-          littleeyeright: 'white',
-          fangleft: 'white',
-          fangright: 'white',
-          mouth: 'white',
+          bigeyeleft: '#FFFFFF',
+          bigeyeright: '#FFFFFF',
+          littleeyeleft: '#FFFFFF',
+          littleeyeright: '#FFFFFF',
+          fangleft: '#FFFFFF',
+          fangright: '#FFFFFF',
+          mouth: '#FFFFFF',
+          bodyleft: '#FFFFFF',
+          bodyright: '#FFFFFF',
+          shortlegleft: '#FFFFFF',
+          shortlegright: '#FFFFFF',
+          longlegleft: '#FFFFFF',
+          longlegright: '#FFFFFF',
         },
       },
     },
@@ -94,11 +108,28 @@ export default class ConfigManager {
 
     for (let s in settingsFiles) {
       try {
-        let settingFile = fs.readFileSync(backendDir + '/settings/' + settingsFiles[s], {
+        const settingsFile = fs.readFileSync(backendDir + '/settings/' + settingsFiles[s], {
           encoding: 'utf8',
         });
 
-        ConfigManager.instance.settings[s] = JSON.parse(settingFile);
+        const settingsObj = JSON.parse(settingsFile);
+
+        if (s === 'themes') {
+          if (settingsObj.spooderpet.parts == null) {
+            const parts = {} as KeyedObject;
+            for (let t in settingsObj.spooderpet) {
+              if (t === 'colors') {
+                continue;
+              }
+              parts[t] = JSON.parse(JSON.stringify(settingsObj.spooderpet[t]));
+              delete settingsObj.spooderpet[t];
+            }
+
+            settingsObj.spooderpet.parts = parts;
+          }
+        }
+
+        ConfigManager.instance.settings[s] = settingsObj;
         spooderLog('Got ' + settingsFiles[s]);
       } catch (e: any) {
         if (e.code == 'ENOENT') {
@@ -116,19 +147,21 @@ export default class ConfigManager {
             newFile = {
               webui: {},
               spooderpet: {
-                bigeyeleft: 'o',
-                bigeyeright: 'o',
-                littleeyeleft: '\u00ba',
-                littleeyeright: '\u00ba',
-                fangleft: ' ',
-                fangright: ' ',
-                mouth: '\u03c9',
-                bodyleft: '(',
-                bodyright: ')',
-                shortlegleft: '/\\',
-                longlegleft: '/╲',
-                shortlegright: '/\\',
-                longlegright: '╱\\',
+                parts: {
+                  bigeyeleft: 'o',
+                  bigeyeright: 'o',
+                  littleeyeleft: 'º',
+                  littleeyeright: 'º',
+                  fangleft: ' ',
+                  fangright: ' ',
+                  mouth: 'ω',
+                  bodyleft: '(',
+                  bodyright: ')',
+                  shortlegleft: '/\\',
+                  longlegleft: '/╲',
+                  shortlegright: '/\\',
+                  longlegright: '╱\\',
+                },
                 colors: {
                   bigeyeleft: '#FFFFFF',
                   bigeyeright: '#FFFFFF',

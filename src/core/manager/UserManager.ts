@@ -28,11 +28,7 @@ export default class UserManager {
   }
 
   users = {
-    trusted_users: {
-      userId: {} as KeyedObject,
-      permission: {} as KeyedObject,
-      verify: {} as KeyedObject,
-    } as KeyedObject,
+    trusted_users: {} as KeyedObject,
     trusted_users_pw: {} as KeyedObject,
   };
 

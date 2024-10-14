@@ -13,6 +13,7 @@ import UserManager from './UserManager.ts';
 import { EventManager, checkResponseTrigger, sayInChat } from './EventManager.ts';
 import { ModerationManager } from './ModerationManager.ts';
 import PluginManager from './PluginManager.ts';
+import ModuleManager from './ModuleManager.ts';
 
 export default class OSCManager {
   private static instance: OSCManager;
@@ -314,7 +315,6 @@ export default class OSCManager {
             case 'plugin':
               const activePlugins = PluginManager.getActivePlugins();
               if (activePlugins[osctunnels[o]['clientTo']]?.onOSC != null) {
-                console.log('PLUGIN');
                 activePlugins[osctunnels[o]['clientTo']].onOSC(message);
               }
               break;
@@ -344,6 +344,7 @@ export default class OSCManager {
     var osc = this.osc;
 
     osc.on('*', (message: OSC.Message) => {
+      console.log('OSC UDP MESSAGE', message.address);
       const events = EventManager.getEvents();
       OSCManager.sendToMonitor('udp', 'receive', {
         types: message.types,
@@ -456,8 +457,15 @@ export default class OSCManager {
         }
       }
 
+      const controlModules = ModuleManager.getControlModules();
+      for (const c in controlModules) {
+        if (controlModules[c].onOSC != null) {
+          controlModules[c].onOSC(message);
+        }
+      }
+
       const activePlugins = PluginManager.getActivePlugins();
-      for (let p in activePlugins) {
+      for (const p in activePlugins) {
         if (activePlugins[p].onOSC != null) {
           activePlugins[p].onOSC(message);
         }
@@ -496,6 +504,13 @@ export default class OSCManager {
       }
 
       let address = message.address.split('/');
+
+      const controlModules = ModuleManager.getControlModules();
+      for (const c in controlModules) {
+        if (controlModules[c].onOSC != null) {
+          controlModules[c].onOSC(message);
+        }
+      }
 
       const activePlugins = PluginManager.getActivePlugins();
       for (let p in activePlugins) {

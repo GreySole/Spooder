@@ -15,11 +15,11 @@ import { webLog } from '../../../Logging.ts';
 export function UserRoutes() {
   const router = Router();
   const publicRouter = Router();
-  router.get('/users', (req: Request, res: Response) => {
+  router.get('/data', (req: Request, res: Response) => {
     res.send(UserManager.getUsers());
   });
 
-  router.get('/users/resetPassword', (req: Request, res: Response) => {
+  router.get('/reset_password', (req: Request, res: Response) => {
     const username = req.query.username;
     if (!username) {
       res.send({ error: 'No username' });
@@ -29,7 +29,7 @@ export function UserRoutes() {
     res.send({ status: 'SUCCESS' });
   });
 
-  router.post('/saveUsers', async (req: Request, res: Response) => {
+  router.post('/save_users', async (req: Request, res: Response) => {
     const users = UserManager.getUsers();
     let newList = req.body.users;
     let nameChanges = req.body.nameChanges;
@@ -73,8 +73,8 @@ export function UserRoutes() {
     verifyingModule.verifyUser(username);
   }
 
-  router.post('/user/verify', userVerify);
-  publicRouter.post('/user/verify', userVerify);
+  router.post('/verify', userVerify);
+  publicRouter.post('/verify', userVerify);
 
   function verifyCheck(req: Request, res: Response) {
     const pendingUser = UserManager.getPendingUser(req.query.username as string);
@@ -89,8 +89,8 @@ export function UserRoutes() {
       res.send('verify-waiting');
     }
   }
-  router.get('/user/verifycheck', verifyCheck);
-  publicRouter.get('/user/verifycheck', verifyCheck);
+  router.get('/verifycheck', verifyCheck);
+  publicRouter.get('/verifycheck', verifyCheck);
 
   async function userLogin(req: Request, res: Response) {
     let username = req.body.username.toLowerCase();
@@ -138,7 +138,7 @@ export function UserRoutes() {
     }
   }
 
-  router.post('/user/authentication', (req: Request, res: Response) => {
+  router.post('/authentication', (req: Request, res: Response) => {
     let browserToken = crypto.randomBytes(48).toString('hex');
     UserManager.setActiveUser('local', browserToken);
     res.cookie('access', browserToken, {
@@ -148,7 +148,7 @@ export function UserRoutes() {
     });
     res.send({ status: 'active' });
   });
-  publicRouter.post('/user/authentication', userLogin);
+  publicRouter.post('/authentication', userLogin);
 
   async function modUtil(req: Request, res: Response) {
     let isLocalHost = isLocal(req);

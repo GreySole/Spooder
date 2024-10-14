@@ -77,6 +77,7 @@ export default class STwitch implements StreamModuleInterface {
   chat = new TwitchChat();
 
   getChannelInfo = this.api.getChannelInfo;
+  getUserInfo = this.api.getUserInfo;
   getChannels = this.api.getChannels;
   refreshEventSubs = this.eventsub.refreshEventSubs;
   lastMessage = this.chat.lastMessage;

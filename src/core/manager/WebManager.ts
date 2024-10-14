@@ -5,23 +5,24 @@ import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import path from 'path';
-import { backendDir, frontendDir } from '../../../Types.ts';
-import { logEffects, webLog } from '../../Logging.ts';
-import ConfigManager from '../ConfigManager.ts';
-import { ConfigRoutes } from './routes/ConfigRoutes.ts';
-import { isLocal, PluginRoutes } from './routes/PluginRoutes.ts';
-import ModuleManager from '../ModuleManager.ts';
+import { backendDir, frontendDir } from '../../Types.ts';
+import { logEffects, webLog } from '../Logging.ts';
+import ConfigManager from './ConfigManager.ts';
+import { ConfigRoutes } from './webui/routes/ConfigRoutes.ts';
+import { isLocal, PluginRoutes } from './webui/routes/PluginRoutes.ts';
+import ModuleManager from './ModuleManager.ts';
 import fs from 'fs-extra';
 import { networkInterfaces } from 'os';
-import { StreamModuleInterface } from '../../../integration/interface/StreamModuleInterface.ts';
-import { CommunityModuleInterface } from '../../../integration/interface/CommunityModuleInterface.ts';
-import { BackupRestoreRoutes } from './routes/BackupRestoreRoutes.ts';
-import { EventRoutes } from './routes/EventRoutes.ts';
-import { UserRoutes } from './routes/UserRoutes.ts';
-import { ShareRoutes } from './routes/ShareRoutes.ts';
-import { PublicRoutes } from './routes/PublicRoutes.ts';
-import PluginManager from '../PluginManager.ts';
-import ShareManager from '../ShareManager.ts';
+import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
+import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface.ts';
+import { BackupRestoreRoutes } from './webui/routes/BackupRestoreRoutes.ts';
+import { EventRoutes } from './webui/routes/EventRoutes.ts';
+import { UserRoutes } from './webui/routes/UserRoutes.ts';
+import { ShareRoutes } from './webui/routes/ShareRoutes.ts';
+import { PublicRoutes } from './webui/routes/PublicRoutes.ts';
+import PluginManager from './PluginManager.ts';
+import ShareManager from './ShareManager.ts';
+import { ControlModuleInterface } from 'src/integration/interface/ControlModuleInterface.ts';
 
 const nets = networkInterfaces();
 const results = Object.create({});
@@ -175,7 +176,7 @@ export class WebManager {
       router.use('/users', userRoutes.local);
 
       const shareRoutes = ShareRoutes();
-      router.use('/share', shareRoutes.local);
+      router.use('/shares', shareRoutes.local);
 
       const publicRoutes = PublicRoutes();
       router.use('/public', publicRoutes.local);
@@ -204,10 +205,16 @@ export class WebManager {
     return router;
   }
 
-  static registerModuleApi(context: StreamModuleInterface | CommunityModuleInterface) {
+  static registerModuleApi(
+    context: StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface,
+  ) {
     const { router, publicRouter, baseUrl } = context.getRouters();
-    WebManager.instance.router?.use(baseUrl, router);
-    WebManager.instance.publicRouter?.use(baseUrl, publicRouter);
+    if (router != null) {
+      WebManager.instance.router?.use(baseUrl, router);
+    }
+    if (publicRouter != null) {
+      WebManager.instance.publicRouter?.use(baseUrl, publicRouter);
+    }
   }
 
   static async startNgrok() {

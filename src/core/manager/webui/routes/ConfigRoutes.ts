@@ -2,7 +2,7 @@ import { backendDir } from '../../../../Types.ts';
 import path from 'path';
 import { Request, Response, Router } from 'express';
 import fs from 'fs';
-import { WebManager } from '../WebManager.ts';
+import { WebManager } from '../../WebManager.ts';
 import ConfigManager from '../../ConfigManager.ts';
 import { webLog } from '../../../Logging.ts';
 import OSCManager from '../../OSCManager.ts';
@@ -13,16 +13,10 @@ export function ConfigRoutes() {
   const publicRouter = Router();
 
   router.get('/server_config', (req, res) => {
-    let backupSettingsDir = path.join(backendDir, 'backup', 'settings');
-    let backupPluginsDir = path.join(backendDir, 'backup', 'plugins');
-    let backups = {
-      settings: fs.existsSync(backupSettingsDir) ? fs.readdirSync(backupSettingsDir) : {},
-      plugins: fs.existsSync(backupPluginsDir) ? fs.readdirSync(backupPluginsDir) : {},
-    };
-    res.send({ config: sconfig, backups: backups });
+    res.send(sconfig);
   });
 
-  router.post('/saveConfig', async (req, res) => {
+  router.post('/save_config', async (req, res) => {
     let statusMsg = '';
     if (sconfig.network.externalhandle == 'ngrok' && req.body.network.externalhandle != 'ngrok') {
       WebManager.stopNgrok();
@@ -48,7 +42,7 @@ export function ConfigRoutes() {
     webLog('SAVED THE CONFIG');
   });
 
-  router.post('/saveCustomSpooder', async (req: Request, res: Response) => {
+  router.post('/save_custom_spooder', async (req: Request, res: Response) => {
     let statusMsg = 'Spooder Saved!';
     ConfigManager.saveThemes(req.body);
     res.send({ status: statusMsg });

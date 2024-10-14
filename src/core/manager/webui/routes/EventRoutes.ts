@@ -6,6 +6,7 @@ import ShareManager from '../../ShareManager.ts';
 import OSCManager from '../../OSCManager.ts';
 import express from 'express';
 import { webLog } from '../../../Logging.ts';
+import { KeyedObject } from 'src/Types.ts';
 
 export function EventRoutes() {
   const router = express.Router();
@@ -19,27 +20,21 @@ export function EventRoutes() {
     });
   });
 
+  router.get('/chat_commands', (req: Request, res: Response) => {
+    const events = EventManager.getEvents();
+    const chatCommands = {} as KeyedObject;
+    for (let e in events) {
+      if (events[e].triggers.chat?.enabled) {
+        chatCommands[e] = { group: events[e].group, command: events[e].triggers.chat.command };
+      }
+    }
+    res.send(chatCommands);
+  });
+
   router.post('/save_events', async (req: Request, res: Response) => {
     EventManager.saveEvents(req.body.events, req.body.groups);
     res.send({ status: 'SAVE SUCCESS' });
     webLog('SAVED COMMANDS');
-  });
-
-  router.get('/osc_tunnels', async (req: Request, res: Response) => {
-    const osctunnels = OSCManager.getTunnels();
-    res.send(JSON.stringify(osctunnels));
-  });
-
-  router.post('/save_osc_tunnels', async (req: Request, res: Response) => {
-    OSCManager.saveTunnels(req.body);
-    res.send({ status: 'SAVE SUCCESS' });
-    webLog('SAVED THE TUNNELS');
-  });
-
-  router.get('/udp_clients', (req: Request, res: Response) => {
-    const sconfig = ConfigManager.getConfig();
-
-    res.send({ express: JSON.stringify(sconfig.network.udp_clients) });
   });
 
   router.post('/verify_response_script', async (req: Request, res: Response) => {

@@ -8,8 +8,9 @@ import ModuleManager from './src/core/manager/ModuleManager.ts';
 import PluginManager from './src/core/manager/PluginManager.ts';
 import ShareManager from './src/core/manager/ShareManager.ts';
 import { backendDir, KeyedObject } from './src/Types.ts';
-import { WebManager } from './src/core/manager/webui/WebManager.ts';
+import { WebManager } from './src/core/manager/WebManager.ts';
 import OSCManager from './src/core/manager/OSCManager.ts';
+import UserManager from './src/core/manager/UserManager.ts';
 
 const logDir = path.join(backendDir, 'log');
 
@@ -62,6 +63,7 @@ if (initMode) {
     new EventManager();
     new ModerationManager();
     new OSCManager();
+    new UserManager();
     new ShareManager();
     new PluginManager();
   });

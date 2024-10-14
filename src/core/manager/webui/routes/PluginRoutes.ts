@@ -4,13 +4,14 @@ import AdmZip from 'adm-zip';
 import chmodr from 'chmodr';
 import path from 'path';
 import fs from 'fs-extra';
-import { UploadedFile } from 'express-fileupload';
-import { CoreModule, KeyedObject, backendDir } from '../../../../Types.ts';
+import fileUpload, { UploadedFile } from 'express-fileupload';
+import { KeyedObject, backendDir } from '../../../../Types.ts';
 import { logToFile, webLog } from '../../../Logging.ts';
 import ConfigManager from '../../ConfigManager.ts';
 import { EventManager } from '../../EventManager.ts';
 import OSCManager from '../../OSCManager.ts';
 import PluginManager from '../../PluginManager.ts';
+import bodyParser from 'body-parser';
 
 const pluginApi = {
   local: {
@@ -76,6 +77,12 @@ export function PluginRoutes() {
   const sconfig = ConfigManager.getConfig();
   const router = express.Router();
   const publicRouter = express.Router();
+
+  router.use(bodyParser.urlencoded({ extended: true }));
+  router.use(bodyParser.json({ limit: '100mb' }));
+  router.use('/install_plugin', fileUpload());
+  router.use('/upload_plugin_asset/*', fileUpload());
+  router.use('/upload_plugin_icon/*', fileUpload());
 
   async function pluginGet(req: Request, res: Response) {
     var pluginName = req.query.plugin;
@@ -402,9 +409,9 @@ export function PluginRoutes() {
     });
   });
 
-  router.post('/browse_plugin_assets', async (req: Request, res: Response) => {
-    let currentPath = req.body.folder;
-    let pluginName = req.body.pluginname;
+  router.get('/browse_plugin_assets', async (req: Request, res: Response) => {
+    const currentPath = req.query.folder as string;
+    const pluginName = req.query.pluginname as string;
 
     if (!fs.existsSync(path.join(backendDir, 'web', 'assets', pluginName))) {
       fs.mkdirSync(path.join(backendDir, 'web', 'assets', pluginName));
@@ -415,10 +422,14 @@ export function PluginRoutes() {
       return;
     }
 
-    let dirs =
+    const dirs =
       fs.existsSync(path.join(backendDir, 'web', 'assets', pluginName, currentPath)) == true
         ? fs.readdirSync(path.join(backendDir, 'web', 'assets', pluginName, currentPath))
-        : null;
+        : [];
+
+    dirs.forEach((value, index, array) => {
+      array[index] = currentPath === '/' ? `/${value}` : `${currentPath}/${value}`;
+    });
 
     res.send({ status: 'ok', dirs: dirs });
   });

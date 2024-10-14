@@ -10,12 +10,10 @@ export default class TwitchEventSub {
   };
 
   getEventSubs = async () => {
-    console.log('MODULES', ModuleManager.getStreamModules(), this);
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const appToken = this.getModule().api.appToken;
     const getAppToken = this.getModule().api.getAppToken;
-    console.log('APP TOKEN', appToken);
     if (loggedIn == false) {
       return;
     }
@@ -36,7 +34,6 @@ export default class TwitchEventSub {
       twitchLog('Eventsub get error: ', error.message, error.response?.data?.message);
       return;
     });
-    console.log('GOT EVENTSUBS', response);
     return response?.data;
   };
 

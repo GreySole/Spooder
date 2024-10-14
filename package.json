@@ -5,7 +5,7 @@
   "main": "spooder.ts",
   "type": "module",
   "scripts": {
-    "start": "ts-node-esm spooder.ts",
+    "start": "tsx spooder.ts",
     "dev": "node spooder.ts -d",
     "init": "node spooder.ts -i",
     "safe": "node spooder.ts -e",
@@ -36,7 +36,6 @@
     "prettier-eslint": "^16.3.0",
     "spooder": "file:",
     "tmi.js": "^1.8.5",
-    "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
   },
   "devDependencies": {
@@ -46,6 +45,7 @@
     "@types/express": "^4.17.21",
     "@types/express-fileupload": "^1.5.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/tmi.js": "^1.8.6"
+    "@types/tmi.js": "^1.8.6",
+    "tsx": "^4.19.1"
   }
 }

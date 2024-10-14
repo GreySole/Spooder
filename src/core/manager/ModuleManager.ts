@@ -3,7 +3,7 @@ import { ControlModuleInterface } from '../../integration/interface/ControlModul
 import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
 import { CoreModule, PlatformType } from '../../Types.ts';
 import ConfigManager from './ConfigManager.ts';
-import { WebManager } from './webui/WebManager.ts';
+import { WebManager } from './WebManager.ts';
 
 interface ModuleContainer {
   [key: string]: any;
@@ -25,8 +25,9 @@ export default class ModuleManager {
       console.log('REGISTERING MODULES');
 
       Promise.all([
-        this.registerIntegrationModule('twitch', PlatformType.stream),
-        this.registerIntegrationModule('discord', PlatformType.community),
+        ModuleManager.registerIntegrationModule('twitch', PlatformType.stream),
+        ModuleManager.registerIntegrationModule('discord', PlatformType.community),
+        ModuleManager.registerIntegrationModule('obs', PlatformType.control),
       ])
         .then(() => onAllModulesLoaded())
         .catch((e) => console.log('Module load error', e.message));
@@ -58,7 +59,6 @@ export default class ModuleManager {
   }
 
   static getStreamModules() {
-    console.log('GETSTREAMMODS', ModuleManager.instance.activeStreams);
     return ModuleManager.instance.activeStreams;
   }
 
@@ -93,7 +93,7 @@ export default class ModuleManager {
     this.coreModules[coreModule] = new newModule.default();
   }
 
-  async registerIntegrationModule(name: string, platformType: PlatformType) {
+  static async registerIntegrationModule(name: string, platformType: PlatformType) {
     return new Promise(async (res, rej) => {
       console.log('REGISTERING MOD', name);
       const newModule = await import(`../../integration/${name}/main.ts`);
@@ -110,6 +110,7 @@ export default class ModuleManager {
       } else if (platformType === PlatformType.control) {
         ModuleManager.instance.activeControls[name] =
           new newModule.default() as ControlModuleInterface;
+        WebManager.registerModuleApi(ModuleManager.instance.activeControls[name]);
       }
       res(undefined);
     }).catch((e) => console.log('Module load error', e.message));

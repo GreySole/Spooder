@@ -14,15 +14,27 @@ export function BackupRestoreRoutes() {
   const router = express.Router();
   const publicRouter = express.Router();
 
-  router.use(bodyParser.urlencoded({ extended: true }));
+  /*router.use(bodyParser.urlencoded({ extended: true }));
   router.use(bodyParser.json({ limit: '100mb' }));
-  router.use('/recovery/install_plugin', fileUpload());
-  router.use('/recovery/upload_plugin_asset/*', fileUpload());
-  router.use('/recovery/upload_plugin_icon/*', fileUpload());
-  router.use('/recovery/checkin_settings', fileUpload());
-  router.use('/recovery/checkin_plugins', fileUpload());
+  router.use('/install_plugin', fileUpload());
+  router.use('/upload_plugin_asset/*', fileUpload());
+  router.use('/upload_plugin_icon/*', fileUpload());*/
+  router.use('/checkin_settings', fileUpload());
+  router.use('/checkin_plugins', fileUpload());
 
-  router.get('/recovery/checkout_settings/*', async (req: Request, res: Response) => {
+  router.get('/get_backups_settings', (req, res) => {
+    let backupSettingsDir = path.join(backendDir, 'backup', 'settings');
+    const backups = fs.existsSync(backupSettingsDir) ? fs.readdirSync(backupSettingsDir) : [];
+    res.send(backups);
+  });
+
+  router.get('/get_backups_plugins', (req, res) => {
+    const backupPluginsDir = path.join(backendDir, 'backup', 'plugins');
+    const backups = fs.existsSync(backupPluginsDir) ? fs.readdirSync(backupPluginsDir) : [];
+    res.send(backups);
+  });
+
+  router.get('/checkout_settings/*', async (req: Request, res: Response) => {
     let backupName = req.params['0'];
     webLog('DOWNLOADING SETTINGS', path.join(backendDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
@@ -36,7 +48,7 @@ export function BackupRestoreRoutes() {
     res.download(path.join(backendDir, 'backup', 'plugins', backupName));
   });
 
-  router.post('/recovery/checkin_settings', (req: Request, res: Response) => {
+  router.post('/checkin_settings', (req: Request, res: Response) => {
     if (!req.files) {
       webLog('NO FILES FOUND');
       res.send({
@@ -58,7 +70,7 @@ export function BackupRestoreRoutes() {
     }
   });
 
-  router.post('/recovery/checkin_plugins', (req: Request, res: Response) => {
+  router.post('/checkin_plugins', (req: Request, res: Response) => {
     if (!req.files) {
       webLog('NO FILES FOUND');
       res.send({
@@ -80,7 +92,7 @@ export function BackupRestoreRoutes() {
     }
   });
 
-  router.post('/recovery/backup_settings', async (req: Request, res: Response) => {
+  router.post('/backup_settings', async (req: Request, res: Response) => {
     let zip = new AdmZip();
 
     zip.addLocalFolder(backendDir + '/settings', '');
@@ -122,7 +134,7 @@ export function BackupRestoreRoutes() {
     });
   });
 
-  router.post('/recovery/backup_plugins', async (req: Request, res: Response) => {
+  router.post('/backup_plugins', async (req: Request, res: Response) => {
     const sconfig = ConfigManager.getConfig();
     let zip = new AdmZip();
 
@@ -174,7 +186,7 @@ export function BackupRestoreRoutes() {
     });
   });
 
-  router.post('/recovery/delete_backup_settings', (req: Request, res: Response) => {
+  router.post('/delete_backup_settings', (req: Request, res: Response) => {
     let backupName = req.body.backupName;
     let backupDir = path.join(backendDir, 'backup', 'settings');
     let fullPath = path.join(backupDir, backupName);
@@ -189,7 +201,7 @@ export function BackupRestoreRoutes() {
     }
   });
 
-  router.post('/recovery/delete_backup_plugins', (req: Request, res: Response) => {
+  router.post('/delete_backup_plugins', (req: Request, res: Response) => {
     let backupName = req.body.backupName;
     let backupDir = path.join(backendDir, 'backup', 'plugins');
     let fullPath = path.join(backupDir, backupName);
@@ -204,7 +216,7 @@ export function BackupRestoreRoutes() {
     }
   });
 
-  router.post('/recovery/restore_settings', async (req: Request, res: Response) => {
+  router.post('/restore_settings', async (req: Request, res: Response) => {
     let fileName = null;
     let selections = req.body.selections ?? { everything: true };
 
@@ -276,7 +288,7 @@ export function BackupRestoreRoutes() {
     res.send({ status: 'SUCCESS' });
   });
 
-  router.post('/recovery/restore_plugins', async (req: Request, res: Response) => {
+  router.post('/restore_plugins', async (req: Request, res: Response) => {
     let fileName = null;
     let selections = req.body.selections;
     if (!fs.existsSync(backendDir + '/tmp')) {

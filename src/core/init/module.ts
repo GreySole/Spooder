@@ -5,7 +5,7 @@ import { backendDir, frontendDir, PlatformType } from '../../Types.ts';
 import ConfigManager from '../manager/ConfigManager.ts';
 import ModuleManager from '../manager/ModuleManager.ts';
 import PluginManager from '../manager/PluginManager.ts';
-import { WebManager } from '../manager/webui/WebManager.ts';
+import { WebManager } from '../manager/WebManager.ts';
 import ShareManager from '../manager/ShareManager.ts';
 import Discord from '../../integration/discord/main.ts';
 import STwitch from '../../integration/twitch/main.ts';
@@ -93,7 +93,6 @@ export default class Initializer {
     webUI.router?.post('/save_twitch', async (req: Request, res: Response) => {
       const twitch = ModuleManager.getStreamModule('twitch') as STwitch;
       let newTwitch = req.body;
-      console.log('OAUTH', req.body);
       twitch.oauth = newTwitch;
       fs.writeFileSync(backendDir + '/settings/twitch.json', JSON.stringify(newTwitch));
       res.send({ status: 'ok' });
@@ -105,7 +104,6 @@ export default class Initializer {
         trusted_users: {},
         trusted_users_pw: {},
       };
-      console.log(newSettings);
       ConfigManager.saveConfig(newSettings);
       res.send({ status: 'ok' });
     });

@@ -145,7 +145,6 @@ export default class TwitchApi {
     const oauth = this.getModule().oauth;
     if (this.appToken == '') {
       const twitchScopes = scopes;
-      console.log('SCOPES', twitchScopes, oauth);
 
       let scopeString = '';
       for (let t in twitchScopes) {
@@ -423,7 +422,7 @@ export default class TwitchApi {
     const loggedIn = this.getModule().loggedIn;
     return new Promise((res, rej) => {
       if (loggedIn == false) {
-        rej('Not logged in');
+        rej({ error: 'Not logged in' });
         return;
       }
 
@@ -452,6 +451,38 @@ export default class TwitchApi {
     });
   };
 
+  getUserInfo = (user?: string | undefined): Promise<KeyedObject> => {
+    const oauth = this.getModule().oauth;
+    const loggedIn = this.getModule().loggedIn;
+    return new Promise(async (res, rej) => {
+      if (loggedIn == false) {
+        rej({ error: 'Not logged in' });
+        return;
+      }
+      if (user === undefined) {
+        user = this.homeChannel;
+      }
+      Axios('https://api.twitch.tv/helix/users?login=' + user, {
+        method: 'GET',
+        headers: {
+          'Client-Id': oauth['client-id'],
+          Authorization: ' Bearer ' + this.appToken,
+          'Content-Type': 'application/json',
+        },
+      })
+        .then((data: AxiosResponse) => {
+          if (data != null) {
+            res(data.data);
+          } else {
+            res({ error: 'getUserInfo error: No data' });
+          }
+        })
+        .catch((error: AxiosError) => {
+          rej(error);
+        });
+    });
+  };
+
   getChannels = async () => {
     const loggedIn = this.getModule().loggedIn;
     const chat = this.getModule().chat;
@@ -464,27 +495,5 @@ export default class TwitchApi {
     } else {
       return [];
     }
-  };
-
-  getUserInfo = (user: string) => {
-    const oauth = this.getModule().oauth;
-    const loggedIn = this.getModule().loggedIn;
-    if (loggedIn == false) {
-      return;
-    }
-    return new Promise(async (res, rej) => {
-      Axios('https://api.twitch.tv/helix/users?login=' + user, {
-        method: 'GET',
-        headers: {
-          'Client-Id': oauth['client-id'],
-          Authorization: ' Bearer ' + this.appToken,
-          'Content-Type': 'application/json',
-        },
-      }).then((data: AxiosResponse) => {
-        if (data != null) {
-          res(data.data);
-        }
-      });
-    });
   };
 }

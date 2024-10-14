@@ -448,10 +448,7 @@ export default class TwitchChat {
       this.chat.removeListener('message', this.processMessage.bind(this));
       this.chat.removeListener('cheer', this.processCheer.bind(this));
     }
-    console.log('STARTING CHAT', {
-      username: botUsername,
-      password: oauth.token,
-    });
+
     this.chat = new tmi.Client({
       options: { debug: true },
       identity: {
@@ -477,7 +474,6 @@ export default class TwitchChat {
         }
 
         let subs = await getEventSubs();
-        console.log('SUBS', subs);
         let subtype = '';
 
         for (let s in subs.data) {
@@ -517,10 +513,8 @@ export default class TwitchChat {
     let commandsArray = [];
 
     for (let e in events) {
-      //console.log("CHECKING ", e);
       if (shareChannel != null && shareChannel != homeChannel) {
         if (!shares[shareChannel].commands.includes(e)) {
-          //console.log("Command skipped", e, shareChannel);
           continue;
         }
       }

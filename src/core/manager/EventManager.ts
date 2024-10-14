@@ -30,7 +30,6 @@ export function saveEventStorage() {
 function matchConditions(a: string, b: string) {
   if (a.includes('|')) {
     let cSplitOR = a.split('|');
-    //console.log(cSplitOR);
     for (let c in cSplitOR) {
       if (cSplitOR[c].startsWith('>')) {
         if (b.startsWith(cSplitOR[c].replace('>', ''))) {
@@ -112,7 +111,6 @@ export function checkResponseTrigger(eventData: KeyedObject, message: StreamMess
           break;
         }
       } else {
-        //console.log(commandMatch, m, startInd);
         if (matchIndex > 0) {
           m = startInd;
         }
@@ -186,7 +184,6 @@ export async function verifyResponseScript(
       response: response,
     };
   } catch (e: any) {
-    console.log(e);
     return {
       status: 'error',
       response: e.stack != null ? e.stack : e,
@@ -332,7 +329,6 @@ export class EventManager {
   ) => {
     const sconfig = ConfigManager.getConfig();
     const activePlugins = PluginManager.getActivePlugins();
-    //console.log("RUNNING COMMANDS", eventData);
     let isChat = eventType.includes('chat');
     let isOSC = eventType.includes('osc');
     if (isOSC) {
@@ -832,7 +828,6 @@ export class EventManager {
   private runInterval = () => {
     this.uptime = Math.floor(Date.now() / 1000);
     const activeEvents = EventManager.getActiveEvents();
-    //console.log(activeEvents);
     for (let e in activeEvents) {
       //Loop 1 for action
       for (let command in activeEvents[e]) {
