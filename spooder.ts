@@ -11,6 +11,7 @@ import { backendDir, KeyedObject } from './src/Types.ts';
 import { WebManager } from './src/core/manager/WebManager.ts';
 import OSCManager from './src/core/manager/OSCManager.ts';
 import UserManager from './src/core/manager/UserManager.ts';
+import MonitorManager from './src/core/manager/MonitorManager.ts';
 
 const logDir = path.join(backendDir, 'log');
 
@@ -63,6 +64,7 @@ if (initMode) {
     new EventManager();
     new ModerationManager();
     new OSCManager();
+    new MonitorManager();
     new UserManager();
     new ShareManager();
     new PluginManager();

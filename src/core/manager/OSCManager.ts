@@ -14,6 +14,7 @@ import { EventManager, checkResponseTrigger, sayInChat } from './EventManager.ts
 import { ModerationManager } from './ModerationManager.ts';
 import PluginManager from './PluginManager.ts';
 import ModuleManager from './ModuleManager.ts';
+import MonitorManager from './MonitorManager.ts';
 
 export default class OSCManager {
   private static instance: OSCManager;
@@ -79,66 +80,6 @@ export default class OSCManager {
   });
 
   private udpClients = ConfigManager.getConfig().network.udp_clients;
-  private monitorLogs = {
-    logs: [] as KeyedObject[],
-    pluginlogs: [] as KeyedObject[],
-    liveLogging: 0,
-  };
-
-  pluginError = (pluginName: string, type: string, message: string) => {
-    let timestamp = Date.now();
-    this.monitorLogs.pluginlogs.push({
-      timestamp: timestamp,
-      name: pluginName,
-      type: type,
-      message: message,
-    });
-    if (this.monitorLogs.pluginlogs.length > 1000) {
-      this.monitorLogs.pluginlogs.shift();
-    }
-
-    if (this.monitorLogs.liveLogging == 1) {
-      this.oscTCP.send(
-        new OSC.Message(
-          '/frontend/monitor/plugin',
-          JSON.stringify({
-            timestamp: timestamp,
-            name: pluginName,
-            type: type,
-            message: message,
-          }),
-        ),
-      );
-    }
-  };
-
-  static sendToMonitor = (proto: string, direction: string, data: KeyedObject) => {
-    let timestamp = Date.now();
-    OSCManager.instance.monitorLogs.logs.push({
-      timestamp: timestamp,
-      type: 'osc',
-      protocol: proto,
-      direction: direction,
-      data: data,
-    });
-    if (OSCManager.instance.monitorLogs.logs.length > 1000) {
-      OSCManager.instance.monitorLogs.logs.shift();
-    }
-    if (OSCManager.instance.monitorLogs.liveLogging == 1) {
-      OSCManager.instance.oscTCP.send(
-        new OSC.Message(
-          '/frontend/monitor/osc',
-          JSON.stringify({
-            timestamp: timestamp,
-            type: 'osc',
-            protocol: proto,
-            direction: direction,
-            data: data,
-          }),
-        ),
-      );
-    }
-  };
 
   static sendToTCP = (address: string, oscValue: any, log?: boolean) => {
     if (log == null) {
@@ -155,7 +96,7 @@ export default class OSCManager {
     }
 
     if (log == true) {
-      OSCManager.sendToMonitor('tcp', 'send', {
+      MonitorManager.sendToMonitor('tcp', 'send', {
         types: newMessage.types,
         address: address,
         data: oscValue,
@@ -211,7 +152,7 @@ export default class OSCManager {
       valueType = 'array';
     }
 
-    OSCManager.sendToMonitor('udp', 'send', {
+    MonitorManager.sendToMonitor('udp', 'send', {
       dest: dest,
       types: valueType,
       address: address,
@@ -346,7 +287,7 @@ export default class OSCManager {
     osc.on('*', (message: OSC.Message) => {
       console.log('OSC UDP MESSAGE', message.address);
       const events = EventManager.getEvents();
-      OSCManager.sendToMonitor('udp', 'receive', {
+      MonitorManager.sendToMonitor('udp', 'receive', {
         types: message.types,
         address: message.address,
         data: message.args,
@@ -496,7 +437,7 @@ export default class OSCManager {
 
     oscTCP.on('*', (message: OSC.Message) => {
       if (!message.address.startsWith('/frontend/monitor')) {
-        OSCManager.sendToMonitor('tcp', 'receive', {
+        MonitorManager.sendToMonitor('tcp', 'receive', {
           types: message.types,
           address: message.address,
           data: message.args,
@@ -529,7 +470,7 @@ export default class OSCManager {
         }
       }
 
-      if (address[1] == 'frontend') {
+      /*if (address[1] == 'frontend') {
         if (address[2] == 'monitor') {
           if (address[3] == 'logging') {
             this.monitorLogs.liveLogging = message.args[0] as number;
@@ -544,14 +485,14 @@ export default class OSCManager {
             }
           }
         }
-      }
+      }*/
 
       if (address[1] == 'spooder') {
         if (address[2] == 'plugin') {
           if (address[3] == 'error') {
             let errorObj = JSON.parse(message.args[0] as string);
             //oscLog("GOT PLUGIN ERROR", errorObj);
-            this.pluginError(errorObj.name, errorObj.type, errorObj.message);
+            MonitorManager.pluginError(errorObj.name, errorObj.type, errorObj.message);
             return;
           }
         }

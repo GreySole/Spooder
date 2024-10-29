@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import path from 'path';
 import { backendDir, frontendDir } from '../../Types.ts';
-import { logEffects, webLog } from '../Logging.ts';
+import { webLog } from '../Logging.ts';
 import ConfigManager from './ConfigManager.ts';
 import { ConfigRoutes } from './webui/routes/ConfigRoutes.ts';
 import { isLocal, PluginRoutes } from './webui/routes/PluginRoutes.ts';
@@ -20,9 +20,8 @@ import { EventRoutes } from './webui/routes/EventRoutes.ts';
 import { UserRoutes } from './webui/routes/UserRoutes.ts';
 import { ShareRoutes } from './webui/routes/ShareRoutes.ts';
 import { PublicRoutes } from './webui/routes/PublicRoutes.ts';
-import PluginManager from './PluginManager.ts';
-import ShareManager from './ShareManager.ts';
 import { ControlModuleInterface } from 'src/integration/interface/ControlModuleInterface.ts';
+import { ServerRoutes } from './webui/routes/ServerRoutes.ts';
 
 const nets = networkInterfaces();
 const results = Object.create({});
@@ -141,23 +140,8 @@ export class WebManager {
       publicRouter.use(cookieParser());
       //publicRouter.use(express.json({ verify: this.verifyTwitchSignature }));
 
-      router.get('/server_state', async (req: Request, res: Response) => {
-        const sconfig = ConfigManager.getConfig();
-        const activePlugins = PluginManager.getActivePlugins();
-        const themes = ConfigManager.getThemes();
-        const shares = ShareManager.getShares();
-        const activeShares = ShareManager.getActiveShares();
-
-        res.send({
-          host: sconfig.network.host,
-          port: sconfig.network.osc_tcp_port,
-          udp_clients: sconfig.network['udp_clients'],
-          plugins: Object.keys(activePlugins),
-          themes: themes,
-          activeShares: activeShares,
-          shares: Object.keys(shares),
-        });
-      });
+      const systemRoutes = ServerRoutes();
+      router.use('/server', systemRoutes.local);
 
       const backupRestoreRoutes = BackupRestoreRoutes();
       router.use('/recovery', backupRestoreRoutes.local);
