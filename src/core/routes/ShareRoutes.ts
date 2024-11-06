@@ -1,10 +1,10 @@
 import express, { Request, Response } from 'express';
-import { KeyedObject } from '../../../../Types.ts';
-import { EventManager } from '../../EventManager.ts';
-import ModuleManager from '../../ModuleManager.ts';
-import PluginManager from '../../PluginManager.ts';
-import ShareManager from '../../ShareManager.ts';
-import { webLog } from '../../../Logging.ts';
+import { KeyedObject } from '../../Types.ts';
+import { EventService } from '../service/EventService.ts';
+import ModuleService from '../service/ModuleService.ts';
+import PluginService from '../service/PluginService.ts';
+import ShareService from '../service/ShareService.ts';
+import { webLog } from '../Logging.ts';
 
 export function ShareRoutes() {
   const router = express.Router();
@@ -13,9 +13,9 @@ export function ShareRoutes() {
   router.get('/list', async (req: Request, res: Response) => {
     let chatCommands = {} as KeyedObject;
 
-    const events = EventManager.getEvents();
-    const activePlugins = PluginManager.getActivePlugins();
-    const shares = ShareManager.getShares();
+    const events = EventService.getEvents();
+    const activePlugins = PluginService.getActivePlugins();
+    const shares = ShareService.getShares();
 
     for (let e in events) {
       if (events[e].triggers.chat.enabled) {
@@ -31,14 +31,14 @@ export function ShareRoutes() {
   });
 
   router.get('/active_shares', async (req: Request, res: Response) => {
-    const activeShares = ShareManager.getActiveShares();
+    const activeShares = ShareService.getActiveShares();
     res.send(activeShares);
   });
 
   router.get('/verify_share_target', async (req: Request, res: Response) => {
     const shareUser = req.query.shareuser;
     const sharePlatform = req.query.shareplatform as string;
-    const streamModules = ModuleManager.getStreamModules();
+    const streamModules = ModuleService.getStreamModules();
     if (!streamModules[sharePlatform]) {
       return;
     }
@@ -58,7 +58,7 @@ export function ShareRoutes() {
 
   router.post('/save_shares', async (req: Request, res: Response) => {
     const newShares = req.body;
-    ShareManager.saveShares(newShares);
+    ShareService.saveShares(newShares);
     res.send({ status: 'ok' });
     webLog('SAVED THE SHARES');
   });
@@ -68,7 +68,7 @@ export function ShareRoutes() {
     const isEnabled = req.body.enabled;
     const message = req.body.message;
 
-    ShareManager.setShare(shareUser, isEnabled, message);
+    ShareService.setShare(shareUser, isEnabled, message);
 
     res.send({ status: 'ok' });
   });

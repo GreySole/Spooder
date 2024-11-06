@@ -1,8 +1,8 @@
-import STwitch from '../../../../integration/twitch/main.ts';
-import { KeyedObject } from '../../../../Types.ts';
-import ConfigManager from '../../ConfigManager.ts';
-import ModuleManager from '../../ModuleManager.ts';
-import PluginManager from '../../PluginManager.ts';
+import STwitch from '../../integration/twitch/main.ts';
+import { KeyedObject } from '../../Types.ts';
+import ConfigService from '../service/ConfigService.ts';
+import ModuleService from '../service/ModuleService.ts';
+import PluginService from '../service/PluginService.ts';
 import express, { Request, Response } from 'express';
 
 export function PublicRoutes() {
@@ -10,7 +10,7 @@ export function PublicRoutes() {
   const publicRouter = express.Router();
 
   function getPublicData(req: Request, res: Response) {
-    const activePlugins = PluginManager.getActivePlugins();
+    const activePlugins = PluginService.getActivePlugins();
     let publicPlugins = {} as KeyedObject;
     for (let p in activePlugins) {
       if (activePlugins[p].hasPublic) {
@@ -20,11 +20,11 @@ export function PublicRoutes() {
 
     //Only Twitch supported currently
     //TODO: Make this work on an Interface level
-    const twitch = ModuleManager.getStreamModule('twitch') as STwitch;
+    const twitch = ModuleService.getStreamModule('twitch') as STwitch;
     res.send({
       botName: twitch.api.botUsername,
       homeChannel: twitch.api.homeChannel,
-      theme: ConfigManager.getThemes().public,
+      theme: ConfigService.getThemes().public,
       plugins: publicPlugins,
     });
   }

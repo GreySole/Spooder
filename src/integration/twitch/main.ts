@@ -5,12 +5,13 @@ import TwitchChat from './TwitchChat.ts';
 import { eventsubs } from './TwitchConstants.ts';
 import TwitchEventSub from './TwitchEventSub.ts';
 import { logEffects } from '../../core/Logging.ts';
-import ConfigManager from '../../core/manager/ConfigManager.ts';
-import { EventManager } from '../../core/manager/EventManager.ts';
-import { backendDir, KeyedObject } from '../../Types.ts';
-import UserManager from '../../core/manager/UserManager.ts';
+import ConfigService from '../../core/service/ConfigService.ts';
+import { EventService } from '../../core/service/EventService.ts';
+import { userDir, KeyedObject } from '../../Types.ts';
+import UserService from '../../core/service/UserService.ts';
 import fs from 'fs';
 import getTwitchRouters from './TwitchRouter.ts';
+import ShareService from 'src/core/service/ShareService.ts';
 
 export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
@@ -18,15 +19,15 @@ export function twitchLog(...content: any[]) {
 
 export default class STwitch implements StreamModuleInterface {
   constructor() {
-    if (fs.existsSync(backendDir + '/settings/eventsub.json')) {
+    if (fs.existsSync(userDir + '/settings/eventsub.json')) {
       twitchLog(
         "Obsolete Eventsub.json detected. Twitch eventsubs are now integrated with Spooder's event system. Go to the Twitch tab in the WebUI to convert your eventsubs!",
       );
     }
-    if (fs.existsSync(backendDir + '/settings/twitch.json')) {
+    if (fs.existsSync(userDir + '/settings/twitch.json')) {
       try {
         this.oauth = JSON.parse(
-          fs.readFileSync(backendDir + '/settings/twitch.json', { encoding: 'utf-8' }),
+          fs.readFileSync(userDir + '/settings/twitch.json', { encoding: 'utf-8' }),
         );
         if (this.oauth.events != null) {
           twitchLog(
@@ -34,17 +35,17 @@ export default class STwitch implements StreamModuleInterface {
           );
         }
       } catch (e) {
-        if (fs.existsSync(backendDir + '/settings/oauth.json')) {
+        if (fs.existsSync(userDir + '/settings/oauth.json')) {
           try {
             this.oauth = JSON.parse(
-              fs.readFileSync(backendDir + '/settings/oauth.json', { encoding: 'utf-8' }),
+              fs.readFileSync(userDir + '/settings/oauth.json', { encoding: 'utf-8' }),
             );
             fs.writeFileSync(
-              backendDir + '/settings/twitch.json',
+              userDir + '/settings/twitch.json',
               JSON.stringify(this.oauth),
               'utf-8',
             );
-            fs.rmSync(backendDir + '/settings/oauth.json');
+            fs.rmSync(userDir + '/settings/oauth.json');
             twitchLog('Obsolete oauth.json is now twitch.json!');
           } catch (e) {
             twitchLog('FAILED TO READ OAUTH FILE');
@@ -55,6 +56,19 @@ export default class STwitch implements StreamModuleInterface {
           this.oauth = {};
         }
       }
+    }
+  }
+
+  shareUsers = {} as KeyedObject;
+
+  onSharesChanged() {
+    const shares = ShareService.getShares();
+    this.shareUsers = {};
+    for (const s in shares) {
+      if (!shares[s].platforms.twitch) {
+        continue;
+      }
+      this.shareUsers[shares[s].platforms.twitch.twitchUsername] = s;
     }
   }
 
@@ -135,7 +149,7 @@ export default class STwitch implements StreamModuleInterface {
   sayInChat = this.chat.sayInChat;
 
   getStreamOnlineEvent() {
-    const events = EventManager.getEvents();
+    const events = EventService.getEvents();
     for (let e in events) {
       if (events[e].triggers.twitch.type == 'stream.online') {
         return events[e];
@@ -143,13 +157,9 @@ export default class STwitch implements StreamModuleInterface {
     }
   }
 
-  onExternalNetworkChange() {
-    this.eventsub.refreshEventSubs();
-  }
-
   async onEventFileSaved() {
-    const events = EventManager.getEvents();
-    const sconfig = ConfigManager.getConfig();
+    const events = EventService.getEvents();
+    const sconfig = ConfigService.getConfig();
     let subs = await this.eventsub.getEventSubs();
 
     let usedEventsubs = [];
@@ -242,13 +252,13 @@ export default class STwitch implements StreamModuleInterface {
   }
 
   userVerify(username: string) {
-    const users = UserManager.getUsers();
+    const users = UserService.getUsers();
     if (Object.values(users.trusted_users.verify.twitch).includes(username)) {
       let sUsername = Object.keys(users.trusted_users.verify.twitch)[
         Object.values(users.trusted_users.verify.twitch).indexOf(username)
       ];
 
-      UserManager.setPendingUser('twitch', username.toLowerCase());
+      UserService.setPendingUser('twitch', username.toLowerCase());
       this.sayInChat(
         username +
           " it looks like you're trying to set a login for me. If this is you, please call '!verify'",

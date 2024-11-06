@@ -1,34 +1,61 @@
 import path from 'path';
 import fs from 'fs-extra';
 import { spooderLog } from '../Logging.ts';
-import { backendDir, KeyedObject } from '../../Types.ts';
+import { userDir, KeyedObject } from '../../Types.ts';
 
-export default class ConfigManager {
-  private static instance: ConfigManager;
+export interface ConfigBotSection {
+  owner_name: string;
+  bot_name: string;
+  help_command: string;
+  introduction: string;
+}
+
+export interface ConfigNetworkSection {
+  host: string;
+  host_port: number;
+  externalhandle: 'manual' | 'ngrok';
+  ngrokauthtoken: string;
+  external_http_url: string;
+  external_tcp_url: string;
+  udp_clients: KeyedObject;
+  osc_udp_port: number;
+  osc_tcp_port: number;
+}
+
+export interface ConfigFile {
+  bot: ConfigBotSection;
+  network: ConfigNetworkSection;
+}
+
+export default class ConfigService {
+  private static instance: ConfigService;
 
   constructor() {
-    const settingsDir = path.join(backendDir, 'settings');
+    const settingsDir = path.join(userDir, 'settings');
 
     if (!fs.existsSync(settingsDir)) {
       fs.mkdirSync(settingsDir);
     }
-    if (ConfigManager.instance) {
-      return ConfigManager.instance;
+    if (ConfigService.instance) {
+      return ConfigService.instance;
     }
 
-    ConfigManager.instance = this;
+    ConfigService.instance = this;
   }
 
   private flags = {
     initMode:
       (process.argv.length > 2 ? process.argv[2] == '-i' : false) ||
-      !fs.existsSync(path.join(backendDir, 'settings', 'config.json')),
+      !fs.existsSync(path.join(userDir, 'settings', 'config.json')),
     safeMode: process.argv.length > 2 ? process.argv[2] == '-e' : false,
     noAutoLogin: process.argv.length > 2 ? process.argv[2] == '-a' : false,
   };
 
   private settings = {
-    config: { network: { host_port: 3000 } },
+    config: {
+      bot: { owner_name: '', bot_name: '', help_command: '', introduction: '' },
+      network: { host_port: 3000 },
+    } as ConfigFile,
     themes: {
       webui: {},
       modui: {},
@@ -67,37 +94,37 @@ export default class ConfigManager {
     },
   } as KeyedObject;
 
-  static getConfig() {
-    return ConfigManager.instance.settings.config;
+  static getConfig(): ConfigFile {
+    return ConfigService.instance.settings.config;
   }
 
   static saveConfig(newConfig: KeyedObject) {
     try {
-      fs.writeFileSync(backendDir + '/settings/config.json', JSON.stringify(newConfig), 'utf-8');
+      fs.writeFileSync(userDir + '/settings/config.json', JSON.stringify(newConfig), 'utf-8');
     } catch (e) {
       spooderLog('FAILED TO SAVE CONFIG FILE! Rolling back save operation.');
       fs.writeFileSync(
-        backendDir + '/settings/config.json',
-        JSON.stringify(ConfigManager.getConfig()),
+        userDir + '/settings/config.json',
+        JSON.stringify(ConfigService.getConfig()),
         'utf-8',
       );
     }
 
-    ConfigManager.refreshFiles();
+    ConfigService.refreshFiles();
   }
 
   static getThemes() {
-    return ConfigManager.instance.settings.themes;
+    return ConfigService.instance.settings.themes;
   }
 
   static saveThemes(newThemes: KeyedObject) {
-    fs.writeFileSync(backendDir + '/settings/themes.json', JSON.stringify(newThemes), 'utf-8');
+    fs.writeFileSync(userDir + '/settings/themes.json', JSON.stringify(newThemes), 'utf-8');
 
-    ConfigManager.refreshFiles();
+    ConfigService.refreshFiles();
   }
 
   static getFlags() {
-    return ConfigManager.instance.flags;
+    return ConfigService.instance.flags;
   }
 
   static refreshFiles = () => {
@@ -108,7 +135,7 @@ export default class ConfigManager {
 
     for (let s in settingsFiles) {
       try {
-        const settingsFile = fs.readFileSync(backendDir + '/settings/' + settingsFiles[s], {
+        const settingsFile = fs.readFileSync(userDir + '/settings/' + settingsFiles[s], {
           encoding: 'utf8',
         });
 
@@ -127,9 +154,10 @@ export default class ConfigManager {
 
             settingsObj.spooderpet.parts = parts;
           }
+          console.log('THEMES', settingsObj);
         }
 
-        ConfigManager.instance.settings[s] = settingsObj;
+        ConfigService.instance.settings[s] = settingsObj;
         spooderLog('Got ' + settingsFiles[s]);
       } catch (e: any) {
         if (e.code == 'ENOENT') {
@@ -187,9 +215,8 @@ export default class ConfigManager {
             newFileString = '{}';
           }
 
-          ConfigManager.instance.settings[s] = JSON.parse(newFileString);
-
-          fs.writeFile(backendDir + '/settings/' + settingsFiles[s], newFileString, 'utf-8', () => {
+          ConfigService.instance.settings[s] = JSON.parse(newFileString);
+          fs.writeFile(userDir + '/settings/' + settingsFiles[s], newFileString, 'utf-8', () => {
             spooderLog(settingsFiles[s] + ' not found. New file created.', s);
           });
         } else {

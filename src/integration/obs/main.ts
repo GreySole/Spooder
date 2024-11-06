@@ -1,4 +1,4 @@
-import { backendDir, KeyedObject } from 'src/Types.ts';
+import { userDir, KeyedObject } from 'src/Types.ts';
 import { ControlModuleInterface } from '../interface/ControlModuleInterface.ts';
 import { OBSRequestTypes } from 'obs-websocket-js';
 import getObsRouters from './ObsRouter.ts';
@@ -9,10 +9,10 @@ import OSC from 'osc-js';
 
 export default class OBS implements ControlModuleInterface {
   constructor() {
-    if (fs.existsSync(backendDir + '/settings/obs.json')) {
+    if (fs.existsSync(userDir + '/settings/obs.json')) {
       try {
         this.settings = JSON.parse(
-          fs.readFileSync(backendDir + '/settings/obs.json', { encoding: 'utf-8' }),
+          fs.readFileSync(userDir + '/settings/obs.json', { encoding: 'utf-8' }),
         );
       } catch (e) {
         console.log('Somethings wrong with obs login file. Try entering it again.');
@@ -60,7 +60,7 @@ export default class OBS implements ControlModuleInterface {
     this.settings.host = host;
     this.settings.port = port;
     this.settings.password = password;
-    fs.writeFileSync(backendDir + '/settings/obs.json', JSON.stringify(this.settings), 'utf-8');
+    fs.writeFileSync(userDir + '/settings/obs.json', JSON.stringify(this.settings), 'utf-8');
     console.log('OBS Login Saved!');
   }
 

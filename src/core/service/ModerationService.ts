@@ -1,31 +1,31 @@
-import { KeyedObject, backendDir } from '../../Types.ts';
+import { KeyedObject, userDir } from '../../Types.ts';
 import { oscLog } from '../Logging.ts';
-import { EventManager } from './EventManager.ts';
-import OSCManager from './OSCManager.ts';
-import PluginManager from './PluginManager.ts';
+import { EventService } from './EventService.ts';
+import OSCService from './OSCService.ts';
+import PluginService from './PluginService.ts';
 import fs from 'fs';
 
 type ModCommand = string | number | boolean;
 
-export class ModerationManager {
-  private static instance: ModerationManager;
+export class ModerationService {
+  private static instance: ModerationService;
 
   constructor() {
-    if (ModerationManager.instance) {
-      return ModerationManager.instance;
+    if (ModerationService.instance) {
+      return ModerationService.instance;
     }
 
-    ModerationManager.instance = this;
+    ModerationService.instance = this;
 
     try {
-      const modFilePath = backendDir + '/settings/mod.json';
+      const modFilePath = userDir + '/settings/mod.json';
       if (!fs.existsSync(modFilePath)) {
-        ModerationManager.saveModFile();
+        ModerationService.saveModFile();
       } else {
         const modFile = fs.readFileSync(modFilePath, {
           encoding: 'utf8',
         });
-        ModerationManager.instance.modlocks = JSON.parse(modFile);
+        ModerationService.instance.modlocks = JSON.parse(modFile);
       }
     } catch (e: any) {
       if (e.code == 'ENOENT') {
@@ -34,7 +34,7 @@ export class ModerationManager {
   }
 
   static getModlocks() {
-    return ModerationManager.instance.modlocks;
+    return ModerationService.instance.modlocks;
   }
 
   modlocks = {
@@ -45,40 +45,42 @@ export class ModerationManager {
     blacklist: {},
   } as KeyedObject;
 
-  static blacklistUser(viewername: string, duration: number) {
-    if (ModerationManager.instance.modlocks.blacklist[viewername] == null) {
-      ModerationManager.instance.modlocks.blacklist[viewername] = {};
+  static blacklistUser(isBlacklisted: boolean, viewername: string, durationInSeconds?: number) {
+    if (isBlacklisted) {
+      ModerationService.instance.modlocks.blacklist[viewername].active = 0;
+      clearTimeout(ModerationService.instance.modlocks.blacklist[viewername].timeout);
+      ModerationService.instance.modlocks.blacklist[viewername].timeout = null;
+    } else {
+      ModerationService.instance.modlocks.blacklist[viewername].active = 1;
+      if (durationInSeconds != null) {
+        ModerationService.instance.modlocks.blacklist[viewername].timeout = setTimeout(() => {
+          ModerationService.instance.modlocks.blacklist[viewername].active = 0;
+        }, durationInSeconds * 1000);
+      }
     }
-    ModerationManager.instance.modlocks.blacklist[viewername].active = 1;
-    if (duration != null) {
-      ModerationManager.instance.modlocks.blacklist[viewername].timeout = setTimeout(() => {
-        ModerationManager.instance.modlocks.blacklist[viewername].active = 0;
-      }, duration);
-    }
-
-    ModerationManager.saveModFile();
+    ModerationService.saveModFile();
 
     oscLog('Mod file saved!');
   }
 
   static saveModFile() {
     fs.writeFileSync(
-      backendDir + '/settings/mod.json',
-      JSON.stringify(ModerationManager.instance.modlocks),
+      userDir + '/settings/mod.json',
+      JSON.stringify(ModerationService.instance.modlocks),
       'utf-8',
     );
   }
 
   static isEventLocked(target: string) {
-    return ModerationManager.instance.modlocks.events[target] == 1;
+    return ModerationService.instance.modlocks.events[target] == 1;
   }
 
   static isPluginLocked(target: string) {
-    return ModerationManager.instance.modlocks.plugins[target] == 1;
+    return ModerationService.instance.modlocks.plugins[target] == 1;
   }
 
   static lockEvent(modCommand: ModCommand, target: string) {
-    const events = EventManager.getEvents();
+    const events = EventService.getEvents();
 
     if (typeof modCommand == 'number') {
       modCommand = modCommand == 1 ? 'lock' : 'unlock';
@@ -88,15 +90,15 @@ export class ModerationManager {
     let eventLocked = false;
     for (let e in events) {
       if (target == 'all') {
-        ModerationManager.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
-        OSCManager.sendToTCP(
+        ModerationService.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
+        OSCService.sendToTCP(
           '/mod/local/' + modCommand + '/event/' + e,
           modCommand == 'lock' ? 1 : 0,
         );
         eventLocked = true;
       } else if (e == target) {
-        ModerationManager.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
-        OSCManager.sendToTCP(
+        ModerationService.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
+        OSCService.sendToTCP(
           '/mod/local/' + modCommand + '/event/' + e,
           modCommand == 'lock' ? 1 : 0,
         );
@@ -108,7 +110,7 @@ export class ModerationManager {
   }
 
   static lockPlugin(modCommand: ModCommand, plugin: string, target?: string) {
-    const activePlugins = PluginManager.getActivePlugins();
+    const activePlugins = PluginService.getActivePlugins();
 
     if (typeof modCommand == 'number') {
       modCommand = modCommand == 1 ? 'lock' : 'unlock';
@@ -118,19 +120,19 @@ export class ModerationManager {
     let pluginLocked = false;
     for (let p in activePlugins) {
       if (plugin == 'all') {
-        ModerationManager.instance.modlocks.plugins[p] = modCommand == 'lock' ? 1 : 0;
-        OSCManager.sendToTCP(
+        ModerationService.instance.modlocks.plugins[p] = modCommand == 'lock' ? 1 : 0;
+        OSCService.sendToTCP(
           '/mod/local/' + modCommand + '/plugin/' + p,
           modCommand == 'lock' ? 1 : 0,
         );
         pluginLocked = true;
       } else if (p == plugin) {
-        if (ModerationManager.instance.modlocks.plugins[p] == null) {
-          ModerationManager.instance.modlocks.plugins[p] = {};
+        if (ModerationService.instance.modlocks.plugins[p] == null) {
+          ModerationService.instance.modlocks.plugins[p] = {};
         }
         if (target == null) {
-          ModerationManager.instance.modlocks.plugins[p] = modCommand == 'lock' ? 1 : 0;
-          OSCManager.sendToTCP(
+          ModerationService.instance.modlocks.plugins[p] = modCommand == 'lock' ? 1 : 0;
+          OSCService.sendToTCP(
             '/mod/local/' + modCommand + '/plugin/' + p,
             modCommand == 'lock' ? 1 : 0,
           );
@@ -140,7 +142,7 @@ export class ModerationManager {
           if (activePlugins[p].modmap) {
             if (activePlugins[p].modmap.locks) {
               activePlugins[p].modmap.locks[target] = modCommand == 'lock' ? 1 : 0;
-              OSCManager.sendToTCP(
+              OSCService.sendToTCP(
                 '/mod/local/' + modCommand + '/plugin/' + p + '/' + target,
                 modCommand == 'lock' ? 1 : 0,
               );
@@ -155,18 +157,18 @@ export class ModerationManager {
   }
 
   static stopEvent(cEvent: string) {
-    const events = EventManager.getEvents();
-    const activeEvents = EventManager.getActiveEvents();
+    const events = EventService.getEvents();
+    const activeEvents = EventService.getActiveEvents();
     if (cEvent == 'all') {
       let eventCount = 0;
       for (let a in activeEvents) {
-        EventManager.stopEvent(a);
+        EventService.stopEvent(a);
         eventCount++;
       }
 
       return eventCount + ' events have been stopped!';
     } else if (typeof activeEvents[cEvent] != 'undefined') {
-      EventManager.stopEvent(cEvent);
+      EventService.stopEvent(cEvent);
       return events[cEvent].name + ' has been stopped!';
     } else {
       return "I can't stop " + cEvent + '!';
@@ -186,18 +188,18 @@ export class ModerationManager {
   }
 
   static setSpamGuard(isOn: ModCommand) {
-    const boolIsOn = ModerationManager.instance.convertToBoolean(isOn);
+    const boolIsOn = ModerationService.instance.convertToBoolean(isOn);
     if (isOn != null) {
       if (isOn == 'on') {
-        ModerationManager.instance.modlocks.spamguard = 1;
+        ModerationService.instance.modlocks.spamguard = 1;
       } else if (isOn == 'off') {
-        ModerationManager.instance.modlocks.spamguard = 0;
+        ModerationService.instance.modlocks.spamguard = 0;
       }
     } else {
-      ModerationManager.instance.modlocks.spamguard =
-        ModerationManager.instance.modlocks.spamguard == 1 ? 0 : 1;
+      ModerationService.instance.modlocks.spamguard =
+        ModerationService.instance.modlocks.spamguard == 1 ? 0 : 1;
     }
-    if (ModerationManager.instance.modlocks.spamguard == 1) {
+    if (ModerationService.instance.modlocks.spamguard == 1) {
       return 'Spam guard is ON';
     } else {
       return 'Spam guard is OFF';

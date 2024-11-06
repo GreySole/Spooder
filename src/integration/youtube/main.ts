@@ -1,6 +1,6 @@
-/*import { sayInChat, checkResponseTrigger } from "@manager/EventManager.ts";
+/*import { sayInChat, checkResponseTrigger } from "@manager/EventService.ts";
 import { logEffects } from "src/core/Logging.ts";
-import { backendDir } from "src/Types.ts";
+import { userDir } from "src/Types.ts";
 
 const fs = require("fs");
 const Axios = require("axios");
@@ -17,20 +17,20 @@ class SYouTube{
             this.oauth2Client.setCredentials(tokens);
             this.oauth.refresh_token = tokens.refresh_token;
             this.oauth.token = tokens.access_token;
-            fs.writeFileSync(backendDir+"/settings/youtube.json", JSON.stringify(this.oauth));
+            fs.writeFileSync(userDir+"/settings/youtube.json", JSON.stringify(this.oauth));
             res.redirect("/?youtubeauthsuccess");
         });
-        this.oauth = fs.existsSync(backendDir+"/settings/youtube.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/youtube.json",{encoding:"utf-8"})):null;
+        this.oauth = fs.existsSync(userDir+"/settings/youtube.json")?JSON.parse(fs.readFileSync(userDir+"/settings/youtube.json",{encoding:"utf-8"})):null;
     }
 
     
 
     autoLogin(){
         return new Promise((res, rej) => {
-            if(fs.existsSync(backendDir+"/settings/youtube.json")){
+            if(fs.existsSync(userDir+"/settings/youtube.json")){
                 let expressPort = sconfig.network.host_port;
                 try{
-                    this.oauth = fs.existsSync(backendDir+"/settings/youtube.json")?JSON.parse(fs.readFileSync(backendDir+"/settings/youtube.json",{encoding:"utf-8"})):null;
+                    this.oauth = fs.existsSync(userDir+"/settings/youtube.json")?JSON.parse(fs.readFileSync(userDir+"/settings/youtube.json",{encoding:"utf-8"})):null;
                     const {google} = require('googleapis');
                     this.oauth2Client = new google.auth.OAuth2(
                         this.oauth["client-id"],

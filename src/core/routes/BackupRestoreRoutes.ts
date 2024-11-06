@@ -5,10 +5,10 @@ import { Request, Response } from 'express';
 import AdmZip from 'adm-zip';
 import fileUpload, { UploadedFile } from 'express-fileupload';
 import express from 'express';
-import { backendDir } from '../../../../Types.ts';
-import { webLog } from '../../../Logging.ts';
-import ConfigManager from '../../ConfigManager.ts';
-import PluginManager from '../../PluginManager.ts';
+import { userDir } from '../../Types.ts';
+import { webLog } from '../Logging.ts';
+import ConfigService from '../service/ConfigService.ts';
+import PluginService from '../service/PluginService.ts';
 
 export function BackupRestoreRoutes() {
   const router = express.Router();
@@ -19,36 +19,36 @@ export function BackupRestoreRoutes() {
   router.use('/install_plugin', fileUpload());
   router.use('/upload_plugin_asset/*', fileUpload());
   router.use('/upload_plugin_icon/*', fileUpload());*/
-  router.use('/checkin_settings', fileUpload());
-  router.use('/checkin_plugins', fileUpload());
+  router.use(fileUpload());
+  router.use(bodyParser.json({ limit: '100mb' }));
 
   router.get('/get_backups_settings', (req, res) => {
-    let backupSettingsDir = path.join(backendDir, 'backup', 'settings');
+    let backupSettingsDir = path.join(userDir, 'backup', 'settings');
     const backups = fs.existsSync(backupSettingsDir) ? fs.readdirSync(backupSettingsDir) : [];
     res.send(backups);
   });
 
   router.get('/get_backups_plugins', (req, res) => {
-    const backupPluginsDir = path.join(backendDir, 'backup', 'plugins');
+    const backupPluginsDir = path.join(userDir, 'backup', 'plugins');
     const backups = fs.existsSync(backupPluginsDir) ? fs.readdirSync(backupPluginsDir) : [];
     res.send(backups);
   });
 
   router.get('/checkout_settings/*', async (req: Request, res: Response) => {
     let backupName = req.params['0'];
-    webLog('DOWNLOADING SETTINGS', path.join(backendDir, 'backup', 'settings', backupName));
+    webLog('DOWNLOADING SETTINGS', path.join(userDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
-    res.download(path.join(backendDir, 'backup', 'settings', backupName));
+    res.download(path.join(userDir, 'backup', 'settings', backupName));
   });
 
   router.get('/checkout_plugins/*', async (req: Request, res: Response) => {
     let backupName = req.params['0'];
-    webLog('DOWNLOADING PLUGINS', path.join(backendDir, 'backup', 'settings', backupName));
+    webLog('DOWNLOADING PLUGINS', path.join(userDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
-    res.download(path.join(backendDir, 'backup', 'plugins', backupName));
+    res.download(path.join(userDir, 'backup', 'plugins', backupName));
   });
 
-  router.post('/checkin_settings', (req: Request, res: Response) => {
+  router.post('/checkin_settings', (req, res) => {
     if (!req.files) {
       webLog('NO FILES FOUND');
       res.send({
@@ -57,14 +57,14 @@ export function BackupRestoreRoutes() {
       });
     } else {
       const file = req.files.file as UploadedFile;
-      if (!fs.existsSync(path.join(backendDir, 'backup'))) {
-        fs.mkdirSync(path.join(backendDir, 'backup'));
+      if (!fs.existsSync(path.join(userDir, 'backup'))) {
+        fs.mkdirSync(path.join(userDir, 'backup'));
       }
-      if (!fs.existsSync(path.join(backendDir, 'backup', 'settings'))) {
-        fs.mkdirSync(path.join(backendDir, 'backup', 'settings'));
+      if (!fs.existsSync(path.join(userDir, 'backup', 'settings'))) {
+        fs.mkdirSync(path.join(userDir, 'backup', 'settings'));
       }
-      file.mv(path.join(backendDir, 'backup', 'settings', file.name));
-      let newSettingsBackups = fs.readdirSync(path.join(backendDir, 'backup', 'settings'));
+      file.mv(path.join(userDir, 'backup', 'settings', file.name));
+      let newSettingsBackups = fs.readdirSync(path.join(userDir, 'backup', 'settings'));
 
       res.send({ newbackups: newSettingsBackups });
     }
@@ -79,14 +79,14 @@ export function BackupRestoreRoutes() {
       });
     } else {
       const file = req.files.file as UploadedFile;
-      if (!fs.existsSync(path.join(backendDir, 'backup'))) {
-        fs.mkdirSync(path.join(backendDir, 'backup'));
+      if (!fs.existsSync(path.join(userDir, 'backup'))) {
+        fs.mkdirSync(path.join(userDir, 'backup'));
       }
-      if (!fs.existsSync(path.join(backendDir, 'backup', 'plugins'))) {
-        fs.mkdirSync(path.join(backendDir, 'backup', 'plugins'));
+      if (!fs.existsSync(path.join(userDir, 'backup', 'plugins'))) {
+        fs.mkdirSync(path.join(userDir, 'backup', 'plugins'));
       }
-      file.mv(path.join(backendDir, 'backup', 'plugins', file.name));
-      let newSettingsBackups = fs.readdirSync(path.join(backendDir, 'backup', 'plugins'));
+      file.mv(path.join(userDir, 'backup', 'plugins', file.name));
+      let newSettingsBackups = fs.readdirSync(path.join(userDir, 'backup', 'plugins'));
 
       res.send({ newbackups: newSettingsBackups });
     }
@@ -95,14 +95,14 @@ export function BackupRestoreRoutes() {
   router.post('/backup_settings', async (req: Request, res: Response) => {
     let zip = new AdmZip();
 
-    zip.addLocalFolder(backendDir + '/settings', '');
+    zip.addLocalFolder(userDir + '/settings', '');
 
-    if (!fs.existsSync(backendDir + '/backup')) {
-      fs.mkdirSync(backendDir + '/backup');
+    if (!fs.existsSync(userDir + '/backup')) {
+      fs.mkdirSync(userDir + '/backup');
     }
 
-    if (!fs.existsSync(backendDir + '/backup/settings')) {
-      fs.mkdirSync(backendDir + '/backup/settings');
+    if (!fs.existsSync(userDir + '/backup/settings')) {
+      fs.mkdirSync(userDir + '/backup/settings');
     }
 
     let backupName = null;
@@ -123,11 +123,11 @@ export function BackupRestoreRoutes() {
         '-' +
         date.getSeconds();
     }
-    zip.writeZip(backendDir + '/backup/settings/' + backupName + '.zip', (e) => {
+    zip.writeZip(userDir + '/backup/settings/' + backupName + '.zip', (e) => {
       if (e) {
         throw new Error(e.message);
       }
-      let newSettingsBackups = fs.readdirSync(path.join(backendDir, 'backup', 'settings'));
+      let newSettingsBackups = fs.readdirSync(path.join(userDir, 'backup', 'settings'));
 
       res.send({ newbackups: newSettingsBackups });
       webLog('BACKUP COMPLETE');
@@ -135,21 +135,21 @@ export function BackupRestoreRoutes() {
   });
 
   router.post('/backup_plugins', async (req: Request, res: Response) => {
-    const sconfig = ConfigManager.getConfig();
+    const sconfig = ConfigService.getConfig();
     let zip = new AdmZip();
 
-    zip.addLocalFolder(backendDir + '/plugins', '/plugins', (entry: any) => {
+    zip.addLocalFolder(userDir + '/plugins', '/plugins', (entry: any) => {
       return !entry.isDirectory || !entry.name.endsWith('/node_modules');
     });
 
-    zip.addLocalFolder(backendDir + '/web', '/web');
+    zip.addLocalFolder(userDir + '/web', '/web');
 
-    if (!fs.existsSync(backendDir + '/backup')) {
-      fs.mkdirSync(backendDir + '/backup');
+    if (!fs.existsSync(userDir + '/backup')) {
+      fs.mkdirSync(userDir + '/backup');
     }
 
-    if (!fs.existsSync(backendDir + '/backup/plugins')) {
-      fs.mkdirSync(backendDir + '/backup/plugins');
+    if (!fs.existsSync(userDir + '/backup/plugins')) {
+      fs.mkdirSync(userDir + '/backup/plugins');
     }
     let backupName = null;
     if (req.body.backupName != null && req.body.backupName != '') {
@@ -176,11 +176,11 @@ export function BackupRestoreRoutes() {
       'Writing backup. This can take a while depending on how many plugins you have. I wish I could show you progress...',
     );
 
-    zip.writeZip(backendDir + '/backup/plugins/' + backupName + '.zip', (e) => {
+    zip.writeZip(userDir + '/backup/plugins/' + backupName + '.zip', (e) => {
       if (e) {
         throw new Error(e.message);
       }
-      let newPluginBackups = fs.readdirSync(path.join(backendDir, 'backup', 'plugins'));
+      let newPluginBackups = fs.readdirSync(path.join(userDir, 'backup', 'plugins'));
       res.send({ newbackups: newPluginBackups });
       webLog('BACKUP COMPLETE');
     });
@@ -188,12 +188,12 @@ export function BackupRestoreRoutes() {
 
   router.post('/delete_backup_settings', (req: Request, res: Response) => {
     let backupName = req.body.backupName;
-    let backupDir = path.join(backendDir, 'backup', 'settings');
+    let backupDir = path.join(userDir, 'backup', 'settings');
     let fullPath = path.join(backupDir, backupName);
 
     if (fs.existsSync(fullPath)) {
       fs.rmSync(fullPath);
-      let newPluginBackups = fs.readdirSync(path.join(backendDir, 'backup', 'settings'));
+      let newPluginBackups = fs.readdirSync(path.join(userDir, 'backup', 'settings'));
       webLog('BACKUP DELETED: ' + backupName);
       res.send({ status: 'SUCCESS', newbackups: newPluginBackups });
     } else {
@@ -203,12 +203,12 @@ export function BackupRestoreRoutes() {
 
   router.post('/delete_backup_plugins', (req: Request, res: Response) => {
     let backupName = req.body.backupName;
-    let backupDir = path.join(backendDir, 'backup', 'plugins');
+    let backupDir = path.join(userDir, 'backup', 'plugins');
     let fullPath = path.join(backupDir, backupName);
 
     if (fs.existsSync(fullPath)) {
       fs.rmSync(fullPath);
-      let newPluginBackups = fs.readdirSync(path.join(backendDir, 'backup', 'plugins'));
+      let newPluginBackups = fs.readdirSync(path.join(userDir, 'backup', 'plugins'));
       webLog('BACKUP DELETED: ' + backupName);
       res.send({ status: 'SUCCESS', newbackups: newPluginBackups });
     } else {
@@ -220,40 +220,40 @@ export function BackupRestoreRoutes() {
     let fileName = null;
     let selections = req.body.selections ?? { everything: true };
 
-    if (!fs.existsSync(backendDir + '/tmp')) {
-      fs.mkdirSync(backendDir + '/tmp');
+    if (!fs.existsSync(userDir + '/tmp')) {
+      fs.mkdirSync(userDir + '/tmp');
     }
 
     if (req.files) {
       const file = req.files.file as UploadedFile;
       console.log('FILE FOUND', req.files);
       fileName = file.name;
-      if (fs.existsSync(path.join(backendDir, 'tmp', fileName))) {
-        await fs.rm(path.join(backendDir, 'tmp', fileName));
+      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+        await fs.rm(path.join(userDir, 'tmp', fileName));
       }
-      await file.mv(path.join(backendDir, 'tmp', fileName));
+      await file.mv(path.join(userDir, 'tmp', fileName));
     } else if (req.body.backupName) {
       fileName = req.body.backupName;
-      if (fs.existsSync(path.join(backendDir, 'tmp', fileName))) {
-        await fs.rm(path.join(backendDir, 'tmp', fileName));
+      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+        await fs.rm(path.join(userDir, 'tmp', fileName));
       }
       fs.copySync(
-        path.join(backendDir, 'backup', 'settings', fileName),
-        path.join(backendDir, 'tmp', fileName),
+        path.join(userDir, 'backup', 'settings', fileName),
+        path.join(userDir, 'tmp', fileName),
         { overwrite: true },
       );
     }
 
-    let fileDir = path.join(backendDir, 'tmp', fileName.split('.')[0]);
+    let fileDir = path.join(userDir, 'tmp', fileName.split('.')[0]);
 
     if (fs.existsSync(fileDir)) {
       await fs.rm(fileDir, { recursive: true });
     }
 
-    let zip = new AdmZip(path.join(backendDir, 'tmp', fileName));
+    let zip = new AdmZip(path.join(userDir, 'tmp', fileName));
     zip.extractAllTo(fileDir);
-    if (selections['everything'] == true) {
-      fs.copySync(path.join(fileDir), path.join(backendDir, 'settings'), { overwrite: true });
+    if (selections.everything == true) {
+      fs.copySync(path.join(fileDir), path.join(userDir, 'settings'), { overwrite: true });
     } else {
       for (let s in selections) {
         if (s == 'everything') {
@@ -265,7 +265,7 @@ export function BackupRestoreRoutes() {
             webLog('OVERWRITE ' + s + '.json');
             fs.copySync(
               path.join(fileDir, s + '.json'),
-              path.join(backendDir, 'settings', s + '.json'),
+              path.join(userDir, 'settings', s + '.json'),
               { overwrite: true },
             );
           } else {
@@ -279,11 +279,11 @@ export function BackupRestoreRoutes() {
       await fs.rm(fileDir, { recursive: true });
     }
 
-    if (fs.existsSync(path.join(backendDir, 'tmp', fileName))) {
-      await fs.rm(path.join(backendDir, 'tmp', fileName));
+    if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+      await fs.rm(path.join(userDir, 'tmp', fileName));
     }
 
-    //let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "settings"));
+    //let newPluginBackups = fs.readdirSync(path.join(userDir, "backup", "settings"));
     webLog('COMPLETE');
     res.send({ status: 'SUCCESS' });
   });
@@ -291,30 +291,30 @@ export function BackupRestoreRoutes() {
   router.post('/restore_plugins', async (req: Request, res: Response) => {
     let fileName = null;
     let selections = req.body.selections;
-    if (!fs.existsSync(backendDir + '/tmp')) {
-      fs.mkdirSync(backendDir + '/tmp');
+    if (!fs.existsSync(userDir + '/tmp')) {
+      fs.mkdirSync(userDir + '/tmp');
     }
 
     if (req.files) {
       const file = req.files.file as UploadedFile;
       fileName = file.name;
-      if (fs.existsSync(path.join(backendDir, 'tmp', fileName))) {
-        await fs.rm(path.join(backendDir, 'tmp', fileName));
+      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+        await fs.rm(path.join(userDir, 'tmp', fileName));
       }
-      await file.mv(path.join(backendDir, 'tmp', fileName));
+      await file.mv(path.join(userDir, 'tmp', fileName));
     } else if (req.body.backupName) {
       fileName = req.body.backupName;
-      if (fs.existsSync(path.join(backendDir, 'tmp', fileName))) {
-        await fs.rm(path.join(backendDir, 'tmp', fileName));
+      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+        await fs.rm(path.join(userDir, 'tmp', fileName));
       }
       fs.copySync(
-        path.join(backendDir, 'backup', 'plugins', fileName),
-        path.join(backendDir, 'tmp', fileName),
+        path.join(userDir, 'backup', 'plugins', fileName),
+        path.join(userDir, 'tmp', fileName),
         { overwrite: true },
       );
     }
 
-    let fileDir = path.join(backendDir, 'tmp', fileName.split('.')[0]);
+    let fileDir = path.join(userDir, 'tmp', fileName.split('.')[0]);
 
     webLog('GET BACKUP', fileName, fileDir);
 
@@ -322,42 +322,42 @@ export function BackupRestoreRoutes() {
       await fs.rm(fileDir, { recursive: true });
     }
 
-    let zip = new AdmZip(path.join(backendDir, 'tmp', fileName));
+    let zip = new AdmZip(path.join(userDir, 'tmp', fileName));
     zip.extractAllTo(fileDir);
 
     let pluginList = fs.readdirSync(path.join(fileDir, 'plugins'));
     webLog('Deleting Plugins...');
-    fs.rmSync(path.join(backendDir, 'plugins'), { recursive: true });
-    fs.mkdirSync(path.join(backendDir, 'plugins'));
+    fs.rmSync(path.join(userDir, 'plugins'), { recursive: true });
+    fs.mkdirSync(path.join(userDir, 'plugins'));
 
     webLog('Copying Plugins...');
     for (let p in pluginList) {
       webLog(pluginList[p]);
       fs.copySync(
         path.join(fileDir, 'plugins', pluginList[p]),
-        path.join(backendDir, 'plugins', pluginList[p]),
+        path.join(userDir, 'plugins', pluginList[p]),
       );
     }
 
     webLog('Checking for dependencies...');
     for (let p in pluginList) {
-      if (fs.existsSync(path.join(backendDir, 'plugins', pluginList[p], 'node_modules'))) {
+      if (fs.existsSync(path.join(userDir, 'plugins', pluginList[p], 'node_modules'))) {
         webLog('Clearing node_modules for ' + pluginList[p]);
-        fs.rmSync(path.join(backendDir, 'plugins', pluginList[p], 'node_modules'), {
+        fs.rmSync(path.join(userDir, 'plugins', pluginList[p], 'node_modules'), {
           recursive: true,
         });
       }
-      if (fs.existsSync(path.join(backendDir, 'plugins', pluginList[p], 'package.json'))) {
+      if (fs.existsSync(path.join(userDir, 'plugins', pluginList[p], 'package.json'))) {
         let packagejson = JSON.parse(
-          fs.readFileSync(path.join(backendDir, 'plugins', pluginList[p], 'package.json'), {
+          fs.readFileSync(path.join(userDir, 'plugins', pluginList[p], 'package.json'), {
             encoding: 'utf-8',
           }),
         );
         let hasDependencies = packagejson.dependencies != null;
         if (hasDependencies) {
-          await PluginManager.installPluginDependencies(
+          await PluginService.installPluginDependencies(
             pluginList[p],
-            path.join(backendDir, 'plugins', pluginList[p]),
+            path.join(userDir, 'plugins', pluginList[p]),
           );
         } else {
           webLog('No dependencies for ' + pluginList[p]);
@@ -365,11 +365,11 @@ export function BackupRestoreRoutes() {
       }
     }
 
-    let webfolders = fs.readdirSync(path.join(backendDir, 'web'));
+    let webfolders = fs.readdirSync(path.join(userDir, 'web'));
     webLog('Deleting Web Folders...');
     for (let w in webfolders) {
       if (webfolders[w] != 'mod') {
-        fs.rmSync(path.join(backendDir, 'web', webfolders[w]), { recursive: true });
+        fs.rmSync(path.join(userDir, 'web', webfolders[w]), { recursive: true });
       }
     }
 
@@ -380,7 +380,7 @@ export function BackupRestoreRoutes() {
         webLog(newWebFolders[w]);
         fs.copySync(
           path.join(fileDir, 'web', newWebFolders[w]),
-          path.join(backendDir, 'web', newWebFolders[w]),
+          path.join(userDir, 'web', newWebFolders[w]),
         );
       }
     }
@@ -389,11 +389,11 @@ export function BackupRestoreRoutes() {
       await fs.rm(fileDir, { recursive: true });
     }
 
-    if (fs.existsSync(path.join(backendDir, 'tmp', fileName))) {
-      await fs.rm(path.join(backendDir, 'tmp', fileName));
+    if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+      await fs.rm(path.join(userDir, 'tmp', fileName));
     }
-    PluginManager.refreshAllPlugins();
-    //let newPluginBackups = fs.readdirSync(path.join(backendDir, "backup", "plugins"));
+    PluginService.refreshAllPlugins();
+    //let newPluginBackups = fs.readdirSync(path.join(userDir, "backup", "plugins"));
     webLog('COMPLETE');
     res.send({ status: 'SUCCESS' });
   });

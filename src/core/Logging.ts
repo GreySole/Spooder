@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { KeyedObject, backendDir } from '../Types.ts';
+import { KeyedObject, userDir } from '../Types.ts';
 
 export function logEffects(effect: string) {
   const effects = {
@@ -41,7 +41,7 @@ export function logEffects(effect: string) {
 }
 
 export function logToFile(filename: string, message: string, maxlines: number) {
-  let logDir = path.join(backendDir, 'log');
+  let logDir = path.join(userDir, 'log');
   let filePath = path.join(logDir, filename);
 
   if (!fs.existsSync(logDir)) {

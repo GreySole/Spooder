@@ -1,19 +1,19 @@
-import { backendDir, KeyedObject } from 'src/Types.ts';
-import OSCManager from './OSCManager.ts';
+import { userDir, KeyedObject } from 'src/Types.ts';
+import OSCService from './OSCService.ts';
 import si from 'systeminformation';
 
-export default class MonitorManager {
-  private static instance: MonitorManager;
+export default class MonitorService {
+  private static instance: MonitorService;
 
   constructor() {
-    if (MonitorManager.instance) {
-      return MonitorManager.instance;
+    if (MonitorService.instance) {
+      return MonitorService.instance;
     }
 
-    MonitorManager.instance = this;
+    MonitorService.instance = this;
 
     try {
-      const oscFilePath = backendDir + '/settings/osc-tunnels.json';
+      const oscFilePath = userDir + '/settings/osc-tunnels.json';
     } catch (e: any) {
       console.log('OSC file error', e);
     }
@@ -22,7 +22,7 @@ export default class MonitorManager {
   /*private systemCheckInterval = setInterval(() => {
     this.getSystemStatus().then((status) => {
       console.log('System Status', status);
-      OSCManager.sendToTCP('/monitor/system', JSON.stringify(status));
+      OSCService.sendToTCP('/monitor/system', JSON.stringify(status));
     });
   }, 3000);*/
 
@@ -49,18 +49,18 @@ export default class MonitorManager {
 
   static pluginError = (pluginName: string, type: string, message: string) => {
     let timestamp = Date.now();
-    MonitorManager.instance.monitorLogs.pluginlogs.push({
+    MonitorService.instance.monitorLogs.pluginlogs.push({
       timestamp: timestamp,
       name: pluginName,
       type: type,
       message: message,
     });
-    if (MonitorManager.instance.monitorLogs.pluginlogs.length > 1000) {
-      MonitorManager.instance.monitorLogs.pluginlogs.shift();
+    if (MonitorService.instance.monitorLogs.pluginlogs.length > 1000) {
+      MonitorService.instance.monitorLogs.pluginlogs.shift();
     }
 
-    if (MonitorManager.instance.monitorLogs.liveLogging == 1) {
-      OSCManager.sendToTCP(
+    if (MonitorService.instance.monitorLogs.liveLogging == 1) {
+      OSCService.sendToTCP(
         '/frontend/monitor/plugin',
         JSON.stringify({
           timestamp: timestamp,
@@ -74,18 +74,18 @@ export default class MonitorManager {
 
   static sendToMonitor = (proto: string, direction: string, data: KeyedObject) => {
     let timestamp = Date.now();
-    MonitorManager.instance.monitorLogs.logs.push({
+    MonitorService.instance.monitorLogs.logs.push({
       timestamp: timestamp,
       type: 'osc',
       protocol: proto,
       direction: direction,
       data: data,
     });
-    if (MonitorManager.instance.monitorLogs.logs.length > 1000) {
-      MonitorManager.instance.monitorLogs.logs.shift();
+    if (MonitorService.instance.monitorLogs.logs.length > 1000) {
+      MonitorService.instance.monitorLogs.logs.shift();
     }
-    if (MonitorManager.instance.monitorLogs.liveLogging == 1) {
-      OSCManager.sendToTCP(
+    if (MonitorService.instance.monitorLogs.liveLogging == 1) {
+      OSCService.sendToTCP(
         '/frontend/monitor/osc',
         JSON.stringify({
           timestamp: timestamp,
@@ -99,11 +99,11 @@ export default class MonitorManager {
   };
 
   static getMonitorLogs = () => {
-    return MonitorManager.instance.monitorLogs;
+    return MonitorService.instance.monitorLogs;
   };
 
   static getSystemStatus = async () => {
-    return MonitorManager.instance.getSystemStatus();
+    return MonitorService.instance.getSystemStatus();
   };
 
   private getSystemStatus = async () => {

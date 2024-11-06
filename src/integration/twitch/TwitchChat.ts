@@ -1,15 +1,17 @@
 import fs from 'fs';
 import tmi from 'tmi.js';
 import STwitch, { twitchLog } from './main.ts';
-import ConfigManager from '../../core/manager/ConfigManager.ts';
-import { EventManager, checkResponseTrigger } from '../../core/manager/EventManager.ts';
-import { ModerationManager } from '../../core/manager/ModerationManager.ts';
-import ModuleManager from '../../core/manager/ModuleManager.ts';
-import PluginManager from '../../core/manager/PluginManager.ts';
-import ShareManager from '../../core/manager/ShareManager.ts';
-import { CoreModule, KeyedObject, StreamMessage, backendDir } from '../../Types.ts';
-import UserManager from '../../core/manager/UserManager.ts';
-import OSCManager from '../../core/manager/OSCManager.ts';
+import ConfigService from '../../core/service/ConfigService.ts';
+import { EventService } from '../../core/service/EventService.ts';
+import { ModerationService } from '../../core/service/ModerationService.ts';
+import ModuleService from '../../core/service/ModuleService.ts';
+import PluginService from '../../core/service/PluginService.ts';
+import ShareService from '../../core/service/ShareService.ts';
+import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types.ts';
+import UserService from '../../core/service/UserService.ts';
+import OSCService from '../../core/service/OSCService.ts';
+import { checkResponseTrigger } from 'src/core/util/ResponseUtil.ts';
+import { processStreamMessage } from 'src/core/util/ChatUtil.ts';
 
 function stringifyArray(a: string[]) {
   return a.join(', ');
@@ -20,7 +22,7 @@ export default class TwitchChat {
   chat: tmi.Client | undefined = undefined;
 
   getModule = () => {
-    return ModuleManager.getStreamModule('twitch') as STwitch;
+    return ModuleService.getStreamModule('twitch') as STwitch;
   };
 
   twitchjsify = (channel: string, tags: KeyedObject, txt: string): StreamMessage => {
@@ -71,9 +73,9 @@ export default class TwitchChat {
     deletedMessage: string,
     userstate: KeyedObject,
   ) => {
-    const activePlugins = PluginManager.getActivePlugins();
+    const activePlugins = PluginService.getActivePlugins();
     const homeChannel = this.getModule().api.homeChannel;
-    const shares = ShareManager.getShares();
+    const shares = ShareService.getShares();
     let message = {
       channel: channel.replace('#', ''),
       platform: 'twitch',
@@ -102,328 +104,34 @@ export default class TwitchChat {
   };
 
   processMessage = (channel: string, tags: KeyedObject, txt: string, self: boolean) => {
-    const modlocks = ModerationManager.getModlocks();
-    const events = EventManager.getEvents();
-    const sendToTCP = OSCManager.sendToTCP;
-    const activePlugins = PluginManager.getActivePlugins();
-    const shares = ShareManager.getShares();
-    const sconfig = ConfigManager.getConfig();
-    const homeChannel = this.getModule().api.homeChannel;
+    if (self) return;
+    const streamMessage = this.twitchjsify(channel, tags, txt);
 
-    let message = this.twitchjsify(channel, tags, txt);
-    message.tags.displayName = message.displayName;
-    if (typeof message.message == 'undefined') {
-      return;
+    let shareId = undefined;
+
+    if (streamMessage.channel != this.getModule().api.homeChannel) {
+      shareId = this.getModule().shareUsers[streamMessage.channel];
     }
-    this.lastMessage = {
-      username: message.username,
-      channel: message.channel,
-      message: message.message,
-    };
 
-    if (message.message.startsWith('!')) {
-      if (modlocks.spamguard == 1) {
-        if (this.checkForSpamming(message.username) == true) {
-          return;
-        }
-      }
-
-      let command = message.message.substr(1).split(' ');
-
-      if (command[0] == 'stop' && (message.isMod || message.isBroadcaster)) {
-        let cEvent = command[1];
-        let status = ModerationManager.stopEvent(cEvent);
-        this.sayInChat(status);
-        return;
-      }
-
-      if (command[0] == 'mod' && (message.isMod || message.isBroadcaster)) {
-        let modCommand = command[1];
-        if (modCommand == 'spamguard') {
-          let response = ModerationManager.setSpamGuard(command[2]);
-          this.sayInChat(response);
-        } else if (modCommand == 'lock' || modCommand == 'unlock') {
-          let eventtarget = command[2];
-          let plugin = command[2];
-          let target = command.length >= 4 ? command[3] : undefined;
-          if (
-            ModerationManager.lockEvent(modCommand, eventtarget) == true &&
-            eventtarget != 'all'
-          ) {
-            return;
-          }
-          if (ModerationManager.lockPlugin(modCommand, plugin, target) == true && plugin != 'all') {
-            return;
-          }
-          if (command[2] == 'all') {
-            ModerationManager.lockEvent(modCommand, eventtarget);
-            ModerationManager.lockPlugin(modCommand, plugin, target);
-            this.sayInChat(
-              message.username +
-                ' ' +
-                (modCommand == 'lock' ? 'locked' : 'unlocked') +
-                ' all chat commands',
-            );
-          }
-        } else if (modCommand == 'blacklist') {
-          let modAction = command[2];
-          let viewer = command[3];
-          if (modAction == 'add') {
-            modlocks.blacklist[viewer] == 1;
-            this.sayInChat(message.username + ' blacklisted ' + viewer);
-            sendToTCP('/mod/' + message.username + '/blacklist' + viewer, 1);
-          } else if (modAction == 'remove') {
-            modlocks.blacklist[viewer] == 0;
-            this.sayInChat(message.username + ' unblacklisted ' + viewer);
-            sendToTCP('/mod/' + message.username + '/blacklist' + viewer, 0);
-          }
-          fs.writeFile(
-            backendDir + '/settings/mod-blacklist.json',
-            JSON.stringify(modlocks.blacklist),
-            'utf-8',
-            () => {
-              twitchLog('Mod file saved!');
-            },
-          );
-        } else if (modCommand == 'trust' && message.isBroadcaster) {
-          if (command.length > 2) {
-            let trustedUser = command[2].startsWith('@')
-              ? command[2].substring(1).trim()
-              : command[2].trim();
-
-            const modData = UserManager.getUsers();
-            modData['trusted_users'].permissions[trustedUser] = 'm';
-            modData['trusted_users'].twitch[trustedUser] = trustedUser;
-            fs.writeFile(
-              backendDir + '/settings/mod.json',
-              JSON.stringify(modData),
-              'utf-8',
-              () => {
-                twitchLog('Mod file saved!');
-                this.sayInChat(
-                  trustedUser + ' has been added as a trustworthy user for the Mod UI!',
-                );
-              },
-            );
-          } else {
-            this.sayInChat('Trust a user to interact with the Mod UI');
-          }
-        }
-      }
-
-      if (command[0] == 'verify') {
-        const pendingUser = UserManager.getPendingUser(message.username);
-        if (pendingUser.vtype == 'twitch' && pendingUser.verified == false) {
-          pendingUser.verified = true;
-          this.sayInChat(
-            message.username + " You're verified! Now set a username and password for my records.",
-          );
-        }
-      }
-
-      if (command[0] == 'commands') {
-        let commandsArray = this.getChatCommands(message.channel) ?? [];
+    if (streamMessage.message == '!verify') {
+      const pendingUser = UserService.getPendingUser(streamMessage.username);
+      if (pendingUser.vtype == 'twitch' && pendingUser.verified == false) {
+        pendingUser.verified = true;
         this.sayInChat(
-          "Here's the chat command list: " + commandsArray.join(', '),
-          message.channel,
+          streamMessage.displayName +
+            " You're verified! Now set a username and password for my records.",
         );
         return;
       }
-
-      if (command[0] == 'plugins') {
-        if (command.length == 1) {
-          let pluginList = Object.keys(activePlugins);
-          this.sayInChat(
-            'Use this command like !plugins [plugin-name] [plugin-command] to get info on an active plugin. Plugin names are: ' +
-              pluginList.join(', '),
-          );
-          return;
-        } else {
-          for (let p in activePlugins) {
-            if (command[1] == p && command.length == 2) {
-              let commandList = Object.keys(activePlugins[p].commandList);
-              this.sayInChat('Commands for ' + p + ' are: ' + commandList.join(', '));
-              return;
-            } else if (command[1] == p) {
-              if (activePlugins[p].commandList[command[2]] != null) {
-                this.sayInChat(activePlugins[p].commandList[command[2]]);
-                return;
-              }
-            }
-          }
-        }
-      }
-
-      if (command[0] == sconfig.bot.help_command) {
-        if (command.length > 1) {
-          let commands = [];
-          let done = false;
-
-          if (command[1] == 'help') {
-            this.sayInChat(
-              "Pass a command type like '!" +
-                sconfig.bot.help_command +
-                " event' to show the commands for that type. You can also pass a command like '!" +
-                sconfig.bot.help_command +
-                " event command' to get a description of what that command does. Active plugins are: [" +
-                stringifyArray(Object.keys(activePlugins)) +
-                ']',
-            );
-            return;
-          }
-
-          if (command[1] == 'event' || command[1] == 'events') {
-            for (let e in events) {
-              if (command.length == 2) {
-                commands.push(e);
-              } else {
-                if (command[2] == e) {
-                  this.sayInChat(
-                    events[e].name +
-                      ' | chat command: ' +
-                      (events[e].triggers.chat.enabled
-                        ? events[e].triggers.chat.command
-                        : ' No chat command') +
-                      ' | Reward: ' +
-                      (events[e].triggers.redemption.enabled
-                        ? 'It has a channel point reward'
-                        : 'No channel point reward') +
-                      ' | OSC: ' +
-                      (events[e].triggers.osc.enabled ? 'Triggered by OSC' : 'No OSC Trigger') +
-                      ' | Description: ' +
-                      events[e].description,
-                  );
-                  done = true;
-                }
-              }
-            }
-          }
-
-          if (command[1] == 'plugin' || command[1] == 'plugins') {
-            for (let p in activePlugins) {
-              if (command.length == 2) {
-                commands.push(p);
-              } else {
-                if (command[2] == p && command.length == 3) {
-                  commands = Object.keys(activePlugins[p].commandList);
-                } else if (command[2] == p) {
-                  if (activePlugins[p].commandList[command[3]] != null) {
-                    this.sayInChat(activePlugins[p].commandList[command[3]]);
-                    done = true;
-                  }
-                }
-              }
-            }
-          }
-          if (commands.length == 0 && done == false) {
-            this.sayInChat("I'm not sure what " + command[1] + ' is (^_^;)');
-          } else if (done == false) {
-            this.sayInChat(command[1] + ' are: ' + stringifyArray(commands));
-          }
-        } else {
-          this.sayInChat("Hi, I'm " + sconfig.bot.bot_name + '. ' + sconfig.bot.introduction);
-        }
-      }
     }
 
-    for (let e in events) {
-      if (message.channel != homeChannel) {
-        if (!shares[message.channel]?.commands.includes(e)) {
-          continue;
-        }
-      }
+    processStreamMessage(streamMessage, shareId);
 
-      if (modlocks.events[e] == 1) {
-        continue;
-      }
-      if (events[e].triggers.chat.enabled && self == false) {
-        if (
-          events[e].triggers.chat.broadcaster == true ||
-          events[e].triggers.chat.mod == true ||
-          events[e].triggers.chat.sub == true ||
-          events[e].triggers.chat.vip == true
-        ) {
-          let pass = false;
-          if (events[e].triggers.chat.broadcaster == true && message.isBroadcaster) {
-            pass = true;
-          }
-          if (events[e].triggers.chat.mod == true && message.isMod) {
-            pass = true;
-          }
-          if (events[e].triggers.chat.sub == true && message.isSubscriber) {
-            pass = true;
-          }
-          if (events[e].triggers.chat.vip == true && message.isVIP) {
-            pass = true;
-          }
-          if (pass == false) {
-            continue;
-          }
-        }
-
-        let check = checkResponseTrigger(events[e], message);
-        if (check != null) {
-          EventManager.runCommands(check.message as StreamMessage, e, 'chat', check.extra);
-        }
-      }
-    }
-
-    for (let p in activePlugins) {
-      if (modlocks.plugins[p] != 1) {
-        try {
-          if (message.channel != homeChannel) {
-            if (shares[message.channel]?.plugins.includes(p)) {
-              if (activePlugins[p].onChat != null) {
-                activePlugins[p].onChat(message);
-              }
-            }
-          } else {
-            if (activePlugins[p].onChat != null) {
-              activePlugins[p].onChat(message);
-            }
-          }
-        } catch (e) {
-          twitchLog(e);
-        }
-      }
-    }
-  };
-
-  checkForSpamming = (viewername: string) => {
-    const modlocks = ModerationManager.getModlocks();
-    if (modlocks.blacklist[viewername] == null) {
-      modlocks.blacklist[viewername] = {
-        active: 0,
-        timeout: null,
-        commandCount: 1,
-        lastCommand: Date.now(),
-      };
-      return false;
-    }
-
-    if (modlocks.blacklist[viewername].active == 1) {
-      if (Date.now() >= modlocks.blacklist[viewername].timeout) {
-        modlocks.blacklist[viewername].active = 0;
-        modlocks.blacklist[viewername].commandCount = 1;
-      } else {
-        return true;
-      }
-    }
-
-    if (Date.now() - modlocks.blacklist[viewername].lastCommand <= 2000) {
-      modlocks.blacklist[viewername].commandCount++;
-    } else {
-      modlocks.blacklist[viewername].commandCount = 1;
-    }
-    modlocks.blacklist[viewername].lastCommand = Date.now();
-    if (modlocks.blacklist[viewername].commandCount >= 6) {
-      this.sayInChat('Hey, cut that out ' + viewername + ", you're on cooldown for a minute.");
-      modlocks.blacklist[viewername].active = 1;
-      modlocks.blacklist[viewername].timeout = Date.now() + 60000;
-      return true;
-    }
-
-    return false;
+    this.lastMessage = {
+      username: streamMessage.username,
+      channel: streamMessage.channel,
+      message: streamMessage.message,
+    };
   };
 
   processCheer = (channel: string, userstate: KeyedObject, message: string) => {
@@ -431,7 +139,7 @@ export default class TwitchChat {
   };
 
   runChat = async (startCase?: string) => {
-    const shares = ShareManager.getShares();
+    const shares = ShareService.getShares();
     const botUsername = this.getModule().api.botUsername;
     const oauth = this.getModule().oauth;
     const onAuthenticationFailure = this.getModule().api.onAuthenticationFailure;
@@ -485,7 +193,7 @@ export default class TwitchChat {
               if (shares[s].twitchid == bid) {
                 isStreamerLive(s).then((isLive) => {
                   if (isLive == true) {
-                    ShareManager.setShare(s, true);
+                    ShareService.setShare(s, true);
                   }
                 });
               }
@@ -505,8 +213,8 @@ export default class TwitchChat {
   getChatCommands = (shareChannel: string) => {
     const loggedIn = this.getModule().loggedIn;
     const homeChannel = this.getModule().api.homeChannel;
-    const shares = ShareManager.getShares();
-    const events = EventManager.getEvents();
+    const shares = ShareService.getShares();
+    const events = EventService.getEvents();
     if (loggedIn == false) {
       return;
     }
@@ -518,7 +226,7 @@ export default class TwitchChat {
           continue;
         }
       }
-      if (events[e].triggers.chat.enabled == true) {
+      if (events[e].triggers.chat) {
         if (events[e].triggers.chat.command.startsWith('!')) {
           commandsArray.push(events[e].triggers.chat.command);
         }

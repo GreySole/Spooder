@@ -1,21 +1,21 @@
-import { sayInChat } from 'src/core/manager/EventManager.ts';
-import ModuleManager from 'src/core/manager/ModuleManager.ts';
-import { backendDir, KeyedObject } from 'src/Types.ts';
+import { sayInChat } from 'src/core/service/EventService.ts';
+import ModuleService from 'src/core/service/ModuleService.ts';
+import { userDir, KeyedObject } from 'src/Types.ts';
 import STwitch from '../twitch/main.ts';
-import OSCManager from 'src/core/manager/OSCManager.ts';
+import OSCService from 'src/core/service/OSCService.ts';
 import fs from 'fs';
 import OBS from './main.ts';
 
 export default async function onObsOscMessage(message: any) {
-  const sendToTCP = OSCManager.sendToTCP;
-  const obsModule = ModuleManager.getControlModule('obs') as OBS;
+  const sendToTCP = OSCService.sendToTCP;
+  const obsModule = ModuleService.getControlModule('obs') as OBS;
   const obsWebsocket = obsModule.websocket;
 
   let address = message.address.split('/');
 
   if (message.address == '/obs/get/obslogininfo') {
-    let obsLoginInfo = fs.existsSync(backendDir + '/settings/obs.json')
-      ? fs.readFileSync(backendDir + '/settings/obs.json', { encoding: 'utf-8' })
+    let obsLoginInfo = fs.existsSync(userDir + '/settings/obs.json')
+      ? fs.readFileSync(userDir + '/settings/obs.json', { encoding: 'utf-8' })
       : null;
     if (obsLoginInfo != null) {
       sendToTCP('/obs/get/obslogininfo', obsLoginInfo);
@@ -93,7 +93,7 @@ export default async function onObsOscMessage(message: any) {
             obsModule.statusInterval = setInterval(async () => {
               let objects = ['stream', 'record'];
               let finalStatusObj: KeyedObject = {};
-              const twitch = ModuleManager.getStreamModule('twitch') as STwitch;
+              const twitch = ModuleService.getStreamModule('twitch') as STwitch;
               for (let o in objects) {
                 if (objects[o] == 'stream') {
                   finalStatusObj[objects[o]] = await obsWebsocket.call('GetStreamStatus');

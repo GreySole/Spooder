@@ -1,6 +1,6 @@
 import path from 'path';
 
-export const backendDir = path.join('./', 'backend');
+export const userDir = path.join('./', 'user');
 export const frontendDir = path.join('./', 'webui');
 
 export interface KeyedObject {

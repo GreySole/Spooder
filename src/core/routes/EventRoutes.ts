@@ -1,12 +1,10 @@
-import { checkResponseTrigger, EventManager, verifyResponseScript } from '../../EventManager.ts';
-import PluginManager from '../../PluginManager.ts';
+import { EventService } from '../service/EventService.ts';
+import PluginService from '../service/PluginService.ts';
 import { Request, Response } from 'express';
-import ConfigManager from '../../ConfigManager.ts';
-import ShareManager from '../../ShareManager.ts';
-import OSCManager from '../../OSCManager.ts';
 import express from 'express';
-import { webLog } from '../../../Logging.ts';
+import { webLog } from '../Logging.ts';
 import { KeyedObject } from 'src/Types.ts';
+import { checkResponseTrigger, verifyResponseScript } from 'src/core/util/ResponseUtil.ts';
 
 export function EventRoutes() {
   const router = express.Router();
@@ -14,14 +12,14 @@ export function EventRoutes() {
 
   router.get('/event_table', async (req: Request, res: Response) => {
     res.send({
-      events: EventManager.getEvents(),
-      groups: EventManager.getGroups(),
-      plugins: Object.keys(PluginManager.getActivePlugins()),
+      events: EventService.getEvents(),
+      groups: EventService.getGroups(),
+      plugins: Object.keys(PluginService.getActivePlugins()),
     });
   });
 
   router.get('/chat_commands', (req: Request, res: Response) => {
-    const events = EventManager.getEvents();
+    const events = EventService.getEvents();
     const chatCommands = {} as KeyedObject;
     for (let e in events) {
       if (events[e].triggers.chat?.enabled) {
@@ -32,7 +30,7 @@ export function EventRoutes() {
   });
 
   router.post('/save_events', async (req: Request, res: Response) => {
-    EventManager.saveEvents(req.body.events, req.body.groups);
+    EventService.saveEvents(req.body.events, req.body.groups);
     res.send({ status: 'SAVE SUCCESS' });
     webLog('SAVED COMMANDS');
   });

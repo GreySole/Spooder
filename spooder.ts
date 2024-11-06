@@ -1,19 +1,19 @@
 import { spooderLog } from './src/core/Logging';
 import fs from 'fs-extra';
 import path from 'path';
-import ConfigManager from './src/core/manager/ConfigManager.ts';
-import { EventManager } from './src/core/manager/EventManager.ts';
-import { ModerationManager } from './src/core/manager/ModerationManager.ts';
-import ModuleManager from './src/core/manager/ModuleManager.ts';
-import PluginManager from './src/core/manager/PluginManager.ts';
-import ShareManager from './src/core/manager/ShareManager.ts';
-import { backendDir, KeyedObject } from './src/Types.ts';
-import { WebManager } from './src/core/manager/WebManager.ts';
-import OSCManager from './src/core/manager/OSCManager.ts';
-import UserManager from './src/core/manager/UserManager.ts';
-import MonitorManager from './src/core/manager/MonitorManager.ts';
+import ConfigService from './src/core/service/ConfigService.ts';
+import { EventService } from './src/core/service/EventService.ts';
+import { ModerationService } from './src/core/service/ModerationService.ts';
+import ModuleService from './src/core/service/ModuleService.ts';
+import PluginService from './src/core/service/PluginService.ts';
+import ShareService from './src/core/service/ShareService.ts';
+import { userDir, KeyedObject } from './src/Types.ts';
+import { WebService } from './src/core/service/WebService.ts';
+import OSCService from './src/core/service/OSCService.ts';
+import UserService from './src/core/service/UserService.ts';
+import MonitorService from './src/core/service/MonitorService.ts';
 
-const logDir = path.join(backendDir, 'log');
+const logDir = path.join(userDir, 'log');
 
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
@@ -52,21 +52,21 @@ process.on('uncaughtException', function (err) {
   process.exit(1);
 });
 
-new ConfigManager();
-const initMode = ConfigManager.getFlags().initMode;
+new ConfigService();
+const initMode = ConfigService.getFlags().initMode;
 
 if (initMode) {
-  new ModuleManager(() => {});
+  new ModuleService(() => {});
 } else {
-  ConfigManager.refreshFiles();
-  new WebManager();
-  new ModuleManager(() => {
-    new EventManager();
-    new ModerationManager();
-    new OSCManager();
-    new MonitorManager();
-    new UserManager();
-    new ShareManager();
-    new PluginManager();
+  ConfigService.refreshFiles();
+  new WebService();
+  new ModuleService(() => {
+    new EventService();
+    new ModerationService();
+    new OSCService();
+    new MonitorService();
+    new UserService();
+    new ShareService();
+    new PluginService();
   });
 }

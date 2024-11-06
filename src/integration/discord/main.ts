@@ -23,9 +23,9 @@ import {
 } from '@discordjs/voice';
 import { CommunityModuleInterface } from '../interface/CommunityModuleInterface.ts';
 import { logEffects } from '../../core/Logging.ts';
-import PluginManager from '../../core/manager/PluginManager.ts';
-import { backendDir, KeyedObject } from '../../Types.ts';
-import UserManager from '../../core/manager/UserManager.ts';
+import PluginService from '../../core/service/PluginService.ts';
+import { userDir, KeyedObject } from '../../Types.ts';
+import UserService from '../../core/service/UserService.ts';
 import fs from 'fs';
 
 export function discordLog(...content: any[]) {
@@ -39,19 +39,14 @@ export default class Discord implements CommunityModuleInterface {
     const publicRouter = Router();
     router.post('/saveDiscordConfig', async (req: Request, res: Response) => {
       Object.assign(this.config, req.body);
-      fs.writeFile(
-        backendDir + '/settings/discord.json',
-        JSON.stringify(this.config),
-        'utf-8',
-        () => {
-          if (this.loggedIn == false && req.body.token != null && req.body.token != '') {
-            this.autoLogin();
-            res.send({ status: 'SAVED! Logging into Discord...' });
-          } else {
-            res.send({ status: 'SAVE SUCCESS' });
-          }
-        },
-      );
+      fs.writeFile(userDir + '/settings/discord.json', JSON.stringify(this.config), 'utf-8', () => {
+        if (this.loggedIn == false && req.body.token != null && req.body.token != '') {
+          this.autoLogin();
+          res.send({ status: 'SAVED! Logging into Discord...' });
+        } else {
+          res.send({ status: 'SAVE SUCCESS' });
+        }
+      });
     });
 
     router.get('/get_channels', async (req: Request, res: Response) => {
@@ -84,8 +79,8 @@ export default class Discord implements CommunityModuleInterface {
 
   onExternalNetworkChanged() {}
 
-  config = fs.existsSync(backendDir + '/settings/discord.json')
-    ? JSON.parse(fs.readFileSync(backendDir + '/settings/discord.json', { encoding: 'utf-8' }))
+  config = fs.existsSync(userDir + '/settings/discord.json')
+    ? JSON.parse(fs.readFileSync(userDir + '/settings/discord.json', { encoding: 'utf-8' }))
     : {
         master: '',
         token: '',
@@ -126,11 +121,11 @@ export default class Discord implements CommunityModuleInterface {
   }
 
   async userVerify(username: string) {
-    const users = UserManager.getUsers();
+    const users = UserService.getUsers();
     if (Object.keys(users['trusted_users'].discord).includes(username)) {
       let sUsername = username;
 
-      UserManager.setPendingUser('discord', sUsername.toLowerCase());
+      UserService.setPendingUser('discord', sUsername.toLowerCase());
 
       const response = (await this.sendInteraction(users.trusted_users.verify.discord[username], {
         content: "Hi, it looks like you're creating a login for me. If this is you, click confirm.",
@@ -146,15 +141,15 @@ export default class Discord implements CommunityModuleInterface {
           time: 60000,
         });
         if (confirmation.customId === 'confirm') {
-          UserManager.verifyUser(username);
+          UserService.verifyUser(username);
           await confirmation.update({ content: 'Verified!', components: [] });
         } else if (confirmation.customId === 'cancel') {
-          UserManager.cancelPendingUser(username);
+          UserService.cancelPendingUser(username);
           await confirmation.update({ content: 'Declined!', components: [] });
         }
       } catch (e) {
         console.log(e);
-        UserManager.cancelPendingUser(username);
+        UserService.cancelPendingUser(username);
       }
       return { status: 'found' };
     } else {
@@ -163,7 +158,7 @@ export default class Discord implements CommunityModuleInterface {
   }
 
   async getCommands() {
-    const activePlugins = PluginManager.getActivePlugins();
+    const activePlugins = PluginService.getActivePlugins();
     let discordInfo = this.config;
     if (discordInfo.commands) {
       discordLog('FOUND COMMANDS');
@@ -318,7 +313,7 @@ export default class Discord implements CommunityModuleInterface {
           }
           this.config.handlers[trustUser.id] = { id: trustUser.id };
           fs.writeFileSync(
-            backendDir + '/settings/discord.json',
+            userDir + '/settings/discord.json',
             JSON.stringify(this.config),
             'utf-8',
           );
@@ -389,7 +384,7 @@ export default class Discord implements CommunityModuleInterface {
   }
 
   callPlugins(type: string, data: KeyedObject) {
-    const activePlugins = PluginManager.getActivePlugins();
+    const activePlugins = PluginService.getActivePlugins();
     for (let a in activePlugins) {
       if (typeof activePlugins[a].onDiscord != 'undefined') {
         try {

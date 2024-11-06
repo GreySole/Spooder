@@ -1,27 +1,27 @@
 import { NextFunction, Request, Response, Router } from 'express';
-import ngrok from 'ngrok';
 import express from 'express';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import path from 'path';
-import { backendDir, frontendDir } from '../../Types.ts';
+import { userDir, frontendDir } from '../../Types.ts';
 import { webLog } from '../Logging.ts';
-import ConfigManager from './ConfigManager.ts';
-import { ConfigRoutes } from './webui/routes/ConfigRoutes.ts';
-import { isLocal, PluginRoutes } from './webui/routes/PluginRoutes.ts';
-import ModuleManager from './ModuleManager.ts';
+import ConfigService from './ConfigService.ts';
+import { ConfigRoutes } from '../routes/ConfigRoutes.ts';
+import { isLocal, PluginRoutes } from '../routes/PluginRoutes.ts';
+import ModuleService from './ModuleService.ts';
 import fs from 'fs-extra';
 import { networkInterfaces } from 'os';
 import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
 import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface.ts';
-import { BackupRestoreRoutes } from './webui/routes/BackupRestoreRoutes.ts';
-import { EventRoutes } from './webui/routes/EventRoutes.ts';
-import { UserRoutes } from './webui/routes/UserRoutes.ts';
-import { ShareRoutes } from './webui/routes/ShareRoutes.ts';
-import { PublicRoutes } from './webui/routes/PublicRoutes.ts';
+import { BackupRestoreRoutes } from '../routes/BackupRestoreRoutes.ts';
+import { EventRoutes } from '../routes/EventRoutes.ts';
+import { UserRoutes } from '../routes/UserRoutes.ts';
+import { ShareRoutes } from '../routes/ShareRoutes.ts';
+import { PublicRoutes } from '../routes/PublicRoutes.ts';
 import { ControlModuleInterface } from 'src/integration/interface/ControlModuleInterface.ts';
-import { ServerRoutes } from './webui/routes/ServerRoutes.ts';
+import { ServerRoutes } from '../routes/ServerRoutes.ts';
+import Ngrok from './webui/Ngrok.ts';
 
 const nets = networkInterfaces();
 const results = Object.create({});
@@ -46,29 +46,31 @@ if (nets !== undefined) {
   }
 }
 
-export class WebManager {
-  private static instance: WebManager;
+export class WebService {
+  private static instance: WebService;
   constructor() {
-    if (WebManager.instance) {
-      return WebManager.instance;
+    if (WebService.instance) {
+      return WebService.instance;
     }
 
-    WebManager.instance = this;
-    WebManager.instance.startServer(ConfigManager.getFlags().initMode);
+    WebService.instance = this;
+    WebService.instance.startServer(ConfigService.getFlags().initMode);
   }
 
   router: Router | undefined = undefined;
   publicRouter: Router | undefined = undefined;
 
+  private ngrok: Ngrok = new Ngrok();
+
   startServer(initMode: boolean) {
     let expressPort = null;
 
-    const pluginsDir = path.join(backendDir, 'plugins');
-    const webDir = path.join(backendDir, 'web');
-    const overlayDir = path.join(backendDir, 'web', 'overlay');
-    const utilityDir = path.join(backendDir, 'web', 'utility');
-    const assetDir = path.join(backendDir, 'web', 'assets');
-    const iconDir = path.join(backendDir, 'web', 'icons');
+    const pluginsDir = path.join(userDir, 'plugins');
+    const webDir = path.join(userDir, 'web');
+    const overlayDir = path.join(userDir, 'web', 'overlay');
+    const utilityDir = path.join(userDir, 'web', 'utility');
+    const assetDir = path.join(userDir, 'web', 'assets');
+    const iconDir = path.join(userDir, 'web', 'icons');
 
     if (!fs.existsSync(pluginsDir)) {
       fs.mkdirSync(pluginsDir);
@@ -100,7 +102,7 @@ export class WebManager {
     this.router = router;
     this.publicRouter = publicRouter;
 
-    const sconfig = ConfigManager.getConfig();
+    const sconfig = ConfigService.getConfig();
 
     if (initMode == true) {
       expressPort = 3000;
@@ -116,29 +118,27 @@ export class WebManager {
       router.use('/mod', express.static(frontendDir + '/mod/build'));
       router.use('/public', express.static(frontendDir + '/public/build'));
 
-      router.use('/overlay', express.static(backendDir + '/web/overlay'));
-      router.use('/utility', express.static(backendDir + '/web/utility'));
-      router.use('/plugin', express.static(backendDir + '/web/public'));
-      router.use('/assets', express.static(backendDir + '/web/assets'));
-      router.use('/icons', express.static(backendDir + '/web/icons'));
+      router.use('/overlay', express.static(userDir + '/web/overlay'));
+      router.use('/utility', express.static(userDir + '/web/utility'));
+      router.use('/plugin', express.static(userDir + '/web/public'));
+      router.use('/assets', express.static(userDir + '/web/assets'));
+      router.use('/icons', express.static(userDir + '/web/icons'));
 
-      //router.use(express.json({ verify: this.verifyTwitchSignature }));
       router.use(cookieParser());
 
       publicRouter.use('/', express.static(frontendDir + '/public/build'));
       publicRouter.use('/login', express.static(frontendDir + '/login/build'));
       publicRouter.use('/mod', express.static(frontendDir + '/mod/build'));
 
-      publicRouter.use('/overlay', express.static(backendDir + '/web/overlay'));
-      publicRouter.use('/utility', express.static(backendDir + '/web/utility'));
-      publicRouter.use('/plugin', express.static(backendDir + '/web/public'));
-      publicRouter.use('/assets', express.static(backendDir + '/web/assets'));
-      publicRouter.use('/icons', express.static(backendDir + '/web/icons'));
+      publicRouter.use('/overlay', express.static(userDir + '/web/overlay'));
+      publicRouter.use('/utility', express.static(userDir + '/web/utility'));
+      publicRouter.use('/plugin', express.static(userDir + '/web/public'));
+      publicRouter.use('/assets', express.static(userDir + '/web/assets'));
+      publicRouter.use('/icons', express.static(userDir + '/web/icons'));
 
       publicRouter.use(bodyParser.urlencoded({ extended: true }));
       publicRouter.use(bodyParser.json());
       publicRouter.use(cookieParser());
-      //publicRouter.use(express.json({ verify: this.verifyTwitchSignature }));
 
       const systemRoutes = ServerRoutes();
       router.use('/server', systemRoutes.local);
@@ -186,7 +186,9 @@ export class WebManager {
       'http://localhost:' + expressPort + ' and http://' + suggestedNet + ':' + expressPort,
     );
 
-    return router;
+    if (sconfig.network.externalhandle == 'ngrok' && sconfig.network.ngrokauthtoken != '') {
+      this.ngrok.start();
+    }
   }
 
   static registerModuleApi(
@@ -194,85 +196,11 @@ export class WebManager {
   ) {
     const { router, publicRouter, baseUrl } = context.getRouters();
     if (router != null) {
-      WebManager.instance.router?.use(baseUrl, router);
+      WebService.instance.router?.use(baseUrl, router);
     }
     if (publicRouter != null) {
-      WebManager.instance.publicRouter?.use(baseUrl, publicRouter);
+      WebService.instance.publicRouter?.use(baseUrl, publicRouter);
     }
-  }
-
-  static async startNgrok() {
-    const sconfig = ConfigManager.getConfig();
-    if (ConfigManager.getFlags().safeMode == true) {
-      return;
-    }
-
-    try {
-      await ngrok.connect({
-        authtoken: sconfig.network.ngrokauthtoken,
-      });
-    } catch (e) {
-      console.log('Error creating Ngrok tunnel', e);
-      return;
-    }
-
-    let napi = ngrok.getApi();
-
-    if (!napi) {
-      webLog('Ngrok error: Could not connect to API');
-      return;
-    }
-
-    let tunnels = await napi.listTunnels();
-    for (let t in tunnels.tunnels) {
-      napi.stopTunnel(tunnels.tunnels[t].name);
-    }
-
-    let httpURL = await napi.startTunnel({
-      name: 'webui',
-      proto: 'http',
-      addr: sconfig.network.host_port,
-    });
-
-    tunnels = await napi.listTunnels();
-
-    for (let t in tunnels.tunnels) {
-      if (tunnels.tunnels[t].proto == 'http') {
-        napi.stopTunnel(tunnels.tunnels[t].name);
-      }
-    }
-
-    let oscURL = await napi.startTunnel({
-      name: 'modui',
-      proto: 'http',
-      addr: sconfig.network.osc_tcp_port,
-    });
-
-    tunnels = await napi.listTunnels();
-
-    for (let t in tunnels.tunnels) {
-      if (tunnels.tunnels[t].proto == 'http') {
-        napi.stopTunnel(tunnels.tunnels[t].name);
-      }
-    }
-
-    sconfig.network.external_http_url = httpURL.public_url;
-    sconfig.network.external_tcp_url = oscURL.public_url;
-
-    const streamModules = ModuleManager.getStreamModules();
-    const communityModules = ModuleManager.getCommunityModules();
-
-    for (let s in streamModules) {
-      streamModules[s].onNgrokStart();
-    }
-
-    for (let c in communityModules) {
-      communityModules[c].onNgrokStart();
-    }
-  }
-
-  static stopNgrok() {
-    ngrok.disconnect();
   }
 }
 

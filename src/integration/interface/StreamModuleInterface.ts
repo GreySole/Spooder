@@ -6,9 +6,10 @@ export interface StreamModuleInterface {
   autoLogin: () => void;
   sayInChat: (message: string, channel: string) => void;
   onEventFileSaved: () => void;
-  onExternalNetworkChange: () => void;
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;
   getUserInfo: (user?: string) => Promise<KeyedObject>;
   onExternalNetworkChanged: () => void;
+  onSharesChanged: () => void;
+  shareUsers: KeyedObject;
   lastMessage: KeyedObject;
 }

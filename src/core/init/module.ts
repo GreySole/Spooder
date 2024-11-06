@@ -1,12 +1,12 @@
 import express, { Request, Response } from 'express';
 import { networkInterfaces } from 'os';
 import fs from 'fs';
-import { backendDir, frontendDir, PlatformType } from '../../Types.ts';
-import ConfigManager from '../manager/ConfigManager.ts';
-import ModuleManager from '../manager/ModuleManager.ts';
-import PluginManager from '../manager/PluginManager.ts';
-import { WebManager } from '../manager/WebManager.ts';
-import ShareManager from '../manager/ShareManager.ts';
+import { userDir, frontendDir, PlatformType } from '../../Types.ts';
+import ConfigService from '../service/ConfigService.ts';
+import ModuleService from '../service/ModuleService.ts';
+import PluginService from '../service/PluginService.ts';
+import { WebService } from '../service/WebService.ts';
+import ShareService from '../service/ShareService.ts';
 import Discord from '../../integration/discord/main.ts';
 import STwitch from '../../integration/twitch/main.ts';
 
@@ -14,23 +14,23 @@ const nets = networkInterfaces();
 
 export default class Initializer {
   constructor() {
-    new ConfigManager();
-    const sconfig = ConfigManager.getConfig();
-    const webUI = new WebManager();
-    new PluginManager();
-    new ShareManager();
+    new ConfigService();
+    const sconfig = ConfigService.getConfig();
+    const webUI = new WebService();
+    new PluginService();
+    new ShareService();
 
-    ModuleManager.registerIntegrationModule('twitch', PlatformType.stream);
-    ModuleManager.registerIntegrationModule('discord', PlatformType.community);
+    ModuleService.registerIntegrationModule('twitch', PlatformType.stream);
+    ModuleService.registerIntegrationModule('discord', PlatformType.community);
 
     webUI.router?.get('/init', async (req, res) => {
-      const twitch = ModuleManager.getStreamModule('twitch') as STwitch;
-      const discord = ModuleManager.getCommunityModule('discord') as Discord;
-      const sconfig = fs.existsSync(backendDir + '/settings/config.json')
-        ? JSON.parse(fs.readFileSync(backendDir + '/settings/config.json', { encoding: 'utf-8' }))
+      const twitch = ModuleService.getStreamModule('twitch') as STwitch;
+      const discord = ModuleService.getCommunityModule('discord') as Discord;
+      const sconfig = fs.existsSync(userDir + '/settings/config.json')
+        ? JSON.parse(fs.readFileSync(userDir + '/settings/config.json', { encoding: 'utf-8' }))
         : null;
-      const themes = fs.existsSync(backendDir + '/settings/themes.json')
-        ? JSON.parse(fs.readFileSync(backendDir + '/settings/themes.json', { encoding: 'utf-8' }))
+      const themes = fs.existsSync(userDir + '/settings/themes.json')
+        ? JSON.parse(fs.readFileSync(userDir + '/settings/themes.json', { encoding: 'utf-8' }))
         : null;
       let twitchBotUser = null;
       let twitchBroadcasterUser = null;
@@ -91,10 +91,10 @@ export default class Initializer {
     });
 
     webUI.router?.post('/save_twitch', async (req: Request, res: Response) => {
-      const twitch = ModuleManager.getStreamModule('twitch') as STwitch;
+      const twitch = ModuleService.getStreamModule('twitch') as STwitch;
       let newTwitch = req.body;
       twitch.oauth = newTwitch;
-      fs.writeFileSync(backendDir + '/settings/twitch.json', JSON.stringify(newTwitch));
+      fs.writeFileSync(userDir + '/settings/twitch.json', JSON.stringify(newTwitch));
       res.send({ status: 'ok' });
     });
 
@@ -104,13 +104,13 @@ export default class Initializer {
         trusted_users: {},
         trusted_users_pw: {},
       };
-      ConfigManager.saveConfig(newSettings);
+      ConfigService.saveConfig(newSettings);
       res.send({ status: 'ok' });
     });
 
     webUI.router?.post('/save_themes', async (req: Request, res: Response) => {
       let newSettings = req.body;
-      ConfigManager.saveThemes(newSettings);
+      ConfigService.saveThemes(newSettings);
       res.send({ status: 'ok' });
     });
 

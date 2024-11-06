@@ -4,17 +4,17 @@ import path from 'path';
 import fs from 'fs';
 import STwitch, { twitchLog } from './main.ts';
 import { eventsubs, scopes } from './TwitchConstants.ts';
-import ConfigManager from '../../core/manager/ConfigManager.ts';
-import { EventManager, sayInChat } from '../../core/manager/EventManager.ts';
-import { ModerationManager } from '../../core/manager/ModerationManager.ts';
-import ModuleManager from '../../core/manager/ModuleManager.ts';
-import ShareManager from '../../core/manager/ShareManager.ts';
-import { backendDir, KeyedObject } from '../../Types.ts';
+import ConfigService from '../../core/service/ConfigService.ts';
+import { EventService, sayInChat } from '../../core/service/EventService.ts';
+import { ModerationService } from '../../core/service/ModerationService.ts';
+import ModuleService from '../../core/service/ModuleService.ts';
+import ShareService from '../../core/service/ShareService.ts';
+import { userDir, KeyedObject } from '../../Types.ts';
 import Discord from '../discord/main.ts';
 
 export default function getTwitchRouters() {
-  const sconfig = ConfigManager.getConfig();
-  const twitchModule = ModuleManager.getStreamModule('twitch') as STwitch;
+  const sconfig = ConfigService.getConfig();
+  const twitchModule = ModuleService.getStreamModule('twitch') as STwitch;
   const oauth = twitchModule.oauth;
   const autoLogin = twitchModule.autoLogin;
 
@@ -50,7 +50,7 @@ export default function getTwitchRouters() {
             oauth['broadcaster_refreshToken'] = oauth.refreshToken;
           }
           fs.writeFile(
-            backendDir + '/settings/twitch.json',
+            userDir + '/settings/twitch.json',
             JSON.stringify(oauth),
             'utf-8',
             async () => {
@@ -106,7 +106,7 @@ export default function getTwitchRouters() {
     twitchLog('Both oauth revoked');
     res.send({ status: 'Both oauth revoked' });
 
-    fs.writeFile(backendDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
+    fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
       twitchLog('oauth saved!');
     });
   });
@@ -114,7 +114,7 @@ export default function getTwitchRouters() {
   router.get('/save_auth_to_broadcaster', async (req, res) => {
     oauth['broadcaster_token'] = oauth.token;
     oauth['broadcaster_refreshToken'] = oauth.refreshToken;
-    fs.writeFile(backendDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
+    fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
       twitchLog('oauth saved!');
       res.send({ status: 'SUCCESS' });
     });
@@ -123,20 +123,20 @@ export default function getTwitchRouters() {
   router.post('/saveConfig', async (req, res) => {
     oauth['client-id'] = req.body['client-id'];
     oauth['client-secret'] = req.body['client-secret'];
-    fs.writeFile(backendDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
+    fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
       res.send({ status: 'SAVE SUCCESS' });
     });
   });
 
   router.get('/convertEventsubToSpooder', (req, res) => {
-    const eventGroups = EventManager.getGroups();
-    const events = EventManager.getEvents();
+    const eventGroups = EventService.getGroups();
+    const events = EventService.getEvents();
     let oldEvents = null;
     if (oauth.events != null) {
       oldEvents = oauth.events;
-    } else if (fs.existsSync(backendDir + '/settings/eventsub.json')) {
+    } else if (fs.existsSync(userDir + '/settings/eventsub.json')) {
       oldEvents = JSON.parse(
-        fs.readFileSync(backendDir + '/settings/eventsub.json', { encoding: 'utf-8' }),
+        fs.readFileSync(userDir + '/settings/eventsub.json', { encoding: 'utf-8' }),
       ).events;
     }
 
@@ -222,7 +222,7 @@ export default function getTwitchRouters() {
       }
     }
     fs.writeFileSync(
-      backendDir + '/settings/commands.json',
+      userDir + '/settings/commands.json',
       JSON.stringify({ events: events, groups: eventGroups }),
       'utf-8',
     );
@@ -230,11 +230,11 @@ export default function getTwitchRouters() {
   });
 
   router.get('/cleanupOldEventsubs', (req, res) => {
-    if (fs.existsSync(backendDir + '/settings/oauth.json')) {
-      fs.rmSync(backendDir + '/settings/oauth.json');
+    if (fs.existsSync(userDir + '/settings/oauth.json')) {
+      fs.rmSync(userDir + '/settings/oauth.json');
     }
-    if (fs.existsSync(backendDir + '/settings/eventsub.json')) {
-      fs.rmSync(backendDir + '/settings/eventsub.json');
+    if (fs.existsSync(userDir + '/settings/eventsub.json')) {
+      fs.rmSync(userDir + '/settings/eventsub.json');
     }
 
     res.send({ status: 'ok' });
@@ -430,8 +430,8 @@ export default function getTwitchRouters() {
     if (event.broadcaster_user_id != twitchModule.api.broadcasterUserID && type != 'channel.raid') {
       if (type == 'stream.online') {
         await twitchModule.api.validateChatbot();
-        ShareManager.setShare(event.broadcaster_user_login, true);
-        const discord = ModuleManager.getCommunityModule('discord') as Discord;
+        ShareService.setShare(event.broadcaster_user_login, true);
+        const discord = ModuleService.getCommunityModule('discord') as Discord;
         if (!discord) {
           return;
         }
@@ -448,7 +448,7 @@ export default function getTwitchRouters() {
           });
         }
       } else if (type == 'stream.offline') {
-        ShareManager.setShare(event.broadcaster_user_login, false);
+        ShareService.setShare(event.broadcaster_user_login, false);
       }
       res.status(200).end();
       return;
@@ -470,7 +470,7 @@ export default function getTwitchRouters() {
     if (type == 'stream.online') {
       twitchModule.startReoccuringMessage();
       let onlineEvent = twitchModule.getStreamOnlineEvent();
-      const discord = ModuleManager.getCommunityModule('discord') as Discord;
+      const discord = ModuleService.getCommunityModule('discord') as Discord;
       if (!discord) {
         return;
       }
@@ -507,12 +507,12 @@ export default function getTwitchRouters() {
     }
 
     if (type == 'channel.channel_points_custom_reward_redemption.add') {
-      const modlocks = ModerationManager.getModlocks();
+      const modlocks = ModerationService.getModlocks();
       event.userId = event.user_id;
       event.username = event.user_login;
       event.displayName = event.user_name;
       event.message = event.user_input;
-      const events = EventManager.getEvents();
+      const events = EventService.getEvents();
       for (let e in events) {
         if (events[e].triggers.twitch == null) {
           return;
@@ -524,7 +524,7 @@ export default function getTwitchRouters() {
           if (event.status == 'fulfilled' || events[e].triggers.twitch.reward.override == true) {
             if (modlocks.events[e] != 1) {
               event.eventType = 'twitch-redeem';
-              EventManager.runCommands(event, e, 'event');
+              EventService.runCommands(event, e, 'event');
             } else {
               //rejectChannelPointReward(event.reward.id, event.id);
               twitchModule.chat.sayInChat(event.reward.title + ' is locked on my end. Sorry.');
@@ -543,8 +543,8 @@ export default function getTwitchRouters() {
         }
       }
     } else if (type == 'channel.channel_points_custom_reward_redemption.update') {
-      const events = EventManager.getEvents();
-      const modlocks = ModerationManager.getModlocks();
+      const events = EventService.getEvents();
+      const modlocks = ModerationService.getModlocks();
       event.userId = event.user_id;
       event.username = event.user_login;
       event.displayName = event.user_name;
@@ -561,7 +561,7 @@ export default function getTwitchRouters() {
           if (event.status == 'fulfilled') {
             if (modlocks.events[e] != 1) {
               event.eventType = 'twitch-redeem';
-              EventManager.runCommands(event, e, 'event');
+              EventService.runCommands(event, e, 'event');
             } else {
               //rejectChannelPointReward(event.reward.id, event.id);
               twitchModule.chat.sayInChat(event.reward.title + ' is locked on my end. Sorry.');
@@ -575,7 +575,7 @@ export default function getTwitchRouters() {
         }
       }
     } else {
-      const events = EventManager.getEvents();
+      const events = EventService.getEvents();
       if (type != 'channel.raid') {
         event.userId = event.user_id ?? event.broadcaster_user_id;
         event.username = event.user_login ?? event.broadcaster_user_login;
@@ -587,7 +587,7 @@ export default function getTwitchRouters() {
         }
         if (events[e].triggers.twitch?.enabled == true) {
           if (events[e].triggers.twitch.type == type) {
-            EventManager.runCommands(event, e, 'event');
+            EventService.runCommands(event, e, 'event');
           }
         }
       }

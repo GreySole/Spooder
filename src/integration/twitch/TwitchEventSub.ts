@@ -1,12 +1,12 @@
-import ConfigManager from '../../core/manager/ConfigManager.ts';
-import ModuleManager from '../../core/manager/ModuleManager.ts';
+import ConfigService from '../../core/service/ConfigService.ts';
+import ModuleService from '../../core/service/ModuleService.ts';
 import { KeyedObject } from '../../Types.ts';
 import STwitch, { twitchLog } from './main.ts';
 import Axios from 'axios';
 
 export default class TwitchEventSub {
   getModule = () => {
-    return ModuleManager.getStreamModule('twitch') as STwitch;
+    return ModuleService.getStreamModule('twitch') as STwitch;
   };
 
   getEventSubs = async () => {
@@ -70,7 +70,7 @@ export default class TwitchEventSub {
   };
 
   initEventSub = async (eventType: string, bid: string) => {
-    const sconfig = ConfigManager.getConfig();
+    const sconfig = ConfigService.getConfig();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const appToken = this.getModule().api.appToken;

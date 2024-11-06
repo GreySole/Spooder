@@ -1,18 +1,18 @@
 import express from 'express';
-import MonitorManager from '../../MonitorManager.ts';
-import ConfigManager from '../../ConfigManager.ts';
-import PluginManager from '../../PluginManager.ts';
-import ShareManager from '../../ShareManager.ts';
+import MonitorService from '../service/MonitorService.ts';
+import ConfigService from '../service/ConfigService.ts';
+import PluginService from '../service/PluginService.ts';
+import ShareService from '../service/ShareService.ts';
 
 export function ServerRoutes() {
   const router = express.Router();
 
   router.get('/server_state', async (req, res) => {
-    const sconfig = ConfigManager.getConfig();
-    const activePlugins = PluginManager.getActivePlugins();
-    const themes = ConfigManager.getThemes();
-    const shares = ShareManager.getShares();
-    const activeShares = ShareManager.getActiveShares();
+    const sconfig = ConfigService.getConfig();
+    const activePlugins = PluginService.getActivePlugins();
+    const themes = ConfigService.getThemes();
+    const shares = ShareService.getShares();
+    const activeShares = ShareService.getActiveShares();
 
     res.send({
       host: sconfig.network.host,
@@ -26,12 +26,12 @@ export function ServerRoutes() {
   });
 
   router.get('/log', (req, res) => {
-    const logs = MonitorManager.getMonitorLogs();
+    const logs = MonitorService.getMonitorLogs();
     res.send(logs);
   });
 
   router.get('/status', async (req, res) => {
-    const status = await MonitorManager.getSystemStatus();
+    const status = await MonitorService.getSystemStatus();
     res.send(status);
   });
 

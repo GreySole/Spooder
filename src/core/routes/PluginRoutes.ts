@@ -5,12 +5,12 @@ import chmodr from 'chmodr';
 import path from 'path';
 import fs from 'fs-extra';
 import fileUpload, { UploadedFile } from 'express-fileupload';
-import { KeyedObject, backendDir } from '../../../../Types.ts';
-import { logToFile, webLog } from '../../../Logging.ts';
-import ConfigManager from '../../ConfigManager.ts';
-import { EventManager } from '../../EventManager.ts';
-import OSCManager from '../../OSCManager.ts';
-import PluginManager from '../../PluginManager.ts';
+import { KeyedObject, userDir } from '../../Types.ts';
+import { logToFile, webLog } from '../Logging.ts';
+import ConfigService from '../service/ConfigService.ts';
+import { EventService } from '../service/EventService.ts';
+import OSCService from '../service/OSCService.ts';
+import PluginService from '../service/PluginService.ts';
 import bodyParser from 'body-parser';
 
 const pluginApi = {
@@ -74,7 +74,7 @@ export function registerPluginApi(
 }
 
 export function PluginRoutes() {
-  const sconfig = ConfigManager.getConfig();
+  const sconfig = ConfigService.getConfig();
   const router = express.Router();
   const publicRouter = express.Router();
 
@@ -89,7 +89,7 @@ export function PluginRoutes() {
     var pluginSettings = null;
 
     try {
-      var thisPlugin = fs.readFileSync(backendDir + 's/' + pluginName + '/settings.json', {
+      var thisPlugin = fs.readFileSync(userDir + 's/' + pluginName + '/settings.json', {
         encoding: 'utf8',
       });
       pluginSettings = JSON.parse(thisPlugin);
@@ -122,24 +122,24 @@ export function PluginRoutes() {
   publicRouter.get('/get', pluginGet);
 
   router.get('/get_list', async (req: Request, res: Response) => {
-    const activePlugins = PluginManager.getActivePlugins();
+    const activePlugins = PluginService.getActivePlugins();
     let pluginPacks = {} as KeyedObject;
     for (let a in activePlugins) {
-      let settingsFile = path.join(backendDir, 'plugins', a, 'settings.json');
+      let settingsFile = path.join(userDir, 'plugins', a, 'settings.json');
       let thisPlugin =
         fs.existsSync(settingsFile) == true
           ? JSON.parse(fs.readFileSync(settingsFile, { encoding: 'utf8' }))
           : null;
 
-      let settingsForm = path.join(backendDir, 'plugins', a, 'settings-form.json');
+      let settingsForm = path.join(userDir, 'plugins', a, 'settings-form.json');
       let thisPluginForm =
         fs.existsSync(settingsForm) == true
           ? JSON.parse(fs.readFileSync(settingsForm, { encoding: 'utf8' }))
           : null;
 
-      let overlayDir = path.join(backendDir, 'web', 'overlay', a);
-      let utilityDir = path.join(backendDir, 'web', 'utility', a);
-      let settingsDir = path.join(backendDir, 'web', 'settings', a);
+      let overlayDir = path.join(userDir, 'web', 'overlay', a);
+      let utilityDir = path.join(userDir, 'web', 'utility', a);
+      let settingsDir = path.join(userDir, 'web', 'settings', a);
       pluginPacks[a] = {
         name: activePlugins[a].name == null ? a : activePlugins[a].name,
         version: activePlugins[a].version == null ? 'Unknown Version' : activePlugins[a].version,
@@ -163,7 +163,7 @@ export function PluginRoutes() {
   });
 
   publicRouter.get('/public', (req: Request, res: Response) => {
-    const activePlugins = EventManager.getActiveEvents();
+    const activePlugins = EventService.getActiveEvents();
     let publicPlugins = [];
     for (let p in activePlugins) {
       if (activePlugins[p].hasPublic) {
@@ -174,7 +174,7 @@ export function PluginRoutes() {
   });
 
   router.get('/public', (req: Request, res: Response) => {
-    const activePlugins = EventManager.getActiveEvents();
+    const activePlugins = EventService.getActiveEvents();
     let publicPlugins = [];
     for (let p in activePlugins) {
       if (activePlugins[p].hasPublic) {
@@ -197,7 +197,7 @@ export function PluginRoutes() {
     };
     let pluginDirName = req.body.internalName;
 
-    let pluginPath = path.join(backendDir, 'tmp', pluginDirName);
+    let pluginPath = path.join(userDir, 'tmp', pluginDirName);
 
     if (!fs.existsSync(pluginPath)) {
       fs.mkdirSync(pluginPath, { recursive: true });
@@ -208,8 +208,8 @@ export function PluginRoutes() {
     fetch('https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/main')
       .then((response) => response.arrayBuffer())
       .then(async (data) => {
-        const tempDir = path.join(backendDir, 'tmp', pluginDirName);
-        const tempFile = path.join(backendDir, 'tmp', pluginDirName, pluginDirName + '.zip');
+        const tempDir = path.join(userDir, 'tmp', pluginDirName);
+        const tempFile = path.join(userDir, 'tmp', pluginDirName, pluginDirName + '.zip');
         if (fs.existsSync(tempDir)) {
           fs.rmSync(tempDir, { recursive: true });
         }
@@ -238,7 +238,7 @@ export function PluginRoutes() {
           status: 'OK',
           pluginName: pluginName,
         });
-        await PluginManager.installPluginFromTemp(pluginDirName, options);
+        await PluginService.installPluginFromTemp(pluginDirName, options);
       });
   });
 
@@ -254,20 +254,20 @@ export function PluginRoutes() {
         let pluginZip = req.files.file as UploadedFile;
         let pluginDirName = req.body.internalName;
 
-        let tempDir = path.join(backendDir, 'tmp', pluginDirName);
+        let tempDir = path.join(userDir, 'tmp', pluginDirName);
         if (fs.existsSync(tempDir)) {
           await fs.rm(tempDir, { recursive: true });
         }
 
         fs.mkdirSync(tempDir, { recursive: true });
 
-        let tempFile = path.join(backendDir, 'tmp', pluginDirName, pluginZip.name);
+        let tempFile = path.join(userDir, 'tmp', pluginDirName, pluginZip.name);
         //Cleanup before install
         if (fs.existsSync(tempFile)) {
           await fs.rm(tempFile);
         }
 
-        OSCManager.sendToTCP('/frontend/install/progress', {
+        OSCService.sendToTCP('/frontend/install/progress', {
           pluginName: pluginDirName,
           status: 'progress',
           message: 'Extracting...',
@@ -283,7 +283,7 @@ export function PluginRoutes() {
         let zip = new AdmZip(tempFile);
         zip.extractAllTo(tempDir);
         fs.rm(tempFile);
-        await PluginManager.installPluginFromTemp(pluginDirName);
+        await PluginService.installPluginFromTemp(pluginDirName);
       }
     } catch (e) {
       console.error(e);
@@ -292,23 +292,23 @@ export function PluginRoutes() {
 
   router.get('/reinstall_plugin', async (req: Request, res: Response) => {
     let pluginName = req.query.pluginname;
-    await PluginManager.installPluginDependencies(
+    await PluginService.installPluginDependencies(
       pluginName as string,
-      path.join(backendDir, 'plugins', pluginName as string),
+      path.join(userDir, 'plugins', pluginName as string),
     );
-    PluginManager.refreshAllPlugins();
+    PluginService.refreshAllPlugins();
     res.send({ status: 'ok' });
   });
 
   router.get('/export_plugin/*', async (req: Request, res: Response) => {
     let pluginName = req.params['0'];
 
-    let tempDir = path.join(backendDir, 'tmp', pluginName);
-    let pluginDir = path.join(backendDir, 'plugins', pluginName);
-    let overlayDir = path.join(backendDir, 'web', 'overlay', pluginName);
-    let utilityDir = path.join(backendDir, 'web', 'utility', pluginName);
-    let settingsDir = path.join(backendDir, 'web', 'settings', pluginName);
-    let iconFile = path.join(backendDir, 'web', 'icons', pluginName + '.png');
+    let tempDir = path.join(userDir, 'tmp', pluginName);
+    let pluginDir = path.join(userDir, 'plugins', pluginName);
+    let overlayDir = path.join(userDir, 'web', 'overlay', pluginName);
+    let utilityDir = path.join(userDir, 'web', 'utility', pluginName);
+    let settingsDir = path.join(userDir, 'web', 'settings', pluginName);
+    let iconFile = path.join(userDir, 'web', 'icons', pluginName + '.png');
 
     let zip = new AdmZip();
 
@@ -343,12 +343,12 @@ export function PluginRoutes() {
   });
 
   router.get('/refresh_plugins', async (req: Request, res: Response) => {
-    await PluginManager.refreshAllPlugins();
+    await PluginService.refreshAllPlugins();
     res.send({ status: 'Refresh Success!' });
   });
 
   router.get('/refresh_plugin', async (req: Request, res: Response) => {
-    await PluginManager.refreshPlugin(req.query.pluginname as string);
+    await PluginService.refreshPlugin(req.query.pluginname as string);
     res.send({ status: 'success' });
   });
 
@@ -357,8 +357,8 @@ export function PluginRoutes() {
     let assetPath = req.body.assetName;
     let fileStatus = 'SUCCESS';
 
-    let assetDir = path.join(backendDir, 'web', 'assets', pluginName, assetPath, '..');
-    let assetFile = path.join(backendDir, 'web', 'assets', pluginName, assetPath);
+    let assetDir = path.join(userDir, 'web', 'assets', pluginName, assetPath, '..');
+    let assetFile = path.join(userDir, 'web', 'assets', pluginName, assetPath);
     fs.rmSync(assetFile, { recursive: true });
     let thisPluginAssets = fs.existsSync(assetDir) == true ? fs.readdirSync(assetDir) : null;
 
@@ -370,7 +370,7 @@ export function PluginRoutes() {
 
   router.post('/get_plugin_assets', async (req: Request, res: Response) => {
     let pluginName = req.body.pluginname;
-    let mainDir = path.join(backendDir, 'web', 'assets', pluginName);
+    let mainDir = path.join(userDir, 'web', 'assets', pluginName);
     var results = {} as KeyedObject;
     let walk = function (dir: string, done: (a: any, b?: any) => void) {
       fs.readdir(dir, function (err: any, list: any) {
@@ -404,7 +404,7 @@ export function PluginRoutes() {
         });
       });
     };
-    walk(path.join(backendDir, 'web', 'assets', pluginName), (err, results) => {
+    walk(path.join(userDir, 'web', 'assets', pluginName), (err, results) => {
       res.send({ status: 'OK', dirs: results });
     });
   });
@@ -413,18 +413,18 @@ export function PluginRoutes() {
     const currentPath = req.query.folder as string;
     const pluginName = req.query.pluginname as string;
 
-    if (!fs.existsSync(path.join(backendDir, 'web', 'assets', pluginName))) {
-      fs.mkdirSync(path.join(backendDir, 'web', 'assets', pluginName));
+    if (!fs.existsSync(path.join(userDir, 'web', 'assets', pluginName))) {
+      fs.mkdirSync(path.join(userDir, 'web', 'assets', pluginName));
     }
 
-    if (!fs.existsSync(path.join(backendDir, 'web', 'assets', pluginName, currentPath))) {
+    if (!fs.existsSync(path.join(userDir, 'web', 'assets', pluginName, currentPath))) {
       res.send({ status: 'EMPTY', dirs: [] });
       return;
     }
 
     const dirs =
-      fs.existsSync(path.join(backendDir, 'web', 'assets', pluginName, currentPath)) == true
-        ? fs.readdirSync(path.join(backendDir, 'web', 'assets', pluginName, currentPath))
+      fs.existsSync(path.join(userDir, 'web', 'assets', pluginName, currentPath)) == true
+        ? fs.readdirSync(path.join(userDir, 'web', 'assets', pluginName, currentPath))
         : [];
 
     dirs.forEach((value, index, array) => {
@@ -446,7 +446,7 @@ export function PluginRoutes() {
         let pluginAsset = req.files.file as UploadedFile;
         let assetPath = req.params['0'];
 
-        let assetDir = path.join(backendDir, 'web', 'assets', assetPath);
+        let assetDir = path.join(userDir, 'web', 'assets', assetPath);
         let assetFile = path.join(assetDir, pluginAsset.name);
 
         if (!fs.existsSync(assetDir)) {
@@ -459,7 +459,7 @@ export function PluginRoutes() {
         });
         webLog('COMPLETE!');
 
-        PluginManager.refreshAllPlugins();
+        PluginService.refreshAllPlugins();
 
         let thisPluginAssets = fs.existsSync(assetDir) == true ? fs.readdirSync(assetDir) : null;
 
@@ -486,7 +486,7 @@ export function PluginRoutes() {
         let pluginAsset = req.files.file as UploadedFile;
         let pluginName = req.params['0'];
 
-        let iconDir = path.join(backendDir, 'web', 'icons');
+        let iconDir = path.join(userDir, 'web', 'icons');
         let iconFile = path.join(iconDir, pluginName + '.png');
 
         if (!fs.existsSync(iconDir)) {
@@ -516,12 +516,12 @@ export function PluginRoutes() {
 
     let pluginName = thisBody.pluginName;
 
-    let pluginDir = path.join(backendDir, 'plugins', pluginName);
-    let overlayDir = path.join(backendDir, 'web', 'overlay', pluginName);
-    let utilityDir = path.join(backendDir, 'web', 'utility', pluginName);
-    let settingsDir = path.join(backendDir, 'web', 'settings', pluginName);
-    let assetsDir = path.join(backendDir, 'web', 'assets', pluginName);
-    let iconFile = path.join(backendDir, 'web', 'icons', pluginName + '.png');
+    let pluginDir = path.join(userDir, 'plugins', pluginName);
+    let overlayDir = path.join(userDir, 'web', 'overlay', pluginName);
+    let utilityDir = path.join(userDir, 'web', 'utility', pluginName);
+    let settingsDir = path.join(userDir, 'web', 'settings', pluginName);
+    let assetsDir = path.join(userDir, 'web', 'assets', pluginName);
+    let iconFile = path.join(userDir, 'web', 'icons', pluginName + '.png');
     if (fs.existsSync(pluginDir)) {
       await fs.rm(pluginDir, { recursive: true });
     }
@@ -541,30 +541,30 @@ export function PluginRoutes() {
       await fs.rm(iconFile);
     }
     res.send(JSON.stringify({ status: 'SUCCESS' }));
-    PluginManager.refreshAllPlugins();
+    PluginService.refreshAllPlugins();
   });
 
   router.post('/save_plugin', async (req: Request, res: Response) => {
     let newSettings = req.body;
-    let settingsFile = path.join(backendDir, 'plugins', newSettings.pluginName, 'settings.json');
+    let settingsFile = path.join(userDir, 'plugins', newSettings.pluginName, 'settings.json');
     webLog('SAVING', settingsFile, newSettings);
     fs.writeFileSync(settingsFile, JSON.stringify(newSettings.settings), 'utf-8');
     res.send({ saveStatus: 'SAVE SUCCESS' });
     fs.chmod(settingsFile, 0o777);
     webLog('' + newSettings.pluginName + ' Settings Saved!');
 
-    PluginManager.refreshAllPlugins();
+    PluginService.refreshAllPlugins();
   });
 
   router.get('/get_plugin/*', async (req: Request, res: Response) => {
     let plugin = {};
     let a = req.params['0'];
-    let thisPlugin = fs.readFileSync(backendDir + 's/' + a + '/settings.json', {
+    let thisPlugin = fs.readFileSync(userDir + 's/' + a + '/settings.json', {
       encoding: 'utf8',
     });
-    let thisPluginIcon = backendDir + '/icons/' + a + '.png';
+    let thisPluginIcon = userDir + '/icons/' + a + '.png';
 
-    let assetDir = path.join(backendDir, 'web', 'overlay', a, 'assets');
+    let assetDir = path.join(userDir, 'web', 'overlay', a, 'assets');
 
     let thisPluginAssets = fs.existsSync(assetDir) == true ? fs.readdirSync(assetDir) : null;
 

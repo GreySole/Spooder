@@ -1,6 +1,6 @@
 import OBSWebSocket, { EventSubscription, OBSRequestTypes } from 'obs-websocket-js';
-import ModuleManager from 'src/core/manager/ModuleManager.ts';
-import OSCManager from 'src/core/manager/OSCManager.ts';
+import ModuleService from 'src/core/service/ModuleService.ts';
+import OSCService from 'src/core/service/OSCService.ts';
 import { KeyedObject } from 'src/Types.ts';
 import OBS from './main.ts';
 import OSC from 'osc-js';
@@ -13,9 +13,9 @@ export default class ObsWebsocket {
   connected = false;
 
   async connect(host?: string, port?: number, password?: string) {
-    const sendToTCP = OSCManager.sendToTCP;
+    const sendToTCP = OSCService.sendToTCP;
     const obsClient = this.obsClient;
-    const obsModule = ModuleManager.getControlModule('obs') as OBS;
+    const obsModule = ModuleService.getControlModule('obs') as OBS;
 
     if (this.connected) {
       return;
@@ -92,7 +92,7 @@ export default class ObsWebsocket {
         parameterName: 'FilenameFormatting',
       })) ?? { defaultParameterValue: '' };
 
-      const firstStreamModule = ModuleManager.getStreamModule('twitch');
+      const firstStreamModule = ModuleService.getStreamModule('twitch');
 
       let channelInfo = await firstStreamModule.getChannelInfo();
       //console.log(channelInfo);

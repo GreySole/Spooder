@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
-import ModuleManager from 'src/core/manager/ModuleManager.ts';
-import { backendDir, KeyedObject } from 'src/Types.ts';
+import ModuleService from 'src/core/service/ModuleService.ts';
+import { userDir, KeyedObject } from 'src/Types.ts';
 import OBS from './main.ts';
 import fs from 'fs';
 import bodyParser from 'body-parser';
 
 export default function getObsRouters() {
-  const obsModule = ModuleManager.getControlModule('obs') as OBS;
+  const obsModule = ModuleService.getControlModule('obs') as OBS;
   const router = Router();
   router.use(bodyParser.json());
   router.use(bodyParser.urlencoded({ extended: true }));
@@ -24,17 +24,13 @@ export default function getObsRouters() {
     obsModule.settings.recordRename = newSettings.recordRename;
     obsModule.settings.frameDropAlert = newSettings.frameDropAlert;
     obsModule.settings.disconnectAlert = newSettings.disconnectAlert;
-    fs.writeFileSync(
-      backendDir + '/settings/obs.json',
-      JSON.stringify(obsModule.settings),
-      'utf-8',
-    );
+    fs.writeFileSync(userDir + '/settings/obs.json', JSON.stringify(obsModule.settings), 'utf-8');
 
     res.send({ status: 'ok' });
   });
 
   router.post('/connect', async (req: Request, res: Response) => {
-    const obsModule = ModuleManager.getControlModule('obs') as OBS;
+    const obsModule = ModuleService.getControlModule('obs') as OBS;
     let connectObj = req.body;
     console.log('CONNECTING TO OBS...', req.body);
 

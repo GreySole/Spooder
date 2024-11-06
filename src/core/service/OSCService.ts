@@ -1,40 +1,33 @@
 import fs from 'fs';
 import OSC from 'osc-js';
-import {
-  KeyedObject,
-  StreamMessage,
-  OSCConditionObject,
-  PermissionType,
-  backendDir,
-} from '../../Types.ts';
+import { KeyedObject, StreamMessage, OSCConditionObject, userDir } from '../../Types.ts';
 import { oscLog } from '../Logging.ts';
-import ConfigManager from './ConfigManager.ts';
-import UserManager from './UserManager.ts';
-import { EventManager, checkResponseTrigger, sayInChat } from './EventManager.ts';
-import { ModerationManager } from './ModerationManager.ts';
-import PluginManager from './PluginManager.ts';
-import ModuleManager from './ModuleManager.ts';
-import MonitorManager from './MonitorManager.ts';
+import ConfigService from './ConfigService.ts';
+import { EventService, sayInChat } from './EventService.ts';
+import PluginService from './PluginService.ts';
+import ModuleService from './ModuleService.ts';
+import MonitorService from './MonitorService.ts';
+import { checkResponseTrigger } from '../util/ResponseUtil.ts';
 
-export default class OSCManager {
-  private static instance: OSCManager;
+export default class OSCService {
+  private static instance: OSCService;
 
   constructor() {
-    if (OSCManager.instance) {
-      return OSCManager.instance;
+    if (OSCService.instance) {
+      return OSCService.instance;
     }
 
-    OSCManager.instance = this;
+    OSCService.instance = this;
 
     try {
-      const oscFilePath = backendDir + '/settings/osc-tunnels.json';
+      const oscFilePath = userDir + '/settings/osc-tunnels.json';
       if (!fs.existsSync(oscFilePath)) {
-        OSCManager.saveTunnels({});
+        OSCService.saveTunnels({});
       } else {
         const oscFile = fs.readFileSync(oscFilePath, {
           encoding: 'utf8',
         });
-        OSCManager.instance.osctunnels = JSON.parse(oscFile);
+        OSCService.instance.osctunnels = JSON.parse(oscFile);
       }
     } catch (e: any) {
       console.log('OSC file error', e);
@@ -45,29 +38,25 @@ export default class OSCManager {
 
   private osctunnels = {} as KeyedObject;
   static getTunnels() {
-    return OSCManager.instance.osctunnels;
+    return OSCService.instance.osctunnels;
   }
 
   static saveTunnels(newTunnels: KeyedObject) {
-    OSCManager.instance.osctunnels = newTunnels;
-    OSCManager.instance.updateOSCListeners();
-    fs.writeFileSync(
-      backendDir + '/settings/osc-tunnels.json',
-      JSON.stringify(newTunnels),
-      'utf-8',
-    );
+    OSCService.instance.osctunnels = newTunnels;
+    OSCService.instance.updateOSCListeners();
+    fs.writeFileSync(userDir + '/settings/osc-tunnels.json', JSON.stringify(newTunnels), 'utf-8');
   }
 
-  private osc = new OSC({
+  private oscUDP = new OSC({
     plugin: new OSC.DatagramPlugin({
       type: 'udp4',
       open: {
-        host: ConfigManager.getConfig().network.host,
-        port: ConfigManager.getConfig().network.osc_udp_port,
+        host: ConfigService.getConfig().network.host,
+        port: ConfigService.getConfig().network.osc_udp_port,
         exclusive: false,
       },
       send: {
-        port: ConfigManager.getConfig().network.osc_udp_port,
+        port: ConfigService.getConfig().network.osc_udp_port,
       },
     } as KeyedObject),
   });
@@ -75,11 +64,11 @@ export default class OSCManager {
   private oscTCP = new OSC({
     plugin: new OSC.WebsocketServerPlugin({
       host: '0.0.0.0',
-      port: ConfigManager.getConfig().network.osc_tcp_port,
+      port: ConfigService.getConfig().network.osc_tcp_port,
     }),
   });
 
-  private udpClients = ConfigManager.getConfig().network.udp_clients;
+  private udpClients = ConfigService.getConfig().network.udp_clients;
 
   static sendToTCP = (address: string, oscValue: any, log?: boolean) => {
     if (log == null) {
@@ -96,18 +85,18 @@ export default class OSCManager {
     }
 
     if (log == true) {
-      MonitorManager.sendToMonitor('tcp', 'send', {
+      MonitorService.sendToMonitor('tcp', 'send', {
         types: newMessage.types,
         address: address,
         data: oscValue,
       });
     }
 
-    OSCManager.instance.oscTCP.send(newMessage);
+    OSCService.instance.oscTCP.send(newMessage);
   };
 
   static sendToUDP = (dest: string, address: string, oscValue: any) => {
-    var udpClients = ConfigManager.getConfig().network.udp_clients;
+    var udpClients = ConfigService.getConfig().network.udp_clients;
 
     let valueType = 'i';
     if (typeof oscValue == 'string') {
@@ -152,7 +141,7 @@ export default class OSCManager {
       valueType = 'array';
     }
 
-    MonitorManager.sendToMonitor('udp', 'send', {
+    MonitorService.sendToMonitor('udp', 'send', {
       dest: dest,
       types: valueType,
       address: address,
@@ -168,7 +157,7 @@ export default class OSCManager {
         allMessage = new OSC.Message(address, oscValue);
       }
       for (let u in udpClients) {
-        OSCManager.instance.osc.send(allMessage, {
+        OSCService.instance.oscUDP.send(allMessage, {
           host: udpClients[u].ip,
           port: udpClients[u].port,
         });
@@ -180,7 +169,7 @@ export default class OSCManager {
       } else {
         message = new OSC.Message(address, oscValue);
       }
-      OSCManager.instance.osc.send(message, {
+      OSCService.instance.oscUDP.send(message, {
         host: udpClients[dest].ip,
         port: udpClients[dest].port,
       });
@@ -188,10 +177,10 @@ export default class OSCManager {
   };
 
   updateOSCListeners() {
-    var osc = this.osc;
+    var osc = this.oscUDP;
     var oscTCP = this.oscTCP;
 
-    const osctunnels = OSCManager.getTunnels();
+    const osctunnels = OSCService.getTunnels();
 
     for (let o in osctunnels) {
       var oscTCP = this.oscTCP;
@@ -211,23 +200,23 @@ export default class OSCManager {
           }
           switch (osctunnels[o]['handlerTo']) {
             case 'tcp':
-              OSCManager.sendToTCP(address, message.args);
+              OSCService.sendToTCP(address, message.args);
               break;
             case 'udp':
-              if (OSCManager.instance.udpClients[osctunnels[o]['clientTo']] != null) {
-                OSCManager.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
+              if (OSCService.instance.udpClients[osctunnels[o]['clientTo']] != null) {
+                OSCService.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
               } else {
-                OSCManager.sendToUDP('-2', address, message.args.join(','));
+                OSCService.sendToUDP('-2', address, message.args.join(','));
               }
               break;
             case 'plugin':
-              const activePlugins = PluginManager.getActivePlugins();
+              const activePlugins = PluginService.getActivePlugins();
               if (activePlugins[osctunnels[o]['clientTo']]?.onOSC != null) {
                 activePlugins[osctunnels[o]['clientTo']].onOSC(message);
               }
               break;
             default:
-              OSCManager.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
+              OSCService.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
           }
         });
       } else if (osctunnels[o]['handlerFrom'] == 'udp') {
@@ -243,24 +232,24 @@ export default class OSCManager {
           }
           switch (osctunnels[o]['handlerTo']) {
             case 'tcp':
-              OSCManager.sendToTCP(address, message.args);
+              OSCService.sendToTCP(address, message.args);
               break;
             case 'udp':
-              if (OSCManager.instance.udpClients[osctunnels[o]['clientTo']] != null) {
-                OSCManager.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
+              if (OSCService.instance.udpClients[osctunnels[o]['clientTo']] != null) {
+                OSCService.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
               } else {
-                OSCManager.sendToUDP('-2', address, message.args.join(','));
+                OSCService.sendToUDP('-2', address, message.args.join(','));
               }
 
               break;
             case 'plugin':
-              const activePlugins = PluginManager.getActivePlugins();
+              const activePlugins = PluginService.getActivePlugins();
               if (activePlugins[osctunnels[o]['clientTo']]?.onOSC != null) {
                 activePlugins[osctunnels[o]['clientTo']].onOSC(message);
               }
               break;
             default:
-              OSCManager.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
+              OSCService.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
           }
         });
       }
@@ -268,7 +257,7 @@ export default class OSCManager {
   }
 
   initializeOSC() {
-    const sconfig = ConfigManager.getConfig();
+    const sconfig = ConfigService.getConfig();
     var udpConfig = {
       type: 'udp4',
       open: {
@@ -281,20 +270,20 @@ export default class OSCManager {
       },
     };
 
-    this.osc = new OSC({ plugin: new OSC.DatagramPlugin(udpConfig) });
-    var osc = this.osc;
+    this.oscUDP = new OSC({ plugin: new OSC.DatagramPlugin(udpConfig) });
+    var osc = this.oscUDP;
 
     osc.on('*', (message: OSC.Message) => {
       console.log('OSC UDP MESSAGE', message.address);
-      const events = EventManager.getEvents();
-      MonitorManager.sendToMonitor('udp', 'receive', {
+      const events = EventService.getEvents();
+      MonitorService.sendToMonitor('udp', 'receive', {
         types: message.types,
         address: message.address,
         data: message.args,
       });
 
       for (let e in events) {
-        if (events[e].triggers.osc?.enabled == true) {
+        if (events[e].triggers.osc) {
           if (events[e].triggers.osc.handletype == 'search') {
             if (message.address == events[e].triggers.osc.address) {
               const streamMessage = {
@@ -317,7 +306,7 @@ export default class OSCManager {
               let check = checkResponseTrigger(events[e], streamMessage);
 
               if (check != null) {
-                EventManager.runCommands(check.message, e, 'osc', check.extra);
+                EventService.runCommands(check.message, e, 'osc', check.extra);
               }
             }
           } else if (message.address == events[e].triggers.osc.address) {
@@ -388,33 +377,35 @@ export default class OSCManager {
                 isReturningChatter: false,
               } as StreamMessage;
 
-              EventManager.runCommands(streamMessage, e, 'osc');
+              EventService.runCommands(streamMessage, e, 'osc');
             }
 
             if (runConditions(message.args, conditionsOff, comparisonOff)) {
-              EventManager.stopEvent(e);
+              EventService.stopEvent(e);
             }
           }
         }
       }
 
-      const controlModules = ModuleManager.getControlModules();
+      const controlModules = ModuleService.getControlModules();
       for (const c in controlModules) {
         if (controlModules[c].onOSC != null) {
           controlModules[c].onOSC(message);
         }
       }
 
-      const activePlugins = PluginManager.getActivePlugins();
+      const activePlugins = PluginService.getActivePlugins();
       for (const p in activePlugins) {
         if (activePlugins[p].onOSC != null) {
           activePlugins[p].onOSC(message);
         }
       }
     });
+
     osc.on('open', () => {
       oscLog('OSC UDP OPEN');
     });
+
     osc.on('error', (e: any) => {
       oscLog('OSC Error: ', e);
     });
@@ -437,7 +428,7 @@ export default class OSCManager {
 
     oscTCP.on('*', (message: OSC.Message) => {
       if (!message.address.startsWith('/frontend/monitor')) {
-        MonitorManager.sendToMonitor('tcp', 'receive', {
+        MonitorService.sendToMonitor('tcp', 'receive', {
           types: message.types,
           address: message.address,
           data: message.args,
@@ -446,14 +437,14 @@ export default class OSCManager {
 
       let address = message.address.split('/');
 
-      const controlModules = ModuleManager.getControlModules();
+      const controlModules = ModuleService.getControlModules();
       for (const c in controlModules) {
         if (controlModules[c].onOSC != null) {
           controlModules[c].onOSC(message);
         }
       }
 
-      const activePlugins = PluginManager.getActivePlugins();
+      const activePlugins = PluginService.getActivePlugins();
       for (let p in activePlugins) {
         //Alert box plugins need to listen for any connect messages from other plugins
         if (activePlugins[p].isAlertBox != null) {
@@ -476,7 +467,7 @@ export default class OSCManager {
             this.monitorLogs.liveLogging = message.args[0] as number;
           } else if (address[3] == 'get') {
             if (message.args[0] == 'all') {
-              OSCManager.sendToTCP(
+              OSCService.sendToTCP(
                 '/frontend/monitor/get/all',
                 JSON.stringify(this.monitorLogs),
                 false,
@@ -492,95 +483,15 @@ export default class OSCManager {
           if (address[3] == 'error') {
             let errorObj = JSON.parse(message.args[0] as string);
             //oscLog("GOT PLUGIN ERROR", errorObj);
-            MonitorManager.pluginError(errorObj.name, errorObj.type, errorObj.message);
+            MonitorService.pluginError(errorObj.name, errorObj.type, errorObj.message);
             return;
           }
         }
-      }
-
-      if (address[1] == 'mod') {
-        const activeMod = UserManager.getActiveUserFromToken(message.args[0] as string);
-        if (activeMod != 'local') {
-          if (
-            activeMod == null ||
-            activeMod != address[2] ||
-            !UserManager.checkPermission(activeMod, [PermissionType.admin, PermissionType.mod])
-          ) {
-            console.log('Unauthorized mod OSC!', address[2], message.args[0]);
-            return;
-          }
-        }
-        if (address[3] == 'lock') {
-          let lockString = message.args[1] === true ? 'lock' : 'unlock';
-          if (address[4] == 'event') {
-            ModerationManager.lockEvent(message.args[1] as string, address[5]);
-            sayInChat(address[2] + ' ' + lockString + 'ed ' + address[5]);
-          } else if (address[4] == 'plugin') {
-            let pluginName = activePlugins[address[5]]?.name;
-
-            if (address[6] == null) {
-              ModerationManager.lockPlugin(message.args[1] as string, address[5]);
-              sayInChat(address[2] + ' ' + lockString + 'ed ' + pluginName);
-            } else {
-              ModerationManager.lockPlugin(message.args[1] as string, address[5], address[6]);
-              sayInChat(address[2] + ' ' + lockString + 'ed ' + address[6] + ' in ' + pluginName);
-            }
-          }
-        } else if (address[3] == 'blacklist') {
-          ModerationManager.blacklistUser(address[4], -1);
-          sayInChat(
-            address[2] + (message.args[1] == 1 ? ' blacklisted ' : ' unblacklisted ') + address[4],
-          );
-        } else if (address[3] == 'spamguard') {
-          ModerationManager.setSpamGuard(address[4]);
-
-          sayInChat(
-            address[2] + ' turned ' + (message.args[1] == 1 ? ' on ' : ' off ') + 'Spam Guard',
-          );
-        } else if (address[3] == 'get') {
-          if (address[4] == 'all') {
-            const events = EventManager.getEvents();
-            const modlocks = ModerationManager.getModlocks();
-            OSCManager.sendToTCP(
-              '/mod/' + address[2] + '/get',
-              JSON.stringify({
-                _events: Object.keys(events),
-                _plugins: Object.keys(activePlugins),
-                _modlocks: modlocks,
-              }),
-            );
-          }
-        } else if (address[3] == 'save') {
-          if (address[4] == 'theme') {
-            const themes = ConfigManager.getThemes();
-            if (themes.modui[address[2]] == null) {
-              themes.modui[address[2]] = {};
-            }
-            themes.modui[address[2]] = JSON.parse(message.args[1] as string);
-            ConfigManager.saveThemes(themes);
-            OSCManager.sendToTCP('/mod/' + address[2] + '/save/theme', message.args[1]);
-          }
-        }
-        OSCManager.sendToTCP(message.address, message.args[1]);
-        return;
       }
 
       //Tell the overlay it's connected
       if (message.address.endsWith('/connect')) {
         oscTCP.send(new OSC.Message(message.address.split('/')[1] + '/connect/success', 1.0));
-        return;
-      }
-
-      //Legacy block to get plugin settings. They're set when they're loaded now
-      //but this can be used for on the fly updates
-      if (message.address.startsWith('/settings')) {
-        let addressSplit = message.address.split('/');
-        let pluginName = addressSplit[addressSplit.length - 1];
-        let settingsJSON = fs.readFileSync(
-          backendDir + '/plugins/' + pluginName + '/settings.json',
-          { encoding: 'utf8' },
-        );
-        oscTCP.send(new OSC.Message('/' + pluginName + '/settings', settingsJSON));
         return;
       }
     });

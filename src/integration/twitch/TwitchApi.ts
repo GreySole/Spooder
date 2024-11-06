@@ -3,8 +3,8 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import crypto from 'crypto';
 import { scopes } from './TwitchConstants.ts';
-import ModuleManager from '../../core/manager/ModuleManager.ts';
-import { KeyedObject, backendDir } from '../../Types.ts';
+import ModuleService from '../../core/service/ModuleService.ts';
+import { KeyedObject, userDir } from '../../Types.ts';
 import STwitch, { twitchLog } from './main.ts';
 
 export default class TwitchApi {
@@ -15,7 +15,7 @@ export default class TwitchApi {
   broadcasterUserID = '';
 
   getModule = () => {
-    return ModuleManager.getStreamModule('twitch') as STwitch;
+    return ModuleService.getStreamModule('twitch') as STwitch;
   };
 
   validateBroadcaster = async (): Promise<KeyedObject> => {
@@ -203,15 +203,10 @@ export default class TwitchApi {
           if (typeof response.data.access_token != 'undefined') {
             oauth.token = response.data.access_token;
             twitchLog('TOKEN REFRESHED');
-            fs.writeFile(
-              backendDir + '/settings/twitch.json',
-              JSON.stringify(oauth),
-              'utf-8',
-              () => {
-                twitchLog('oauth saved!');
-                res(oauth.token);
-              },
-            );
+            fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
+              twitchLog('oauth saved!');
+              res(oauth.token);
+            });
           }
         })
         .catch((error: AxiosError) => {
@@ -244,15 +239,10 @@ export default class TwitchApi {
             oauth.broadcaster_token = response.data.access_token;
 
             twitchLog('BROADCASTER TOKEN REFRESHED');
-            fs.writeFile(
-              backendDir + '/settings/twitch.json',
-              JSON.stringify(oauth),
-              'utf-8',
-              () => {
-                twitchLog('broadcaster oauth saved!');
-                res(oauth.broadcaster_token);
-              },
-            );
+            fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
+              twitchLog('broadcaster oauth saved!');
+              res(oauth.broadcaster_token);
+            });
           }
         })
         .catch((error: AxiosError) => {
