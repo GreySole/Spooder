@@ -46,6 +46,7 @@ export default class ShareService {
             };
 
             loadedShares[l] = {
+              name: loadedShares[l].displayName,
               joinMessage: loadedShares[l].joinMessage,
               leaveMessage: loadedShares[l].leaveMessage,
               plugins: loadedShares[l].plugins,
@@ -92,6 +93,7 @@ export default class ShareService {
     const userShare = ShareService.instance.shares[shareUser];
     const sharePlatforms = userShare.streamPlatforms;
     const notificationPlatforms = userShare.notificationPlatforms;
+
     if (message == null) {
       if (isEnabled) {
         message = userShare.joinMessage;

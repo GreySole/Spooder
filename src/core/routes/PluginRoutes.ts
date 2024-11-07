@@ -131,28 +131,16 @@ export function PluginRoutes() {
           ? JSON.parse(fs.readFileSync(settingsFile, { encoding: 'utf8' }))
           : null;
 
-      let settingsForm = path.join(userDir, 'plugins', a, 'settings-form.json');
-      let thisPluginForm =
-        fs.existsSync(settingsForm) == true
-          ? JSON.parse(fs.readFileSync(settingsForm, { encoding: 'utf8' }))
-          : null;
-
-      let overlayDir = path.join(userDir, 'web', 'overlay', a);
-      let utilityDir = path.join(userDir, 'web', 'utility', a);
-      let settingsDir = path.join(userDir, 'web', 'settings', a);
       pluginPacks[a] = {
         name: activePlugins[a].name == null ? a : activePlugins[a].name,
         version: activePlugins[a].version == null ? 'Unknown Version' : activePlugins[a].version,
         author: activePlugins[a].author == null ? 'Unknown Author' : activePlugins[a].author,
         description: activePlugins[a].description == null ? '' : activePlugins[a].description,
         dependencies: activePlugins[a].dependencies == null ? {} : activePlugins[a].dependencies,
-        settings: thisPlugin,
-        'settings-form': thisPluginForm,
         assetBrowserPath: '/',
         assetPath: path.join('assets', a),
-        hasOverlay: fs.existsSync(overlayDir),
-        hasUtility: fs.existsSync(utilityDir),
-        hasExternalSettingsPage: fs.existsSync(settingsDir),
+        hasOverlay: activePlugins[a].hasOverlay,
+        hasUtility: activePlugins[a].hasUtility,
       };
       if (activePlugins[a].status != null && activePlugins[a].status != 'ok') {
         pluginPacks[a].status = activePlugins[a].status;
@@ -160,6 +148,48 @@ export function PluginRoutes() {
     }
 
     res.send(JSON.stringify(pluginPacks));
+  });
+
+  router.get('/get_plugin_settings', async (req: Request, res: Response) => {
+    const pluginName = req.query.plugin as string;
+    try {
+      const settings = path.join(userDir, 'plugins', pluginName, 'settings.json');
+      const thisPluginForm =
+        fs.existsSync(settings) == true
+          ? JSON.parse(fs.readFileSync(settings, { encoding: 'utf8' }))
+          : null;
+      res.send(thisPluginForm);
+    } catch (e) {
+      res.send({ status: 'error', message: e });
+    }
+  });
+
+  router.get('/get_plugin_settings_form', async (req: Request, res: Response) => {
+    const pluginName = req.query.plugin as string;
+    try {
+      const settingsForm = path.join(userDir, 'plugins', pluginName, 'settings-form.json');
+      const thisPluginForm =
+        fs.existsSync(settingsForm) == true
+          ? JSON.parse(fs.readFileSync(settingsForm, { encoding: 'utf8' }))
+          : null;
+      res.send(thisPluginForm);
+    } catch (e) {
+      res.send({ status: 'error', message: e });
+    }
+  });
+
+  router.get('/get_plugin_events_form', async (req: Request, res: Response) => {
+    const pluginName = req.query.plugin as string;
+    try {
+      const eventsForm = path.join(userDir, 'plugins', pluginName, 'events-form.json');
+      const thisPluginForm =
+        fs.existsSync(eventsForm) == true
+          ? JSON.parse(fs.readFileSync(eventsForm, { encoding: 'utf8' }))
+          : null;
+      res.send(thisPluginForm);
+    } catch (e) {
+      res.send({ status: 'error', message: e });
+    }
   });
 
   publicRouter.get('/public', (req: Request, res: Response) => {

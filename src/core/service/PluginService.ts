@@ -7,7 +7,10 @@ import OSCService from './OSCService.ts';
 import { webLog } from '../Logging.ts';
 import childProcess from 'child_process';
 import Plugin from 'src/Plugin.ts';
-import os from 'os';
+
+interface PluginMap {
+  [key: string]: Plugin;
+}
 
 export default class PluginService {
   private static instance: PluginService;
@@ -47,7 +50,7 @@ export default class PluginService {
     disabled: {},
   };
 
-  private activePlugins = {} as KeyedObject;
+  private activePlugins = {} as PluginMap;
 
   static getActivePlugins() {
     return PluginService.instance.activePlugins;
