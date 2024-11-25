@@ -1,16 +1,21 @@
-import { userDir, KeyedObject } from './Types.ts';
+import { userDir, KeyedObject, StreamMessage } from './Types.ts';
 import path from 'path';
 import fs from 'fs';
 import ModuleService from './core/service/ModuleService.ts';
 import os from 'os';
+import OSC from 'osc-js';
 
 interface PluginModule {
-  settings?: KeyedObject;
-  onSettings?: (settings: KeyedObject) => void;
-  onDestroy?: () => void;
   streamModules: KeyedObject;
   communityModules: KeyedObject;
   controlModules: KeyedObject;
+  settings?: KeyedObject;
+  onSettings?: (settings: KeyedObject) => void;
+  onDestroy?: () => void;
+  onChat?: (message: StreamMessage) => void;
+  onOSC?: (message: OSC.Message) => void;
+  onEvent?: (event: string, data: KeyedObject) => void;
+  registerExtra: (key: string, value: any) => void;
 }
 
 export default class Plugin {
@@ -24,6 +29,7 @@ export default class Plugin {
   hasUtility: boolean = false;
   hasPublic: boolean = false;
   status: string = '';
+  extra: KeyedObject = {};
 
   private pluginModule: PluginModule | undefined = undefined;
 
@@ -60,6 +66,7 @@ export default class Plugin {
         this.hasUtility = fs.existsSync(utilityDir);
         this.hasPublic = fs.existsSync(publicDir);
         this.status = 'ok';
+        this.extra = {} as KeyedObject;
 
         import(modulePath).then((module) => {
           this.pluginModule = new module.default() as PluginModule;
@@ -71,6 +78,9 @@ export default class Plugin {
           this.pluginModule.streamModules = ModuleService.getStreamModules();
           this.pluginModule.communityModules = ModuleService.getCommunityModules();
           this.pluginModule.controlModules = ModuleService.getControlModules();
+          this.pluginModule.registerExtra = (key: string, value: any) => {
+            this.extra[key] = value;
+          };
 
           if (fs.existsSync(userDir + '/plugins/' + pluginDirName + '/settings.json')) {
             this.pluginModule.settings = JSON.parse(
@@ -99,6 +109,22 @@ export default class Plugin {
       this.dependencies = pluginMeta.dependencies;
       console.log('Refresh Failed', e);
     }
+  }
+
+  onChat(message: StreamMessage) {
+    this.pluginModule?.onChat?.(message);
+  }
+
+  onOSC(message: OSC.Message) {
+    this.pluginModule?.onOSC?.(message);
+  }
+
+  onEvent(event: string, data: KeyedObject) {
+    this.pluginModule?.onEvent?.(event, data);
+  }
+
+  getExtra(key: string) {
+    return this.extra[key];
   }
 
   async destroy() {

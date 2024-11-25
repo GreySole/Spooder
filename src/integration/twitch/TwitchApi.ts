@@ -441,6 +441,38 @@ export default class TwitchApi {
     });
   };
 
+  getUserInfoById = (id: string): Promise<KeyedObject> => {
+    const oauth = this.getModule().oauth;
+    const loggedIn = this.getModule().loggedIn;
+    return new Promise(async (res, rej) => {
+      if (loggedIn == false) {
+        rej({ error: 'Not logged in' });
+        return;
+      }
+      if (id === undefined) {
+        rej({ error: 'getUserInfoById error: No id' });
+      }
+      Axios('https://api.twitch.tv/helix/users?id=' + id, {
+        method: 'GET',
+        headers: {
+          'Client-Id': oauth['client-id'],
+          Authorization: ' Bearer ' + this.appToken,
+          'Content-Type': 'application/json',
+        },
+      })
+        .then((data: AxiosResponse) => {
+          if (data != null) {
+            res(data.data);
+          } else {
+            res({ error: 'getUserInfo error: No data' });
+          }
+        })
+        .catch((error: AxiosError) => {
+          rej(error);
+        });
+    });
+  };
+
   getUserInfo = (user?: string | undefined): Promise<KeyedObject> => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;

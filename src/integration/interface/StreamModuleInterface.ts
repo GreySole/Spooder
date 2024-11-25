@@ -8,6 +8,7 @@ export interface StreamModuleInterface {
   onEventFileSaved: () => void;
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;
   getUserInfo: (user?: string) => Promise<KeyedObject>;
+  refreshShareUserInfo(id: string): Promise<KeyedObject>;
   onExternalNetworkChanged: () => void;
   onSharesChanged: () => void;
   shareUsers: KeyedObject;

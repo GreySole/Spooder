@@ -5,6 +5,8 @@ import ConfigService from './ConfigService.ts';
 import ModuleService from './ModuleService.ts';
 import PluginService from './PluginService.ts';
 import OSCService from './OSCService.ts';
+import { StreamModuleInterface } from 'src/integration/interface/StreamModuleInterface.ts';
+import { spooderLog } from '../Logging.ts';
 
 export default class ShareService {
   private static instance: ShareService;
@@ -26,14 +28,17 @@ export default class ShareService {
         });
 
         const loadedShares = JSON.parse(shareFile);
-        if (!loadedShares[Object.keys(loadedShares)[0]].platforms) {
+
+        // Convert old share format to new format
+        if (!loadedShares[Object.keys(loadedShares)[0]].streamPlatforms) {
+          spooderLog('Upgrading shares file');
           for (const l in loadedShares) {
             const newStreamPlatforms = {
               twitch: {
                 username: l,
                 userId: loadedShares[l].twitchid,
                 displayName: loadedShares[l].displayName,
-                profilePic: loadedShares[l].profilePic,
+                profilePic: loadedShares[l].profilepic,
               },
             };
 
@@ -56,11 +61,33 @@ export default class ShareService {
             };
           }
         }
+
         ShareService.instance.shares = loadedShares;
       }
     } catch (e: any) {
       console.log('Share file error', e);
     }
+  }
+
+  static async refreshShareUsers() {
+    const shares = ShareService.instance.shares;
+    for (const l in shares) {
+      for (const s in shares[l].streamPlatforms) {
+        const streamModule = ModuleService.findModule(s) as StreamModuleInterface;
+        if (streamModule) {
+          const newInfo = await streamModule.refreshShareUserInfo(
+            shares[l].streamPlatforms[s].userId,
+          );
+          if (newInfo) {
+            shares[l].streamPlatforms[s].username = newInfo.username;
+            shares[l].streamPlatforms[s].displayName = newInfo.displayName;
+            shares[l].streamPlatforms[s].profilePic = newInfo.profilePic;
+          }
+        }
+      }
+    }
+
+    ShareService.instance.saveShares();
   }
 
   shares: KeyedObject = {};

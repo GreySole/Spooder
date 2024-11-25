@@ -59,6 +59,7 @@ if (initMode) {
   new ModuleService(() => {});
 } else {
   ConfigService.refreshFiles();
+  new ShareService();
   new WebService();
   new ModuleService(() => {
     new EventService();
@@ -66,7 +67,7 @@ if (initMode) {
     new OSCService();
     new MonitorService();
     new UserService();
-    new ShareService();
     new PluginService();
+    ShareService.refreshShareUsers();
   });
 }

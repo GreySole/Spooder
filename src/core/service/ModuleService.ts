@@ -66,11 +66,15 @@ export default class ModuleService {
     return ModuleService.instance.activeCommunities;
   }
 
-  static findModule(name: string) {
+  static findModule(
+    name: string,
+  ): StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface | undefined {
     if (ModuleService.instance.activeStreams[name] !== undefined) {
       return ModuleService.instance.activeStreams[name];
     } else if (ModuleService.instance.activeCommunities[name] !== undefined) {
       return ModuleService.instance.activeCommunities[name];
+    } else if (ModuleService.instance.activeControls[name] !== undefined) {
+      return ModuleService.instance.activeControls[name];
     }
 
     return undefined;
@@ -101,12 +105,12 @@ export default class ModuleService {
         ModuleService.instance.activeStreams[name] =
           new newModule.default() as StreamModuleInterface;
         WebService.registerModuleApi(ModuleService.instance.activeStreams[name]);
-        ModuleService.instance.activeStreams[name].autoLogin();
+        await ModuleService.instance.activeStreams[name].autoLogin();
       } else if (platformType === PlatformType.community) {
         ModuleService.instance.activeCommunities[name] =
           new newModule.default() as CommunityModuleInterface;
         WebService.registerModuleApi(ModuleService.instance.activeCommunities[name]);
-        ModuleService.instance.activeCommunities[name].autoLogin();
+        await ModuleService.instance.activeCommunities[name].autoLogin();
       } else if (platformType === PlatformType.control) {
         ModuleService.instance.activeControls[name] =
           new newModule.default() as ControlModuleInterface;

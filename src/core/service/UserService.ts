@@ -1,6 +1,7 @@
-import crypto from 'crypto';
+import crypto, { verify } from 'crypto';
 import { KeyedObject, userDir, PermissionType } from '../../Types.ts';
 import fs from 'fs';
+import { spooderLog } from '../Logging.ts';
 
 export default class UserService {
   private static instance: UserService;
@@ -20,7 +21,30 @@ export default class UserService {
         const userFile = fs.readFileSync(userFilePath, {
           encoding: 'utf8',
         });
-        UserService.instance.users = JSON.parse(userFile);
+
+        const parsedUsers = JSON.parse(userFile);
+        if (!parsedUsers.trusted_users.verify) {
+          spooderLog('Upgrading users file');
+          const newVerifyObj = {
+            twitch: parsedUsers.trusted_users.twitch,
+            discord: parsedUsers.trusted_users.discord,
+          };
+
+          const newUsernames = {} as KeyedObject;
+          const newDisplayNames = {} as KeyedObject;
+          for (let u in parsedUsers.trusted_users.permissions) {
+            newUsernames[u] = u;
+            newDisplayNames[u] = u;
+          }
+
+          parsedUsers.trusted_users = {
+            usernames: newUsernames,
+            displaynames: newDisplayNames,
+            verify: newVerifyObj,
+            permissions: parsedUsers.trusted_users.permissions,
+          };
+        }
+        UserService.instance.users = parsedUsers;
       }
     } catch (e: any) {
       console.log('Users file error', e);
@@ -127,41 +151,20 @@ export default class UserService {
   }
 
   static matchPassword(username: string, password: string) {
-    const pwInfo = UserService.instance.users.trusted_users_pw[username];
+    const userId = UserService.instance.users.trusted_users.usernames[username];
+    const pwInfo = UserService.instance.users.trusted_users_pw[userId];
     return (
       crypto.pbkdf2Sync(password, pwInfo.salt, 1000, 64, `sha512`).toString(`hex`) === pwInfo.hash
     );
   }
 
   static changeUsername(oldUsername: string, newUsername: string) {
-    if (UserService.instance.users.trusted_users.permission[newUsername]) {
-      console.log('Change Username Error: New username already exists');
-      return;
+    const users = UserService.instance.users.trusted_users;
+    if (users.usernames[newUsername] !== undefined) {
+      return false;
     }
 
-    UserService.instance.users.trusted_users.permissions[newUsername] = Object.assign(
-      {},
-      UserService.instance.users.trusted_users.permission[oldUsername],
-    );
-    delete UserService.instance.users.trusted_users.permission[oldUsername];
-
-    const userVerifications = UserService.instance.users.trusted_users.verify;
-    for (let v in userVerifications) {
-      if (userVerifications[v][oldUsername]) {
-        UserService.instance.users.trusted_users.verify[v][newUsername] = Object.assign(
-          {},
-          userVerifications[v][oldUsername],
-        );
-        delete UserService.instance.users.trusted_users.verify[v][oldUsername];
-      }
-    }
-
-    if (UserService.instance.users.trusted_users_pw[oldUsername]) {
-      UserService.instance.users.trusted_users_pw[newUsername] = Object.assign(
-        {},
-        UserService.instance.users.trusted_users_pw[oldUsername],
-      );
-      delete UserService.instance.users.trusted_users_pw[oldUsername];
-    }
+    users.usernames[newUsername] = users.usernames[oldUsername];
+    delete users.usernames[oldUsername];
   }
 }

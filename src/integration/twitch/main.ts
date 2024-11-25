@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import e, { Router } from 'express';
 import { StreamModuleInterface } from '../interface/StreamModuleInterface.ts';
 import TwitchApi from './TwitchApi.ts';
 import TwitchChat from './TwitchChat.ts';
@@ -94,6 +94,24 @@ export default class STwitch implements StreamModuleInterface {
   getUserInfo = this.api.getUserInfo;
   getChannels = this.api.getChannels;
   refreshEventSubs = this.eventsub.refreshEventSubs;
+  refreshShareUserInfo(id: string): Promise<KeyedObject> {
+    return new Promise((res, rej) => {
+      this.api
+        .getUserInfoById(id)
+        .then((data) => {
+          twitchLog('Got user info', data);
+          res({
+            username: data.data[0].login,
+            displayName: data.data[0].display_name,
+            profilePic: data.data[0].profile_image_url,
+          });
+        })
+        .catch((e) => {
+          twitchLog('Failed to get user info', e.message);
+          rej(e);
+        });
+    });
+  }
   lastMessage = this.chat.lastMessage;
 
   loggedIn = false;
