@@ -74,7 +74,7 @@ export default class Ngrok {
     }
   }
 
-  public stopNgrok() {
+  public stop() {
     ngrok.disconnect();
   }
 }

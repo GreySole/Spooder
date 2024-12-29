@@ -446,12 +446,6 @@ export default class OSCService {
 
       const activePlugins = PluginService.getActivePlugins();
       for (let p in activePlugins) {
-        //Alert box plugins need to listen for any connect messages from other plugins
-        if (activePlugins[p].isAlertBox != null) {
-          activePlugins[p].onOSC(message);
-          continue;
-        }
-
         //Only the plugin with its name in the beginning of the address
         //will call its onOSC
         if (p.startsWith(address[1])) {

@@ -137,14 +137,12 @@ export function PluginRoutes() {
         author: activePlugins[a].author == null ? 'Unknown Author' : activePlugins[a].author,
         description: activePlugins[a].description == null ? '' : activePlugins[a].description,
         dependencies: activePlugins[a].dependencies == null ? {} : activePlugins[a].dependencies,
+        status: activePlugins[a].status,
         assetBrowserPath: '/',
         assetPath: path.join('assets', a),
         hasOverlay: activePlugins[a].hasOverlay,
         hasUtility: activePlugins[a].hasUtility,
       };
-      if (activePlugins[a].status != null && activePlugins[a].status != 'ok') {
-        pluginPacks[a].status = activePlugins[a].status;
-      }
     }
 
     res.send(JSON.stringify(pluginPacks));

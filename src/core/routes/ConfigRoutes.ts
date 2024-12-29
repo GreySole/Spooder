@@ -51,7 +51,7 @@ export function ConfigRoutes() {
 
   router.get('/osc_tunnels', async (req: Request, res: Response) => {
     const osctunnels = OSCService.getTunnels();
-    res.send(JSON.stringify(osctunnels));
+    res.send(osctunnels);
   });
 
   router.post('/save_osc_tunnels', async (req: Request, res: Response) => {
@@ -63,7 +63,7 @@ export function ConfigRoutes() {
   router.get('/udp_clients', (req: Request, res: Response) => {
     const sconfig = ConfigService.getConfig();
 
-    res.send({ express: JSON.stringify(sconfig.network.udp_clients) });
+    res.send(sconfig.network.udp_clients);
   });
 
   return {

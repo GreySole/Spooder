@@ -191,6 +191,14 @@ export class WebService {
     }
   }
 
+  static startNgrok() {
+    this.instance.ngrok.start();
+  }
+
+  static stopNgrok() {
+    this.instance.ngrok.stop();
+  }
+
   static registerModuleApi(
     context: StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface,
   ) {
