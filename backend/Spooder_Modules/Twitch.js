@@ -1037,16 +1037,21 @@ class STwitch {
 
         let emotes = tags.emotes;
         let newEmotes = [];
-        for (let e in emotes) {
-            for (let ei in emotes[e]) {
-                newEmotes.push({
-                    id: e,
-                    start: parseInt(emotes[e][ei].split("-")[0]),
-                    end: parseInt(emotes[e][ei].split("-")[1])
-                });
+        try{
+            for (let e in emotes) {
+                for (let ei in emotes[e]) {
+                    newEmotes.push({
+                        id: e,
+                        start: parseInt(emotes[e][ei].split("-")[0]),
+                        end: parseInt(emotes[e][ei].split("-")[1])
+                    });
+                }
+    
             }
-
+        }catch(e){
+            twitchLog("Error with twitchjsify", e.message, tags, txt);
         }
+        
         if (message.tags.badges == null) { message.tags.badges = {}; }
         message.tags.emotes = newEmotes;
         return message;

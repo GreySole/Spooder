@@ -5,6 +5,7 @@ backend/temp
 backend/log
 backend/plugins
 backend/backup
+user
 
 # Logs
 logs
