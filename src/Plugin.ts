@@ -11,6 +11,7 @@ interface PluginModule {
   controlModules: KeyedObject;
   settings?: KeyedObject;
   onSettings?: (settings: KeyedObject) => void;
+  onLoad?: () => void;
   onDestroy?: () => void;
   onChat?: (message: StreamMessage) => void;
   onOSC?: (message: OSC.Message) => void;
@@ -88,10 +89,15 @@ export default class Plugin {
                 encoding: 'utf8',
               }),
             );
-
+            //console.log('Settings Loaded', this.pluginModule.settings);
             if (this.pluginModule.onSettings != null) {
               this.pluginModule.onSettings(this.pluginModule.settings ?? {});
             }
+          }
+
+          console.log('ON LOAD', this.pluginModule.onLoad != null);
+          if (this.pluginModule.onLoad != null) {
+            this.pluginModule.onLoad();
           }
         });
       }

@@ -42,11 +42,24 @@ export class EventService {
     EventService.instance = this;
 
     try {
-      let settingFile = fs.readFileSync(userDir + '/settings/commands.json', {
+      const modCommandFile = fs.readFileSync(userDir + '/settings/mod_commands.json', {
         encoding: 'utf8',
       });
 
-      let eventsObj = JSON.parse(settingFile);
+      const modCommandsObj = JSON.parse(modCommandFile);
+      this.modCommands = modCommandsObj;
+
+      spooderLog('Got Mod Commands');
+    } catch (e: any) {
+      this.modCommands = {};
+    }
+
+    try {
+      const settingFile = fs.readFileSync(userDir + '/settings/commands.json', {
+        encoding: 'utf8',
+      });
+
+      const eventsObj = JSON.parse(settingFile);
       this.events = eventsObj.events;
       this.eventGroups = eventsObj.groups;
 
@@ -72,11 +85,35 @@ export class EventService {
   activeEvents = {} as KeyedObject;
   eventstorage = {} as KeyedObject;
 
+  modCommands = {} as KeyedObject;
   events = {} as KeyedObject;
   eventGroups = ['Default'];
 
+  static addModCommand(name: string, command: Event) {
+    EventService.instance.modCommands[name] = command;
+    OSCService.sendToTCP('/mod/command/add', { name, command });
+    this.saveModCommands();
+  }
+
+  static removeModCommand(name: string) {
+    delete EventService.instance.modCommands[name];
+    OSCService.sendToTCP('/mod/command/remove', name);
+    this.saveModCommands();
+  }
+
+  static saveModCommands() {
+    fs.writeFileSync(
+      userDir + '/settings/mod_commands.json',
+      JSON.stringify(EventService.instance.modCommands),
+      'utf-8',
+    );
+  }
+
   static getEvents() {
-    return EventService.instance.events;
+    return {
+      ...EventService.instance.modCommands,
+      ...EventService.instance.events,
+    };
   }
 
   static getEventStorage() {

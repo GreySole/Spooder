@@ -58,6 +58,10 @@ export class ModerationService {
         }, durationInSeconds * 1000);
       }
     }
+    OSCService.sendToTCP('/mod/blacklist/' + viewername, {
+      active: ModerationService.instance.modlocks.blacklist[viewername].active,
+      timeout: durationInSeconds ? durationInSeconds * 1000 : null,
+    });
     ModerationService.saveModFile();
 
     oscLog('Mod file saved!');
@@ -89,19 +93,14 @@ export class ModerationService {
     }
     let eventLocked = false;
     for (let e in events) {
+      console.log(target, e);
       if (target == 'all') {
         ModerationService.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
-        OSCService.sendToTCP(
-          '/mod/local/' + modCommand + '/event/' + e,
-          modCommand == 'lock' ? 1 : 0,
-        );
+        OSCService.sendToTCP('/mod/lock/event/' + e, modCommand == 'lock' ? 1 : 0);
         eventLocked = true;
       } else if (e == target) {
         ModerationService.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
-        OSCService.sendToTCP(
-          '/mod/local/' + modCommand + '/event/' + e,
-          modCommand == 'lock' ? 1 : 0,
-        );
+        OSCService.sendToTCP('/mod/lock/event/' + e, modCommand == 'lock' ? 1 : 0);
         eventLocked = true;
         break;
       }
@@ -121,10 +120,7 @@ export class ModerationService {
     for (let p in activePlugins) {
       if (plugin == 'all') {
         ModerationService.instance.modlocks.plugins[p] = modCommand == 'lock' ? 1 : 0;
-        OSCService.sendToTCP(
-          '/mod/local/' + modCommand + '/plugin/' + p,
-          modCommand == 'lock' ? 1 : 0,
-        );
+        OSCService.sendToTCP('/mod/lock/plugin/' + p, modCommand == 'lock' ? 1 : 0);
         pluginLocked = true;
       } else if (p == plugin) {
         if (ModerationService.instance.modlocks.plugins[p] == null) {
@@ -132,18 +128,16 @@ export class ModerationService {
         }
         if (target == null) {
           ModerationService.instance.modlocks.plugins[p] = modCommand == 'lock' ? 1 : 0;
-          OSCService.sendToTCP(
-            '/mod/local/' + modCommand + '/plugin/' + p,
-            modCommand == 'lock' ? 1 : 0,
-          );
+          OSCService.sendToTCP('/mod/lock/plugin/' + p, modCommand == 'lock' ? 1 : 0);
           pluginLocked = true;
           break;
         } else {
-          if (activePlugins[p].modmap) {
-            if (activePlugins[p].modmap.locks) {
-              activePlugins[p].modmap.locks[target] = modCommand == 'lock' ? 1 : 0;
+          if (activePlugins[p].getExtra('modmap')) {
+            const pluginModmap = activePlugins[p].getExtra('modmap');
+            if (pluginModmap.locks) {
+              pluginModmap.locks[target] = modCommand == 'lock' ? 1 : 0;
               OSCService.sendToTCP(
-                '/mod/local/' + modCommand + '/plugin/' + p + '/' + target,
+                '/mod/lock/plugin/' + p + '/' + target,
                 modCommand == 'lock' ? 1 : 0,
               );
               pluginLocked = true;
@@ -199,6 +193,7 @@ export class ModerationService {
       ModerationService.instance.modlocks.spamguard =
         ModerationService.instance.modlocks.spamguard == 1 ? 0 : 1;
     }
+    OSCService.sendToTCP('/mod/spamguard', ModerationService.instance.modlocks.spamguard);
     if (ModerationService.instance.modlocks.spamguard == 1) {
       return 'Spam guard is ON';
     } else {

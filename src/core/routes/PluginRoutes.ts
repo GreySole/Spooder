@@ -280,7 +280,7 @@ export function PluginRoutes() {
         });
       } else {
         let pluginZip = req.files.file as UploadedFile;
-        let pluginDirName = req.body.internalName;
+        let pluginDirName = pluginZip.name.replace('.zip', '');
 
         let tempDir = path.join(userDir, 'tmp', pluginDirName);
         if (fs.existsSync(tempDir)) {

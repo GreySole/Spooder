@@ -11,7 +11,7 @@ export function ThemeRoutes() {
   }
 
   function getModTheme(req: Request, res: Response) {
-    if (!req.body.user) {
+    if (!req.query.user) {
       res.send('No username provided');
     }
     const themes = ConfigService.getThemes();
@@ -31,4 +31,6 @@ export function ThemeRoutes() {
 
   router.get('/custom_spooder', getCustomSpooder);
   publicRouter.get('/custom_spooder', getCustomSpooder);
+
+  return { local: router, public: publicRouter };
 }

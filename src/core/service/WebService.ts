@@ -22,6 +22,8 @@ import { PublicRoutes } from '../routes/PublicRoutes.ts';
 import { ControlModuleInterface } from 'src/integration/interface/ControlModuleInterface.ts';
 import { ServerRoutes } from '../routes/ServerRoutes.ts';
 import Ngrok from './webui/Ngrok.ts';
+import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
+import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
 
 const nets = networkInterfaces();
 const results = Object.create({});
@@ -158,6 +160,13 @@ export class WebService {
 
       const userRoutes = UserRoutes();
       router.use('/users', userRoutes.local);
+
+      const modRoutes = ModerationRoutes();
+      router.use('/mod', modRoutes.local);
+
+      const themeRoutes = ThemeRoutes();
+      router.use('/theme', themeRoutes.local);
+      publicRouter.use('/theme', themeRoutes.public);
 
       const shareRoutes = ShareRoutes();
       router.use('/shares', shareRoutes.local);

@@ -186,12 +186,21 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
       } else {
         for (let p in activePlugins) {
           if (command[1] == p && command.length == 2) {
-            let commandList = Object.keys(activePlugins[p].commandList);
+            if (activePlugins[p].getExtra('commandList') == null) {
+              sayInChat('No commands for ' + p);
+              return;
+            }
+            const commandList = Object.keys(activePlugins[p].getExtra('commandList'));
             sayInChat('Commands for ' + p + ' are: ' + commandList.join(', '));
             return;
           } else if (command[1] == p) {
-            if (activePlugins[p].commandList[command[2]] != null) {
-              sayInChat(activePlugins[p].commandList[command[2]]);
+            if (activePlugins[p].getExtra('commandList') == null) {
+              sayInChat('No commands for ' + p);
+              return;
+            }
+            const commandList = activePlugins[p].getExtra('commandList');
+            if (commandList[command[2]] != null) {
+              sayInChat(commandList[command[2]]);
               return;
             }
           }
@@ -250,10 +259,19 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
               commands.push(p);
             } else {
               if (command[2] == p && command.length == 3) {
-                commands = Object.keys(activePlugins[p].commandList);
+                if (activePlugins[p].getExtra('commandList') == null) {
+                  sayInChat('No commands for ' + p);
+                  return;
+                }
+                commands = Object.keys(activePlugins[p].getExtra('commandList'));
               } else if (command[2] == p) {
-                if (activePlugins[p].commandList[command[3]] != null) {
-                  sayInChat(activePlugins[p].commandList[command[3]]);
+                if (activePlugins[p].getExtra('commandList') == null) {
+                  sayInChat('No commands for ' + p);
+                  return;
+                }
+                const commandList = activePlugins[p].getExtra('commandList');
+                if (commandList[command[3]] != null) {
+                  sayInChat(commandList[command[3]]);
                   done = true;
                 }
               }

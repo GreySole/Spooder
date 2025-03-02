@@ -99,7 +99,7 @@ export default class STwitch implements StreamModuleInterface {
       this.api
         .getUserInfoById(id)
         .then((data) => {
-          twitchLog('Got user info', data);
+          //twitchLog('Got user info', data);
           res({
             username: data.data[0].login,
             displayName: data.data[0].display_name,

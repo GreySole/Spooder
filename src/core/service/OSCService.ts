@@ -91,7 +91,7 @@ export default class OSCService {
         data: oscValue,
       });
     }
-
+    console.log('SENDING TO TCP', newMessage.address, newMessage.args);
     OSCService.instance.oscTCP.send(newMessage);
   };
 
