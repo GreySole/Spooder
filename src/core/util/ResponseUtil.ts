@@ -111,6 +111,46 @@ export function checkResponseTrigger(eventData: KeyedObject, message: StreamMess
   return undefined;
 }
 
+export function buildMockStreamMessage(message: string): StreamMessage {
+  return {
+    userId: '000000000',
+    username: 'testchannel',
+    displayName: 'TestChannel',
+    platform: 'twitch',
+    channel: '#testchannel',
+    message: message,
+    emotes: [],
+    tags: {
+      badgeInfo: 'subscriber/1',
+      badges: { broadcaster: true, subscriber: 0 },
+      clientNonce: '00000000000000000000000000000000',
+      color: '#1E90FF',
+      displayName: 'TestChannel',
+      emotes: [],
+      firstMsg: '0',
+      flags: '',
+      id: '00000000-0000-0000-0000-000000000000',
+      mod: '0',
+      roomId: '000000000',
+      subscriber: '1',
+      tmiSentTs: '0000000000000',
+      turbo: '0',
+      userId: '000000000',
+      userType: '',
+      bits: undefined,
+      emoteSets: [],
+      username: 'testchannel',
+      isModerator: false,
+    },
+    isBroadcaster: false,
+    isMod: false,
+    isSubscriber: false,
+    isVIP: false,
+    isFirstMessage: false,
+    isReturningChatter: false,
+  };
+}
+
 export async function verifyResponseScript(
   eventName: string,
   message: StreamMessage,

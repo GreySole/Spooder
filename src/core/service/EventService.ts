@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { KeyedObject, userDir, StreamMessage } from '../../Types.ts';
 import { spooderLog } from '../Logging.ts';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
@@ -89,15 +90,70 @@ export class EventService {
   events = {} as KeyedObject;
   eventGroups = ['Default'];
 
-  static addModCommand(name: string, command: Event) {
-    EventService.instance.modCommands[name] = command;
-    OSCService.sendToTCP('/mod/command/add', { name, command });
+  static getModCommands() {
+    return EventService.instance.modCommands;
+  }
+
+  static getModCommandsAsEvents() {
+    const modCommands = EventService.getModCommands();
+    const modEvents = {} as KeyedObject;
+
+    for (let c in modCommands) {
+      modEvents[c] = {
+        name: c,
+        description: '',
+        group: '_ModCommands',
+        triggers: {
+          chat: {
+            enabled: modCommands[c].enabled,
+            command: modCommands[c].command,
+            search: modCommands[c].search,
+            vip: modCommands[c].vip,
+            mod: modCommands[c].mod,
+            sub: modCommands[c].sub,
+            broadcaster: modCommands[c].broadcaster,
+          },
+        },
+        commands: [
+          {
+            type: 'response',
+            message: modCommands[c].script,
+            delay: 0,
+          },
+        ],
+        cooldown: 0,
+        chatnotification: false,
+        cooldownnotification: false,
+      };
+    }
+    return modEvents;
+  }
+
+  static addModCommand(command: string, search: boolean, permissions: KeyedObject, script: string) {
+    const newCommandId = uuidv4();
+    const commandObj = { enabled: true, command, search, permissions, script };
+    EventService.instance.modCommands[newCommandId] = commandObj;
+    OSCService.sendToTCP('/mod/command/update', 1);
     this.saveModCommands();
   }
 
-  static removeModCommand(name: string) {
-    delete EventService.instance.modCommands[name];
-    OSCService.sendToTCP('/mod/command/remove', name);
+  static updateModCommand(
+    commandId: string,
+    enabled: boolean,
+    command: string,
+    search: boolean,
+    permissions: KeyedObject,
+    script: string,
+  ) {
+    const commandObj = { enabled, command, search, permissions, script };
+    EventService.instance.modCommands[commandId] = commandObj;
+    OSCService.sendToTCP('/mod/command/update', 1);
+    this.saveModCommands();
+  }
+
+  static removeModCommand(commandId: string) {
+    delete EventService.instance.modCommands[commandId];
+    OSCService.sendToTCP('/mod/command/update', 1);
     this.saveModCommands();
   }
 
@@ -110,10 +166,7 @@ export class EventService {
   }
 
   static getEvents() {
-    return {
-      ...EventService.instance.modCommands,
-      ...EventService.instance.events,
-    };
+    return EventService.instance.events;
   }
 
   static getEventStorage() {

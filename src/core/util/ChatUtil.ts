@@ -82,37 +82,39 @@ function checkForSpamming(viewername: string) {
   return false;
 }
 
-export function processStreamMessage(message: StreamMessage, shareId?: string) {
+export function processStreamMessage(streamMessage: StreamMessage, shareId?: string) {
   // Do something with the message
   const modlocks = ModerationService.getModlocks();
-  const events = EventService.getEvents();
+  const modEvents = EventService.getModCommandsAsEvents();
+  const spooderEvents = EventService.getEvents();
   const sendToTCP = OSCService.sendToTCP;
   const activePlugins = PluginService.getActivePlugins();
   const shares = ShareService.getShares();
   const sconfig = ConfigService.getConfig();
+  const events = { ...modEvents, ...spooderEvents };
 
-  message.tags.displayName = message.displayName;
-  if (typeof message.message == 'undefined') {
+  streamMessage.tags.displayName = streamMessage.displayName;
+  if (typeof streamMessage.message == 'undefined') {
     return;
   }
 
-  if (message.message.startsWith('!')) {
+  if (streamMessage.message.startsWith('!')) {
     if (modlocks.spamguard == 1) {
-      if (checkForSpamming(message.username) == true) {
+      if (checkForSpamming(streamMessage.username) == true) {
         return;
       }
     }
 
-    let command = message.message.substr(1).split(' ');
+    const command = streamMessage.message.substr(1).split(' ');
 
-    if (command[0] == 'stop' && (message.isMod || message.isBroadcaster)) {
+    if (command[0] == 'stop' && (streamMessage.isMod || streamMessage.isBroadcaster)) {
       let cEvent = command[1];
       let status = ModerationService.stopEvent(cEvent);
       sayInChat(status);
       return;
     }
 
-    if (command[0] == 'mod' && (message.isMod || message.isBroadcaster)) {
+    if (command[0] == 'mod' && (streamMessage.isMod || streamMessage.isBroadcaster)) {
       let modCommand = command[1];
       if (modCommand == 'spamguard') {
         let response = ModerationService.setSpamGuard(command[2]);
@@ -131,7 +133,7 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
           ModerationService.lockEvent(modCommand, eventtarget);
           ModerationService.lockPlugin(modCommand, plugin, target);
           sayInChat(
-            message.username +
+            streamMessage.username +
               ' ' +
               (modCommand == 'lock' ? 'locked' : 'unlocked') +
               ' all chat commands',
@@ -142,36 +144,21 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
         let viewer = command[3];
         if (modAction == 'add') {
           ModerationService.blacklistUser(true, viewer);
-          sayInChat(message.username + ' blacklisted ' + viewer);
-          sendToTCP('/mod/' + message.username + '/blacklist' + viewer, 1);
+          sayInChat(streamMessage.username + ' blacklisted ' + viewer);
+          sendToTCP('/mod/' + streamMessage.username + '/blacklist' + viewer, 1);
         } else if (modAction == 'remove') {
           ModerationService.blacklistUser(false, viewer);
-          sayInChat(message.username + ' unblacklisted ' + viewer);
-          sendToTCP('/mod/' + message.username + '/blacklist' + viewer, 0);
-        }
-      } else if (modCommand == 'trust' && message.isBroadcaster) {
-        if (command.length > 2) {
-          let trustedUser = command[2].startsWith('@')
-            ? command[2].substring(1).trim()
-            : command[2].trim();
-
-          const modData = UserService.getUsers();
-          modData['trusted_users'].permissions[trustedUser] = 'm';
-          modData['trusted_users'].twitch[trustedUser] = trustedUser;
-          fs.writeFile(userDir + '/settings/mod.json', JSON.stringify(modData), 'utf-8', () => {
-            twitchLog('Mod file saved!');
-            sayInChat(trustedUser + ' has been added as a trustworthy user for the Mod UI!');
-          });
-        } else {
-          sayInChat('Trust a user to interact with the Mod UI');
+          sayInChat(streamMessage.username + ' unblacklisted ' + viewer);
+          sendToTCP('/mod/' + streamMessage.username + '/blacklist' + viewer, 0);
         }
       }
     }
 
     if (command[0] == 'commands') {
       let commandsArray =
-        EventService.getStreamChatCommands(true, message.platform, message.channel) ?? [];
-      sayInChat("Here's the chat command list: " + commandsArray.join(', '), message.channel);
+        EventService.getStreamChatCommands(true, streamMessage.platform, streamMessage.channel) ??
+        [];
+      sayInChat("Here's the chat command list: " + commandsArray.join(', '), streamMessage.channel);
       return;
     }
 
@@ -308,16 +295,16 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
         events[e].triggers.chat.vip == true
       ) {
         let pass = false;
-        if (events[e].triggers.chat.broadcaster == true && message.isBroadcaster) {
+        if (events[e].triggers.chat.broadcaster == true && streamMessage.isBroadcaster) {
           pass = true;
         }
-        if (events[e].triggers.chat.mod == true && message.isMod) {
+        if (events[e].triggers.chat.mod == true && streamMessage.isMod) {
           pass = true;
         }
-        if (events[e].triggers.chat.sub == true && message.isSubscriber) {
+        if (events[e].triggers.chat.sub == true && streamMessage.isSubscriber) {
           pass = true;
         }
-        if (events[e].triggers.chat.vip == true && message.isVIP) {
+        if (events[e].triggers.chat.vip == true && streamMessage.isVIP) {
           pass = true;
         }
         if (pass == false) {
@@ -325,7 +312,7 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
         }
       }
 
-      let check = checkResponseTrigger(events[e], message);
+      let check = checkResponseTrigger(events[e], streamMessage);
       if (check != null) {
         EventService.runCommands(check.message as StreamMessage, e, 'chat', check.extra);
       }
@@ -338,12 +325,12 @@ export function processStreamMessage(message: StreamMessage, shareId?: string) {
         if (shareId) {
           if (shares[shareId]?.plugins.includes(p)) {
             if (activePlugins[p].onChat != null) {
-              activePlugins[p].onChat(message);
+              activePlugins[p].onChat(streamMessage);
             }
           }
         } else {
           if (activePlugins[p].onChat != null) {
-            activePlugins[p].onChat(message);
+            activePlugins[p].onChat(streamMessage);
           }
         }
       } catch (e) {

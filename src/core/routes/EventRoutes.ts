@@ -4,7 +4,11 @@ import { Request, Response } from 'express';
 import express from 'express';
 import { webLog } from '../Logging.ts';
 import { KeyedObject } from 'src/Types.ts';
-import { checkResponseTrigger, verifyResponseScript } from 'src/core/util/ResponseUtil.ts';
+import {
+  buildMockStreamMessage,
+  checkResponseTrigger,
+  verifyResponseScript,
+} from 'src/core/util/ResponseUtil.ts';
 
 export function EventRoutes() {
   const router = express.Router();
@@ -36,7 +40,7 @@ export function EventRoutes() {
   });
 
   router.post('/verify_response_script', async (req: Request, res: Response) => {
-    let check = checkResponseTrigger(req.body.event, req.body.message);
+    let check = checkResponseTrigger(req.body.event, buildMockStreamMessage(req.body.message));
     if (check != null) {
       let response = await verifyResponseScript(
         req.body.eventName,

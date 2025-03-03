@@ -10,7 +10,11 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { checkResponseTrigger, verifyResponseScript } from '../util/ResponseUtil.ts';
+import {
+  buildMockStreamMessage,
+  checkResponseTrigger,
+  verifyResponseScript,
+} from '../util/ResponseUtil.ts';
 
 export function ModerationRoutes() {
   const storage = multer.memoryStorage();
@@ -251,7 +255,7 @@ export function ModerationRoutes() {
     console.log(req.body);
     const command = req.body.command;
     const script = req.body.script;
-    const message = JSON.parse(req.body.message);
+    const message = buildMockStreamMessage(req.body.message);
     const eventTemplate = {
       name: command,
       description: '',
@@ -315,6 +319,79 @@ export function ModerationRoutes() {
 
   router.post('/verify_response_script', verifyResponseScriptPOST);
   publicRouter.post('/verify_response_script', verifyResponseScriptPOST);
+
+  function getModCommands(req: Request, res: Response) {
+    if (!validateUser(req, res)) {
+      return;
+    }
+    const commands = EventService.getModCommands();
+    res.send(commands);
+  }
+
+  router.get('/get_mod_commands', getModCommands);
+  publicRouter.get('/get_mod_commands', getModCommands);
+
+  function addModCommand(req: Request, res: Response) {
+    if (!validateUser(req, res)) {
+      return;
+    }
+    const command = req.body.command;
+    const isSearchAndMatch = req.body.search == 'true';
+    const permissions = {
+      vip: req.body.vip == 'true',
+      mod: req.body.mod == 'true',
+      sub: req.body.sub == 'true',
+      broadcaster: req.body.broadcaster == 'true',
+    };
+    const script = req.body.script;
+
+    const commandId = EventService.addModCommand(command, isSearchAndMatch, permissions, script);
+    res.send({ status: 'ok', commandId });
+  }
+
+  router.post('/add_mod_command', addModCommand);
+  publicRouter.post('/add_mod_command', addModCommand);
+
+  function updateModCommand(req: Request, res: Response) {
+    if (!validateUser(req, res)) {
+      return;
+    }
+    const commandId = req.body.commandId;
+    const enabled = req.body.enabled == 'true';
+    const command = req.body.command;
+    const isSearchAndMatch = req.body.search == 'true';
+    const permissions = {
+      vip: req.body.vip == 'true',
+      mod: req.body.mod == 'true',
+      sub: req.body.sub == 'true',
+      broadcaster: req.body.broadcaster == 'true',
+    };
+    const script = req.body.script;
+
+    EventService.updateModCommand(
+      commandId,
+      enabled,
+      command,
+      isSearchAndMatch,
+      permissions,
+      script,
+    );
+    res.send({ status: 'ok' });
+  }
+
+  router.post('/update_mod_command', updateModCommand);
+  publicRouter.post('/update_mod_command', updateModCommand);
+
+  function removeModCommand(req: Request, res: Response) {
+    if (!validateUser(req, res)) {
+      return;
+    }
+    const commandId = req.body.commandId;
+    EventService.removeModCommand(commandId);
+  }
+
+  router.post('/remove_mod_command', removeModCommand);
+  publicRouter.post('/remove_mod_command', removeModCommand);
 
   return { local: router, public: publicRouter };
 }
