@@ -4,6 +4,7 @@ import fs from 'fs';
 import ModuleService from './core/service/ModuleService.ts';
 import os from 'os';
 import OSC from 'osc-js';
+import { createRequire } from 'module';
 
 interface PluginModule {
   streamModules: KeyedObject;
@@ -33,12 +34,13 @@ export default class Plugin {
   extra: KeyedObject = {};
 
   private pluginModule: PluginModule | undefined = undefined;
+  private modulePath: string | undefined = undefined;
+  private require: NodeJS.Require | undefined = undefined;
 
-  constructor(pluginDirName: string, pluginPath: string) {
+  constructor(require: NodeJS.Require, pluginDirName: string, pluginPath: string) {
+    this.require = require;
     console.log(
       'LOADING PLUGIN',
-      path.resolve(pluginPath, 'package.json'),
-      path.resolve(userDir, 'plugins', pluginDirName, 'package.json'),
       fs.existsSync(path.resolve(userDir, 'plugins', pluginDirName, 'package.json')),
     );
     try {
@@ -53,6 +55,8 @@ export default class Plugin {
         const modulePath = isWindows
           ? `file://${pluginPath}/${pluginMeta.main}`
           : `${pluginPath}/${pluginMeta.main}`;
+
+        this.modulePath = modulePath;
 
         this.name = pluginMeta.name;
         this.dirname = pluginDirName;
@@ -69,37 +73,37 @@ export default class Plugin {
         this.status = 'ok';
         this.extra = {} as KeyedObject;
 
-        import(modulePath).then((module) => {
-          this.pluginModule = new module.default() as PluginModule;
+        const module = this.require(modulePath);
 
-          if (!this.pluginModule) {
-            throw new Error('Plugin not found');
+        this.pluginModule = new module() as PluginModule;
+
+        if (!this.pluginModule) {
+          throw new Error('Plugin not found');
+        }
+
+        this.pluginModule.streamModules = ModuleService.getStreamModules();
+        this.pluginModule.communityModules = ModuleService.getCommunityModules();
+        this.pluginModule.controlModules = ModuleService.getControlModules();
+        this.pluginModule.registerExtra = (key: string, value: any) => {
+          this.extra[key] = value;
+        };
+
+        if (fs.existsSync(userDir + '/plugins/' + pluginDirName + '/settings.json')) {
+          this.pluginModule.settings = JSON.parse(
+            fs.readFileSync(userDir + '/plugins/' + pluginDirName + '/settings.json', {
+              encoding: 'utf8',
+            }),
+          );
+          //console.log('Settings Loaded', this.pluginModule.settings);
+          if (this.pluginModule.onSettings != null) {
+            this.pluginModule.onSettings(this.pluginModule.settings ?? {});
           }
+        }
 
-          this.pluginModule.streamModules = ModuleService.getStreamModules();
-          this.pluginModule.communityModules = ModuleService.getCommunityModules();
-          this.pluginModule.controlModules = ModuleService.getControlModules();
-          this.pluginModule.registerExtra = (key: string, value: any) => {
-            this.extra[key] = value;
-          };
-
-          if (fs.existsSync(userDir + '/plugins/' + pluginDirName + '/settings.json')) {
-            this.pluginModule.settings = JSON.parse(
-              fs.readFileSync(userDir + '/plugins/' + pluginDirName + '/settings.json', {
-                encoding: 'utf8',
-              }),
-            );
-            //console.log('Settings Loaded', this.pluginModule.settings);
-            if (this.pluginModule.onSettings != null) {
-              this.pluginModule.onSettings(this.pluginModule.settings ?? {});
-            }
-          }
-
-          console.log('ON LOAD', this.pluginModule.onLoad != null);
-          if (this.pluginModule.onLoad != null) {
-            this.pluginModule.onLoad();
-          }
-        });
+        console.log('ON LOAD', this.pluginModule.onLoad != null);
+        if (this.pluginModule.onLoad != null) {
+          this.pluginModule.onLoad();
+        }
       }
     } catch (e: any) {
       let pluginMeta = JSON.parse(
@@ -136,5 +140,25 @@ export default class Plugin {
   async destroy() {
     await this.pluginModule?.onDestroy?.();
     this.pluginModule = undefined;
+
+    if (this.require) {
+      if (this.modulePath) {
+        const resolvedPath = this.require.resolve(this.modulePath);
+        const module = this.require.cache[resolvedPath];
+
+        console.log('DESTROYING PLUGIN', module);
+
+        if (module) {
+          // Remove children from cache
+          module.children.forEach((child: any) => {
+            delete this.require!.cache[child.id];
+          });
+          // Remove the module itself from cache
+          delete this.require.cache[resolvedPath];
+        }
+      }
+    }
+
+    this.modulePath = undefined;
   }
 }

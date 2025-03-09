@@ -1,6 +1,6 @@
 import fs from 'fs';
 import OSC from 'osc-js';
-import { KeyedObject, StreamMessage, OSCConditionObject, userDir } from '../../Types.ts';
+import { KeyedObject, StreamMessage, userDir, OSCConditionGroup } from '../../Types.ts';
 import { oscLog } from '../Logging.ts';
 import ConfigService from './ConfigService.ts';
 import { EventService, sayInChat } from './EventService.ts';
@@ -282,7 +282,7 @@ export default class OSCService {
         data: message.args,
       });
 
-      for (let e in events) {
+      for (const e of Object.keys(events)) {
         if (events[e].triggers.osc) {
           if (events[e].triggers.osc.handletype == 'search') {
             if (message.address == events[e].triggers.osc.address) {
@@ -310,10 +310,8 @@ export default class OSCService {
               }
             }
           } else if (message.address == events[e].triggers.osc.address) {
-            const conditionsOn: OSCConditionObject[] = events[e].triggers.osc.conditionsOn;
-            const comparisonOn = events[e].triggers.osc.comparisonOn as string;
-            const conditionsOff = events[e].triggers.osc.conditionsOff as any[];
-            const comparisonOff = events[e].triggers.osc.comparisonOff as string;
+            const conditionsOn = events[e].triggers.osc.conditionsOn as OSCConditionGroup[];
+            const conditionsOff = events[e].triggers.osc.conditionsOff as OSCConditionGroup[];
 
             if (
               message.args.length < conditionsOn.length ||
@@ -322,82 +320,87 @@ export default class OSCService {
               return;
             }
 
-            function runConditions(
-              args: any[],
-              conditions: OSCConditionObject[],
-              comparison: string,
-            ) {
-              const results = [];
-              for (let condition = 0; condition < conditions.length; condition++) {
-                if (conditions[condition].subConditions !== undefined) {
-                  const subConditions = conditions[condition].subConditions!;
-                  const subComparison = conditions[condition].subComparison!;
-                  let conditionString = '';
-                  for (let subCondition = 0; subCondition < subConditions.length; subCondition++) {
-                    conditionString += '(';
-                    args[condition] +
-                      subConditions[subCondition].condition +
-                      subConditions[subCondition].value +
-                      ')';
-                    if (subCondition !== subConditions.length - 1) {
-                      conditionString += subComparison === 'AND' ? ' && ' : ' || ';
+            function runConditions(args: any[], conditionGroups: OSCConditionGroup[]) {
+              const groupConditionResults = [] as boolean[];
+              for (let groupIndex = 0; groupIndex < conditionGroups.length; groupIndex++) {
+                const groupConditionMode = conditionGroups[groupIndex].mode;
+                const conditionValues = conditionGroups[groupIndex].conditions;
+
+                if (groupConditionMode === 'AND') {
+                  for (
+                    let conditionIndex = 0;
+                    conditionIndex < conditionValues.length;
+                    conditionIndex++
+                  ) {
+                    const conditionType = conditionValues[conditionIndex].type;
+                    const conditionValue = conditionValues[conditionIndex].value;
+                    if (eval(args[conditionIndex] + conditionType + conditionValue) === false) {
+                      groupConditionResults.push(false);
+                      break;
                     }
                   }
+                } else if (groupConditionMode === 'OR') {
+                  for (
+                    let conditionIndex = 0;
+                    conditionIndex < conditionValues.length;
+                    conditionIndex++
+                  ) {
+                    const conditionType = conditionValues[conditionIndex].type;
+                    const conditionValue = conditionValues[conditionIndex].value;
+                    if (eval(args[conditionIndex] + conditionType + conditionValue) === true) {
+                      groupConditionResults.push(true);
+                      break;
+                    }
+                  }
+                }
 
-                  results.push(eval(conditionString));
+                if (groupConditionResults.some((result) => result === true)) {
+                  return true;
                 } else {
-                  const mainCondition = conditions[condition].mainCondition!;
-                  results.push(
-                    eval(args[condition] + mainCondition.condition + mainCondition.value),
-                  );
+                  return false;
                 }
               }
-              if (comparison === 'AND') {
-                return results.every((value) => value === true);
-              } else {
-                return results.some((value) => value === true);
+
+              if (runConditions(message.args, conditionsOn)) {
+                const streamMessage = {
+                  userId: '',
+                  username: '',
+                  displayName: '',
+                  platform: 'osc',
+                  channel: 'udp',
+                  message: message.args[0],
+                  emotes: [],
+                  tags: {},
+                  isBroadcaster: false,
+                  isMod: false,
+                  isSubscriber: false,
+                  isVIP: false,
+                  isFirstMessage: false,
+                  isReturningChatter: false,
+                } as StreamMessage;
+
+                EventService.runCommands(streamMessage, e, 'osc');
               }
-            }
 
-            if (runConditions(message.args, conditionsOn, comparisonOn)) {
-              const streamMessage = {
-                userId: '',
-                username: '',
-                displayName: '',
-                platform: 'osc',
-                channel: 'udp',
-                message: message.args[0],
-                emotes: [],
-                tags: {},
-                isBroadcaster: false,
-                isMod: false,
-                isSubscriber: false,
-                isVIP: false,
-                isFirstMessage: false,
-                isReturningChatter: false,
-              } as StreamMessage;
-
-              EventService.runCommands(streamMessage, e, 'osc');
-            }
-
-            if (runConditions(message.args, conditionsOff, comparisonOff)) {
-              EventService.stopEvent(e);
+              if (runConditions(message.args, conditionsOff)) {
+                EventService.stopEvent(e);
+              }
             }
           }
         }
-      }
 
-      const controlModules = ModuleService.getControlModules();
-      for (const c in controlModules) {
-        if (controlModules[c].onOSC != null) {
-          controlModules[c].onOSC(message);
+        const controlModules = ModuleService.getControlModules();
+        for (const c in controlModules) {
+          if (controlModules[c].onOSC != null) {
+            controlModules[c].onOSC(message);
+          }
         }
-      }
 
-      const activePlugins = PluginService.getActivePlugins();
-      for (const p in activePlugins) {
-        if (activePlugins[p].onOSC != null) {
-          activePlugins[p].onOSC(message);
+        const activePlugins = PluginService.getActivePlugins();
+        for (const p in activePlugins) {
+          if (activePlugins[p].onOSC != null) {
+            activePlugins[p].onOSC(message);
+          }
         }
       }
     });

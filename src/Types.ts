@@ -33,15 +33,14 @@ export interface ShareObject {
   sharedCommands: KeyedObject;
 }
 
-export interface OSCConditionObject {
-  subConditions?: OSCBasicCondition[];
-  subComparison?: string;
-  mainCondition?: OSCBasicCondition;
+export interface OSCConditionGroup {
+  mode: 'AND' | 'OR';
+  conditions: OSCCondition[];
 }
 
-export interface OSCBasicCondition {
-  condition: string;
-  value: string | number;
+export interface OSCCondition {
+  type: string;
+  value: string;
 }
 
 export enum IntegrationModuleType {

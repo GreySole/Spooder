@@ -9,18 +9,27 @@ import { userDir } from '../../Types.ts';
 import { webLog } from '../Logging.ts';
 import ConfigService from '../service/ConfigService.ts';
 import PluginService from '../service/PluginService.ts';
+import multer from 'multer';
+import OSCService from '../service/OSCService.ts';
 
 export function BackupRestoreRoutes() {
   const router = express.Router();
   const publicRouter = express.Router();
 
-  /*router.use(bodyParser.urlencoded({ extended: true }));
-  router.use(bodyParser.json({ limit: '100mb' }));
-  router.use('/install_plugin', fileUpload());
-  router.use('/upload_plugin_asset/*', fileUpload());
-  router.use('/upload_plugin_icon/*', fileUpload());*/
-  router.use(fileUpload());
-  router.use(bodyParser.json({ limit: '100mb' }));
+  const memoryStorage = multer.memoryStorage();
+
+  const tempStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, path.join(userDir, 'tmp'));
+    },
+  });
+  const restoreUpload = multer({ storage: memoryStorage });
+
+  router.use(express.json());
+  router.use('/delete_backup_settings', restoreUpload.none());
+  router.use('/delete_backup_plugins', restoreUpload.none());
+  router.use('/prepare_restore_settings', restoreUpload.single('file'));
+  router.use('/prepare_restore_plugins', restoreUpload.single('file'));
 
   router.get('/get_backups_settings', (req, res) => {
     let backupSettingsDir = path.join(userDir, 'backup', 'settings');
@@ -93,6 +102,7 @@ export function BackupRestoreRoutes() {
   });
 
   router.post('/backup_settings', async (req: Request, res: Response) => {
+    const sconfig = ConfigService.getConfig();
     let zip = new AdmZip();
 
     zip.addLocalFolder(userDir + '/settings', '');
@@ -111,35 +121,78 @@ export function BackupRestoreRoutes() {
     } else {
       let date = new Date();
       backupName =
+        sconfig.bot.bot_name +
+        '_settings_' +
         date.getFullYear() +
-        '-' +
+        '_' +
         date.getMonth() +
-        '-' +
+        '_' +
         date.getDate() +
-        '-' +
+        '_' +
         date.getHours() +
-        '-' +
+        '_' +
         date.getMinutes() +
-        '-' +
+        '_' +
         date.getSeconds();
     }
     zip.writeZip(userDir + '/backup/settings/' + backupName + '.zip', (e) => {
       if (e) {
         throw new Error(e.message);
       }
-      let newSettingsBackups = fs.readdirSync(path.join(userDir, 'backup', 'settings'));
 
-      res.send({ newbackups: newSettingsBackups });
+      res.send({ status: 'ok' });
       webLog('BACKUP COMPLETE');
     });
   });
 
   router.post('/backup_plugins', async (req: Request, res: Response) => {
     const sconfig = ConfigService.getConfig();
-    let zip = new AdmZip();
+    const zip = new AdmZip();
 
-    zip.addLocalFolder(userDir + '/plugins', '/plugins', (entry: any) => {
-      return !entry.isDirectory || !entry.name.endsWith('/node_modules');
+    const pluginDirs = fs
+      .readdirSync(userDir + '/plugins', { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name);
+
+    const progressSteps = pluginDirs.length * 2;
+    let progress = 0;
+
+    pluginDirs.forEach((pluginDir) => {
+      const pluginContents = fs.readdirSync(path.join(userDir, 'plugins', pluginDir), {
+        withFileTypes: true,
+      });
+      pluginContents.forEach((pluginContent) => {
+        console.log('PLUGIN CONTENT', pluginContent);
+        progress++;
+        OSCService.sendToTCP('/spooder/restore/plugin', {
+          name: pluginDir,
+          message: `Backing up ${pluginContent.name}`,
+          progress: progress,
+          totalProgress: progressSteps,
+        });
+        console.log('PLUGIN CONTENT', pluginContent.name, pluginContent.isDirectory());
+        if (pluginContent.isDirectory()) {
+          if (pluginContent.name !== 'node_modules') {
+            zip.addLocalFolder(
+              path.join(userDir, 'plugins', pluginDir, pluginContent.name),
+              '/plugins/' + pluginDir + '/' + pluginContent.name,
+            );
+          }
+        } else {
+          zip.addLocalFile(
+            path.join(userDir, 'plugins', pluginDir, pluginContent.name),
+            '/plugins/' + pluginDir,
+            pluginContent.name,
+          );
+        }
+      });
+    });
+
+    OSCService.sendToTCP('/spooder/restore/plugin', {
+      name: 'Web',
+      message: `Backing up web directory`,
+      progress: progress,
+      totalProgress: progressSteps,
     });
 
     zip.addLocalFolder(userDir + '/web', '/web');
@@ -158,17 +211,17 @@ export function BackupRestoreRoutes() {
       let date = new Date();
       backupName =
         sconfig.bot.bot_name +
-        '-' +
+        '_plugins_' +
         date.getFullYear() +
-        '-' +
+        '_' +
         date.getMonth() +
-        '-' +
+        '_' +
         date.getDate() +
-        '-' +
+        '_' +
         date.getHours() +
-        '-' +
+        '_' +
         date.getMinutes() +
-        '-' +
+        '_' +
         date.getSeconds();
     }
 
@@ -216,10 +269,8 @@ export function BackupRestoreRoutes() {
     }
   });
 
-  router.post('/restore_settings', async (req: Request, res: Response) => {
+  router.post('/prepare_restore_settings', async (req: Request, res: Response) => {
     let fileName = null;
-    let selections = req.body.selections ?? { everything: true };
-
     if (!fs.existsSync(userDir + '/tmp')) {
       fs.mkdirSync(userDir + '/tmp');
     }
@@ -239,161 +290,275 @@ export function BackupRestoreRoutes() {
       }
       fs.copySync(
         path.join(userDir, 'backup', 'settings', fileName),
-        path.join(userDir, 'tmp', fileName),
+        path.join(userDir, 'tmp', '_active_settings_backup.zip'),
         { overwrite: true },
       );
+
+      const zip = new AdmZip(path.join(userDir, 'tmp', '_active_settings_backup.zip'));
+      const zipEntries = zip.getEntries();
+      console.log(
+        'BACKUP SETTINGS ENTRIES',
+        zipEntries.map((e) => e.entryName),
+      );
+
+      res.send({
+        status: 'ok',
+        data: zipEntries.map((e) => e.entryName.substring(0, e.entryName.lastIndexOf('.'))),
+      });
+    }
+  });
+
+  router.post('/restore_settings', async (req: Request, res: Response) => {
+    const selections = req.body.selections;
+
+    if (!fs.existsSync(userDir + '/tmp')) {
+      fs.mkdirSync(userDir + '/tmp');
     }
 
-    let fileDir = path.join(userDir, 'tmp', fileName.split('.')[0]);
+    const tempDir = path.join(userDir, 'tmp');
+    const tempBackupDirectory = path.join(tempDir, '_active_settings_backup');
+    const tempBackupFileName = '_active_settings_backup.zip';
 
-    if (fs.existsSync(fileDir)) {
-      await fs.rm(fileDir, { recursive: true });
-    }
-
-    let zip = new AdmZip(path.join(userDir, 'tmp', fileName));
-    zip.extractAllTo(fileDir);
-    if (selections.everything == true) {
-      fs.copySync(path.join(fileDir), path.join(userDir, 'settings'), { overwrite: true });
-    } else {
-      for (let s in selections) {
-        if (s == 'everything') {
-          continue;
-        }
-        webLog('CHECKING', s + '.json');
-        if (selections[s] == true) {
-          if (fs.existsSync(path.join(fileDir, s + '.json'))) {
-            webLog('OVERWRITE ' + s + '.json');
-            fs.copySync(
-              path.join(fileDir, s + '.json'),
-              path.join(userDir, 'settings', s + '.json'),
-              { overwrite: true },
-            );
-          } else {
-            webLog(path.join(fileDir, s + '.json'), 'NOT FOUND');
-          }
-        }
+    const zip = new AdmZip(path.join(tempDir, tempBackupFileName));
+    zip.extractAllTo(tempDir);
+    for (let s in selections) {
+      if (selections[s] !== true) {
+        continue;
+      }
+      webLog('CHECKING', s + '.json');
+      if (fs.existsSync(path.join(tempDir, s + '.json'))) {
+        webLog('OVERWRITE ' + s + '.json');
+        fs.copySync(path.join(tempDir, s + '.json'), path.join(userDir, 'settings', s + '.json'), {
+          overwrite: true,
+        });
+      } else {
+        webLog(path.join(tempDir, s + '.json'), 'NOT FOUND');
       }
     }
 
-    if (fs.existsSync(fileDir)) {
-      await fs.rm(fileDir, { recursive: true });
+    if (fs.existsSync(tempBackupDirectory)) {
+      await fs.rm(tempBackupDirectory, { recursive: true });
+    }
+
+    if (fs.existsSync(tempBackupFileName)) {
+      await fs.rm(tempBackupFileName);
+    }
+
+    webLog('COMPLETE');
+    res.send({ status: 'SUCCESS' });
+  });
+
+  router.post('/prepare_restore_plugins', async (req: Request, res: Response) => {
+    let fileName = null;
+    if (!fs.existsSync(userDir + '/backup/plugins')) {
+      fs.mkdirSync(userDir + '/backup/plugins');
+    }
+    if (!fs.existsSync(userDir + '/tmp')) {
+      fs.mkdirSync(userDir + '/tmp');
+    }
+
+    if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {
+      fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup'), { recursive: true });
+    }
+
+    fileName = req.body.backupName;
+
+    if (req.file) {
+      const file = req.file as Express.Multer.File;
+      console.log('FILE FOUND', req.file);
+      await fs.promises.writeFile(path.join(userDir, 'backup', 'plugins', fileName), file.buffer);
     }
 
     if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
       await fs.rm(path.join(userDir, 'tmp', fileName));
     }
+    fs.copySync(
+      path.join(userDir, 'backup', 'plugins', fileName),
+      path.join(userDir, 'tmp', '_active_plugins_backup.zip'),
+      { overwrite: true },
+    );
 
-    //let newPluginBackups = fs.readdirSync(path.join(userDir, "backup", "settings"));
-    webLog('COMPLETE');
-    res.send({ status: 'SUCCESS' });
+    const zip = new AdmZip(path.join(userDir, 'tmp', '_active_plugins_backup.zip'));
+    zip.extractAllTo(path.join(userDir, 'tmp', '_active_plugins_backup'));
+    const pluginNames = fs.readdirSync(
+      path.join(userDir, 'tmp', '_active_plugins_backup', 'plugins'),
+    );
+
+    const pluginList = pluginNames
+      .map((p) => {
+        const packageJsonPath = path.join(
+          userDir,
+          'tmp',
+          '_active_plugins_backup',
+          'plugins',
+          p,
+          'package.json',
+        );
+        if (fs.existsSync(packageJsonPath)) {
+          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: 'utf-8' }));
+          return {
+            dirName: p,
+            name: packageJson.name,
+            version: packageJson.version,
+          };
+        }
+      })
+      .filter((plugin) => plugin !== undefined);
+
+    console.log('BACKUP PLUGINS ENTRIES', pluginList);
+
+    res.send({
+      status: 'ok',
+      data: pluginList,
+    });
   });
 
   router.post('/restore_plugins', async (req: Request, res: Response) => {
-    let fileName = null;
-    let selections = req.body.selections;
-    if (!fs.existsSync(userDir + '/tmp')) {
-      fs.mkdirSync(userDir + '/tmp');
-    }
+    const selections = req.body.selections;
 
-    if (req.files) {
-      const file = req.files.file as UploadedFile;
-      fileName = file.name;
-      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
-        await fs.rm(path.join(userDir, 'tmp', fileName));
+    const pluginNames = fs.readdirSync(
+      path.join(userDir, 'tmp', '_active_plugins_backup', 'plugins'),
+    );
+    console.log('SELECTIONS', selections);
+
+    const pluginList = pluginNames
+      .map((p) => {
+        const packageJsonPath = path.join(
+          userDir,
+          'tmp',
+          '_active_plugins_backup',
+          'plugins',
+          p,
+          'package.json',
+        );
+        if (fs.existsSync(packageJsonPath)) {
+          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: 'utf-8' }));
+          return {
+            dirName: p,
+            name: packageJson.name,
+            version: packageJson.version,
+          };
+        }
+      })
+      .filter((plugin) => plugin !== undefined);
+
+    const pluginDir = path.join(userDir, 'plugins');
+    const webDir = path.join(userDir, 'web');
+    const overlayDir = path.join(webDir, 'overlay');
+    const utilityDir = path.join(webDir, 'utility');
+    const assetDir = path.join(webDir, 'assets');
+    const iconDir = path.join(webDir, 'icons');
+
+    function deletePluginDir(basePath: string, pluginDirName: string) {
+      if (fs.existsSync(path.join(basePath, pluginDirName))) {
+        fs.rmSync(path.join(basePath, pluginDirName), { recursive: true });
       }
-      await file.mv(path.join(userDir, 'tmp', fileName));
-    } else if (req.body.backupName) {
-      fileName = req.body.backupName;
-      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
-        await fs.rm(path.join(userDir, 'tmp', fileName));
+    }
+
+    function copyToPluginDir(basePath: string, pluginDirName: string) {
+      if (
+        fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup', basePath, pluginDirName))
+      ) {
+        fs.copySync(
+          path.join(userDir, 'tmp', '_active_plugins_backup', basePath, pluginDirName),
+          path.join(userDir, basePath, pluginDirName),
+          { overwrite: true },
+        );
       }
-      fs.copySync(
-        path.join(userDir, 'backup', 'plugins', fileName),
-        path.join(userDir, 'tmp', fileName),
-        { overwrite: true },
-      );
     }
 
-    let fileDir = path.join(userDir, 'tmp', fileName.split('.')[0]);
+    await PluginService.stopAllPlugins();
 
-    webLog('GET BACKUP', fileName, fileDir);
+    const selectionKeys = Object.keys(selections);
+    const progressSteps = selectionKeys.length * 2;
+    let progress = 0;
 
-    if (fs.existsSync(fileDir)) {
-      await fs.rm(fileDir, { recursive: true });
-    }
-
-    let zip = new AdmZip(path.join(userDir, 'tmp', fileName));
-    zip.extractAllTo(fileDir);
-
-    let pluginList = fs.readdirSync(path.join(fileDir, 'plugins'));
-    webLog('Deleting Plugins...');
-    fs.rmSync(path.join(userDir, 'plugins'), { recursive: true });
-    fs.mkdirSync(path.join(userDir, 'plugins'));
-
-    webLog('Copying Plugins...');
-    for (let p in pluginList) {
-      webLog(pluginList[p]);
-      fs.copySync(
-        path.join(fileDir, 'plugins', pluginList[p]),
-        path.join(userDir, 'plugins', pluginList[p]),
-      );
-    }
-
-    webLog('Checking for dependencies...');
-    for (let p in pluginList) {
-      if (fs.existsSync(path.join(userDir, 'plugins', pluginList[p], 'node_modules'))) {
-        webLog('Clearing node_modules for ' + pluginList[p]);
-        fs.rmSync(path.join(userDir, 'plugins', pluginList[p], 'node_modules'), {
-          recursive: true,
-        });
+    for (let s = 0; s < selectionKeys.length; s++) {
+      const selectionKey = selectionKeys[s];
+      if (selections[selectionKey] !== true) {
+        continue;
       }
-      if (fs.existsSync(path.join(userDir, 'plugins', pluginList[p], 'package.json'))) {
+
+      const plugin = pluginList.find((p) => p.dirName === selectionKey);
+      if (!plugin) {
+        webLog('Plugin not found: ' + selectionKey);
+        continue;
+      }
+      webLog('Deleting: ' + plugin.dirName);
+      deletePluginDir(pluginDir, plugin.dirName);
+      deletePluginDir(overlayDir, plugin.dirName);
+      deletePluginDir(utilityDir, plugin.dirName);
+      deletePluginDir(assetDir, plugin.dirName);
+      deletePluginDir(iconDir, `${plugin.dirName}.png`);
+
+      const copyLogMessage = 'Copying: ' + plugin.dirName;
+      progress++;
+      OSCService.sendToTCP('/spooder/restore/plugin', {
+        name: plugin.name,
+        message: copyLogMessage,
+        progress: progress,
+        totalProgress: progressSteps,
+      });
+      webLog(copyLogMessage);
+      copyToPluginDir('plugins', plugin.dirName);
+      copyToPluginDir(path.join('web', 'overlay'), plugin.dirName);
+      copyToPluginDir(path.join('web', 'utility'), plugin.dirName);
+      copyToPluginDir(path.join('web', 'assets'), plugin.dirName);
+      copyToPluginDir(path.join('web', 'icons'), `${plugin.dirName}.png`);
+
+      progress++;
+
+      if (fs.existsSync(path.join(userDir, 'plugins', plugin.dirName, 'package.json'))) {
         let packagejson = JSON.parse(
-          fs.readFileSync(path.join(userDir, 'plugins', pluginList[p], 'package.json'), {
+          fs.readFileSync(path.join(userDir, 'plugins', plugin.dirName, 'package.json'), {
             encoding: 'utf-8',
           }),
         );
         let hasDependencies = packagejson.dependencies != null;
         if (hasDependencies) {
+          const installLogMessage = 'Installing dependencies for ' + plugin.dirName;
+          OSCService.sendToTCP('/spooder/restore/plugin', {
+            name: plugin.name,
+            message: installLogMessage,
+            progress: progress,
+            totalProgress: progressSteps,
+          });
+          webLog(installLogMessage);
           await PluginService.installPluginDependencies(
-            pluginList[p],
-            path.join(userDir, 'plugins', pluginList[p]),
+            plugin.dirName,
+            path.join(userDir, 'plugins', plugin.dirName),
           );
         } else {
-          webLog('No dependencies for ' + pluginList[p]);
+          const installLogMessage = 'No dependencies for ' + plugin.dirName;
+          OSCService.sendToTCP('/spooder/restore/plugin', {
+            name: plugin.name,
+            message: installLogMessage,
+            progress: progress,
+            totalProgress: progressSteps,
+          });
+          webLog('No dependencies for ' + plugin.dirName);
         }
       }
     }
 
-    let webfolders = fs.readdirSync(path.join(userDir, 'web'));
-    webLog('Deleting Web Folders...');
-    for (let w in webfolders) {
-      if (webfolders[w] != 'mod') {
-        fs.rmSync(path.join(userDir, 'web', webfolders[w]), { recursive: true });
-      }
-    }
+    progress = progressSteps;
+    OSCService.sendToTCP('/spooder/restore/plugin', {
+      name: 'Done',
+      message: 'Cleaning up...',
+      progress: progress,
+      totalProgress: progress,
+    });
 
-    let newWebFolders = fs.readdirSync(path.join(fileDir, 'web'));
-    webLog('Copying Web Folders...');
-    for (let w in newWebFolders) {
-      if (newWebFolders[w] != 'mod') {
-        webLog(newWebFolders[w]);
-        fs.copySync(
-          path.join(fileDir, 'web', newWebFolders[w]),
-          path.join(userDir, 'web', newWebFolders[w]),
-        );
-      }
-    }
     webLog('Cleaning up...');
-    if (fs.existsSync(fileDir)) {
-      await fs.rm(fileDir, { recursive: true });
+
+    if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {
+      fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup'), { recursive: true });
+    }
+    if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup.zip'))) {
+      fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup.zip'));
     }
 
-    if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
-      await fs.rm(path.join(userDir, 'tmp', fileName));
-    }
     PluginService.refreshAllPlugins();
-    //let newPluginBackups = fs.readdirSync(path.join(userDir, "backup", "plugins"));
     webLog('COMPLETE');
     res.send({ status: 'SUCCESS' });
   });

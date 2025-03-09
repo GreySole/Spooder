@@ -281,10 +281,11 @@ export class EventService {
       streamMessage.message ?? '';
     }
 
+    const modCommands = EventService.getModCommandsAsEvents();
     const events = EventService.getEvents();
     const activeEvents = EventService.getActiveEvents();
 
-    let event = events[eventName];
+    let event = events[eventName] ?? modCommands[eventName];
 
     if (isChat) {
       if (activeEvents[eventName] != null) {

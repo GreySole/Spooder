@@ -1,5 +1,6 @@
 import { KeyedObject, StreamMessage } from 'src/Types.ts';
 import { EventService } from '../service/EventService.ts';
+import { triggerExistsAndEnabled } from './EventTriggerUtil.ts';
 
 function matchConditions(a: string, b: string) {
   if (a.includes('|')) {
@@ -38,11 +39,17 @@ function matchConditions(a: string, b: string) {
 }
 
 export function checkResponseTrigger(eventData: KeyedObject, message: StreamMessage) {
-  let searchMode = eventData.triggers.chat.search
-    ? true
-    : eventData.triggers.osc.handletype == 'search'
-      ? true
-      : false;
+  let searchMode = false;
+  if (triggerExistsAndEnabled(eventData.triggers, 'chat')) {
+    if (eventData.triggers.chat.search) {
+      searchMode = true;
+    }
+  }
+  if (triggerExistsAndEnabled(eventData.triggers, 'osc')) {
+    if (eventData.triggers.osc.search) {
+      searchMode = true;
+    }
+  }
   let command = '';
   if (message.platform == 'osc') {
     command = eventData.triggers.osc.value.toLowerCase();

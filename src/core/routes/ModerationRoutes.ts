@@ -21,8 +21,10 @@ export function ModerationRoutes() {
   const upload = multer({ storage: storage });
   const router = express.Router();
 
+  router.use(express.json());
   router.use(upload.none());
   const publicRouter = express.Router();
+  publicRouter.use(express.json());
   publicRouter.use(upload.none());
 
   async function getModmap(req: Request, res: Response) {
@@ -74,10 +76,8 @@ export function ModerationRoutes() {
     }
 
     const themes = ConfigService.getThemes();
-    let modTheme = null;
-    if (themes.modui[req.query.moduser as string] != null) {
-      modTheme = themes.modui[req.query.moduser as string];
-    }
+    const defaultTheme = themes.webui;
+    const modTheme = themes.modui[moduser];
 
     let oscURL = null;
     let oscPort = null;
@@ -110,7 +110,6 @@ export function ModerationRoutes() {
         plugins: modplugins,
         modlocks: modlocks,
       },
-      theme: modTheme,
     });
   }
 
@@ -194,17 +193,21 @@ export function ModerationRoutes() {
   publicRouter.post('/spamguard', modSpamGuard);
 
   function modSaveTheme(req: Request, res: Response) {
-    const newTheme = req.body.theme;
+    console.log(req.body);
+
     if (!validateUser(req, res)) {
       return;
     }
+    const hue = req.body.hue;
+    const saturation = req.body.saturation;
+    const isDarkTheme = req.body.isDarkTheme;
     const accessCookie = req.cookies['access'];
     const modUser = UserService.getActiveUserFromCookie(accessCookie);
     const themes = ConfigService.getThemes();
     if (themes.modui[modUser] == null) {
       themes.modui[modUser] = {};
     }
-    themes.modui[modUser] = JSON.parse(newTheme);
+    themes.modui[modUser] = { hue, saturation, isDarkTheme };
     ConfigService.saveThemes(themes);
     res.send({ status: 'ok' });
   }

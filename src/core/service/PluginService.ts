@@ -7,6 +7,7 @@ import OSCService from './OSCService.ts';
 import { webLog } from '../Logging.ts';
 import childProcess from 'child_process';
 import Plugin from 'src/Plugin.ts';
+import { createRequire } from 'module';
 
 interface PluginMap {
   [key: string]: Plugin;
@@ -14,6 +15,7 @@ interface PluginMap {
 
 export default class PluginService {
   private static instance: PluginService;
+  private require = createRequire(import.meta.url);
 
   constructor() {
     if (PluginService.instance) {
@@ -57,29 +59,58 @@ export default class PluginService {
   }
 
   static async refreshPlugin(pluginName: string) {
-    PluginService.instance.activePlugins[pluginName].destroy();
+    PluginService.instance.activePlugins[pluginName]?.destroy();
     delete PluginService.instance.activePlugins[pluginName];
 
     const pluginPath = path.resolve(userDir, 'plugins', pluginName);
-    PluginService.instance.activePlugins[pluginName] = new Plugin(pluginName, pluginPath);
+    PluginService.instance.activePlugins[pluginName] = new Plugin(
+      PluginService.instance.require,
+      pluginName,
+      pluginPath,
+    );
   }
 
-  static async refreshAllPlugins(onPluginsLoaded?: () => void) {
+  static refreshAllPlugins(onPluginsLoaded?: () => void) {
     try {
-      const dir = await fsPromises.opendir(userDir + '/plugins');
-      PluginService.instance.activePlugins = {};
-      for await (const dirent of dir) {
-        PluginService.instance.activePlugins[dirent.name]?.destroy();
-        delete PluginService.instance.activePlugins[dirent.name];
+      const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
+      console.log('Directory read for refreshing plugins');
 
-        const pluginPath = path.resolve(userDir, 'plugins', dirent.name);
-        const newPlugin = new Plugin(dirent.name, pluginPath);
-        PluginService.instance.activePlugins[dirent.name] = newPlugin;
+      for (const dirent of dirents) {
+        if (dirent.isDirectory()) {
+          console.log('Processing directory entry:', dirent.name);
+          PluginService.instance.activePlugins[dirent.name]?.destroy();
+          delete PluginService.instance.activePlugins[dirent.name];
+
+          const pluginPath = path.resolve(userDir, 'plugins', dirent.name);
+          const newPlugin = new Plugin(PluginService.instance.require, dirent.name, pluginPath);
+          PluginService.instance.activePlugins[dirent.name] = newPlugin;
+        }
       }
-      webLog('Plugins Refreshed!');
+
       if (onPluginsLoaded != null) {
         onPluginsLoaded();
       }
+    } catch (err) {
+      console.error('Error during refreshAllPlugins:', err);
+    }
+  }
+
+  static async stopAllPlugins() {
+    try {
+      const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
+
+      for (const dirent of dirents) {
+        if (dirent.isDirectory()) {
+          console.log('Processing directory entry:', dirent.name);
+          PluginService.instance.activePlugins[dirent.name]?.destroy();
+          delete PluginService.instance.activePlugins[dirent.name];
+
+          const pluginPath = path.resolve(userDir, 'plugins', dirent.name);
+          const newPlugin = new Plugin(PluginService.instance.require, dirent.name, pluginPath);
+          PluginService.instance.activePlugins[dirent.name] = newPlugin;
+        }
+      }
+      webLog('Plugins STOPPED!');
     } catch (err) {
       console.error(err);
     }
