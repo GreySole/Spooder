@@ -342,7 +342,6 @@ export class EventService {
               streamMessage.platform,
               streamMessage.channel,
             );
-            OSCService.sendToTCP('/events/end/' + eventName, event.name + ' has been deactivated!');
           },
           event.cooldown,
         );
@@ -436,17 +435,35 @@ export class EventService {
       activeEvents[name] = [];
     }
 
-    let timeout = seconds > -1 ? EventService.instance.uptime + seconds : -1;
+    function endCommand() {
+      funct();
+
+      for (let activeCommand in activeEvents[name]) {
+        if (
+          activeEvents[name][activeCommand]['timeout'] != -1 &&
+          Date.now() / 1000 >= activeEvents[name][activeCommand]['timeout']
+        ) {
+          activeEvents[name].splice(activeCommand, 1);
+        }
+      }
+
+      if (activeEvents[name].length == 0) {
+        delete activeEvents[name];
+        OSCService.sendToTCP('/events/end/' + name + '/' + command, name + ' is now deactivated!');
+      }
+    }
+
+    const timeout = seconds > -1 ? Date.now() / 1000 + seconds : -1;
     activeEvents[name].push({
       function: funct,
-      event: command,
-      timeout: Math.ceil(timeout),
-      timeoutEvent: seconds != -1 ? setTimeout(funct, seconds * 1000) : null,
+      command: command,
+      timeout: timeout,
+      timeoutEvent: seconds != -1 ? setTimeout(endCommand, seconds * 1000) : null,
       etype: etype,
     });
   }
 
-  private runInterval = () => {
+  /*private runInterval = () => {
     this.uptime = Math.floor(Date.now() / 1000);
     const activeEvents = EventService.getActiveEvents();
     for (let e in activeEvents) {
@@ -483,7 +500,7 @@ export class EventService {
         delete activeEvents[e];
       }
     }
-  };
+  };*/
 
   private sayAlreadyOn(name: string) {
     const events = EventService.getEvents();
@@ -501,5 +518,5 @@ export class EventService {
     }
   }
 
-  upInterval = setInterval(this.runInterval, 1000);
+  //upInterval = setInterval(this.runInterval, 1000);
 }

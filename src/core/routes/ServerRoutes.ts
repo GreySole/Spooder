@@ -3,6 +3,7 @@ import MonitorService from '../service/MonitorService.ts';
 import ConfigService from '../service/ConfigService.ts';
 import PluginService from '../service/PluginService.ts';
 import ShareService from '../service/ShareService.ts';
+import { EventService } from '../service/EventService.ts';
 
 export function ServerRoutes() {
   const router = express.Router();
@@ -23,6 +24,11 @@ export function ServerRoutes() {
       activeShares: activeShares,
       shares: Object.keys(shares),
     });
+  });
+
+  router.get('/active_events', (req, res) => {
+    const events = EventService.getActiveEvents();
+    res.send(events);
   });
 
   router.get('/log', (req, res) => {

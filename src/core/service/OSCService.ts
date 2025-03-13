@@ -6,8 +6,9 @@ import ConfigService from './ConfigService.ts';
 import { EventService, sayInChat } from './EventService.ts';
 import PluginService from './PluginService.ts';
 import ModuleService from './ModuleService.ts';
-import MonitorService from './MonitorService.ts';
+import MonitorService, { MonitorDataType, MonitorDirection } from './MonitorService.ts';
 import { checkResponseTrigger } from '../util/ResponseUtil.ts';
+import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
 
 export default class OSCService {
   private static instance: OSCService;
@@ -70,6 +71,10 @@ export default class OSCService {
 
   private udpClients = ConfigService.getConfig().network.udp_clients;
 
+  static getUdpClients() {
+    return OSCService.instance.udpClients;
+  }
+
   static sendToTCP = (address: string, oscValue: any, log?: boolean) => {
     if (log == null) {
       log = true;
@@ -84,15 +89,11 @@ export default class OSCService {
       newMessage = new OSC.Message(address, ...oscValue);
     }
 
-    if (log == true) {
-      MonitorService.sendToMonitor('tcp', 'send', {
-        types: newMessage.types,
-        address: address,
-        data: oscValue,
-      });
-    }
-    console.log('SENDING TO TCP', newMessage.address, newMessage.args);
     OSCService.instance.oscTCP.send(newMessage);
+
+    if (log == true) {
+      MonitorService.addLog(MonitorDataType.TCP, MonitorDirection.Send, address, oscValue);
+    }
   };
 
   static sendToUDP = (dest: string, address: string, oscValue: any) => {
@@ -141,12 +142,6 @@ export default class OSCService {
       valueType = 'array';
     }
 
-    MonitorService.sendToMonitor('udp', 'send', {
-      dest: dest,
-      types: valueType,
-      address: address,
-      data: oscValue,
-    });
     if (dest == '-1') {
       return;
     } else if (dest == '-2') {
@@ -174,6 +169,8 @@ export default class OSCService {
         port: udpClients[dest].port,
       });
     }
+
+    MonitorService.addLog(MonitorDataType.UDP, MonitorDirection.Send, address, oscValue);
   };
 
   updateOSCListeners() {
@@ -276,14 +273,16 @@ export default class OSCService {
     osc.on('*', (message: OSC.Message) => {
       console.log('OSC UDP MESSAGE', message.address);
       const events = EventService.getEvents();
-      MonitorService.sendToMonitor('udp', 'receive', {
-        types: message.types,
-        address: message.address,
-        data: message.args,
-      });
+
+      MonitorService.addLog(
+        MonitorDataType.UDP,
+        MonitorDirection.Receive,
+        message.address,
+        message.args,
+      );
 
       for (const e of Object.keys(events)) {
-        if (events[e].triggers.osc) {
+        if (triggerExistsAndEnabled(events[e].triggers, 'osc')) {
           if (events[e].triggers.osc.handletype == 'search') {
             if (message.address == events[e].triggers.osc.address) {
               const streamMessage = {
@@ -303,7 +302,7 @@ export default class OSCService {
                 isReturningChatter: false,
               } as StreamMessage;
 
-              let check = checkResponseTrigger(events[e], streamMessage);
+              const check = checkResponseTrigger(events[e], streamMessage);
 
               if (check != null) {
                 EventService.runCommands(check.message, e, 'osc', check.extra);
@@ -430,15 +429,16 @@ export default class OSCService {
     });
 
     oscTCP.on('*', (message: OSC.Message) => {
-      if (!message.address.startsWith('/frontend/monitor')) {
-        MonitorService.sendToMonitor('tcp', 'receive', {
-          types: message.types,
-          address: message.address,
-          data: message.args,
-        });
+      if (!message.address.startsWith('/spooder/monitor')) {
+        MonitorService.addLog(
+          MonitorDataType.TCP,
+          MonitorDirection.Receive,
+          message.address,
+          message.args,
+        );
       }
 
-      let address = message.address.split('/');
+      const address = message.address.split('/');
 
       const controlModules = ModuleService.getControlModules();
       for (const c in controlModules) {
@@ -449,38 +449,21 @@ export default class OSCService {
 
       const activePlugins = PluginService.getActivePlugins();
       for (let p in activePlugins) {
-        //Only the plugin with its name in the beginning of the address
-        //will call its onOSC
-        if (p.startsWith(address[1])) {
-          if (activePlugins[p].onOSC != null) {
-            activePlugins[p].onOSC(message);
-          }
+        if (activePlugins[p].onOSC != null) {
+          activePlugins[p].onOSC(message);
         }
       }
-
-      /*if (address[1] == 'frontend') {
-        if (address[2] == 'monitor') {
-          if (address[3] == 'logging') {
-            this.monitorLogs.liveLogging = message.args[0] as number;
-          } else if (address[3] == 'get') {
-            if (message.args[0] == 'all') {
-              OSCService.sendToTCP(
-                '/frontend/monitor/get/all',
-                JSON.stringify(this.monitorLogs),
-                false,
-              );
-              return;
-            }
-          }
-        }
-      }*/
 
       if (address[1] == 'spooder') {
         if (address[2] == 'plugin') {
           if (address[3] == 'error') {
-            let errorObj = JSON.parse(message.args[0] as string);
-            //oscLog("GOT PLUGIN ERROR", errorObj);
-            MonitorService.pluginError(errorObj.name, errorObj.type, errorObj.message);
+            const errorObj = JSON.parse(message.args[0] as string);
+            MonitorService.addLog(
+              MonitorDataType.Plugin,
+              MonitorDirection.Receive,
+              errorObj.name,
+              errorObj.message,
+            );
             return;
           }
         }

@@ -2,14 +2,12 @@ import { NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
-import fileUpload from 'express-fileupload';
 import path from 'path';
 import { userDir, frontendDir } from '../../Types.ts';
 import { webLog } from '../Logging.ts';
 import ConfigService from './ConfigService.ts';
 import { ConfigRoutes } from '../routes/ConfigRoutes.ts';
 import { isLocal, PluginRoutes } from '../routes/PluginRoutes.ts';
-import ModuleService from './ModuleService.ts';
 import fs from 'fs-extra';
 import { networkInterfaces } from 'os';
 import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
@@ -24,6 +22,7 @@ import { ServerRoutes } from '../routes/ServerRoutes.ts';
 import Ngrok from './webui/Ngrok.ts';
 import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
 import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
+import multer from 'multer';
 
 const nets = networkInterfaces();
 const results = Object.create({});
@@ -106,14 +105,23 @@ export class WebService {
 
     const sconfig = ConfigService.getConfig();
 
+    fs.existsSync(path.join(userDir, 'tmp', 'multer')) ||
+      fs.mkdirSync(path.join(userDir, 'tmp', 'multer'));
+
     if (initMode == true) {
+      const tempStorage = multer.diskStorage({
+        destination: (req, file, cb) => {
+          cb(null, path.join(userDir, 'tmp', 'multer'));
+        },
+      });
+      const fileUpload = multer({ storage: tempStorage });
       expressPort = 3000;
       console.log('STARTING SERVER IN INIT MODE');
       router.use('/', express.static(frontendDir + '/init/build'));
       router.use(bodyParser.urlencoded({ extended: true }));
       router.use(bodyParser.json({ limit: '100mb' }));
-      router.use('/restore_settings', fileUpload());
-      router.use('/restore_plugins', fileUpload());
+      router.use('/restore_settings', fileUpload.single('file'));
+      router.use('/restore_plugins', fileUpload.single('file'));
     } else {
       expressPort = sconfig.network.host_port;
       router.use('/', express.static(frontendDir + '/main/build'));

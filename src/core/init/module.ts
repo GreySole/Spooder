@@ -20,46 +20,13 @@ export default class Initializer {
     new PluginService();
     new ShareService();
 
-    ModuleService.registerIntegrationModule('twitch', PlatformType.stream);
-    ModuleService.registerIntegrationModule('discord', PlatformType.community);
-
     webUI.router?.get('/init', async (req, res) => {
-      const twitch = ModuleService.getStreamModule('twitch') as STwitch;
-      const discord = ModuleService.getCommunityModule('discord') as Discord;
       const sconfig = fs.existsSync(userDir + '/settings/config.json')
         ? JSON.parse(fs.readFileSync(userDir + '/settings/config.json', { encoding: 'utf-8' }))
         : null;
       const themes = fs.existsSync(userDir + '/settings/themes.json')
         ? JSON.parse(fs.readFileSync(userDir + '/settings/themes.json', { encoding: 'utf-8' }))
         : null;
-      let twitchBotUser = null;
-      let twitchBroadcasterUser = null;
-      let discordUser = null;
-      if (twitch.oauth?.['token'] != null) {
-        if (twitch.loggedIn == false) {
-          await twitch.autoLogin();
-        }
-      }
-      if (twitch.loggedIn == true) {
-        twitchBotUser = await twitch.api.getUserInfo(twitch.api.botUsername);
-        twitchBroadcasterUser = await twitch.api.getUserInfo(twitch.api.homeChannel);
-      }
-
-      if (discord.config?.['token'] != '') {
-        if (discord.loggedIn == false) {
-          await discord.autoLogin();
-        }
-      }
-      if (discord.loggedIn == true) {
-        let masterUser = await discord.findUser(discord.config.master);
-        discordUser = {
-          botUser: {
-            username: discord.client?.user?.username,
-            profilepic: discord.client?.user?.displayAvatarURL(),
-          },
-          master: { username: masterUser.username, profilepic: masterUser.displayAvatarURL() },
-        };
-      }
 
       const results = Object.create(null); // Or just '{}', an empty object
 
@@ -82,28 +49,12 @@ export default class Initializer {
       res.send({
         config: sconfig,
         nets: results,
-        twitch: twitch.oauth ?? {},
-        twitch_user: { botUser: twitchBotUser, broadcasterUser: twitchBroadcasterUser },
-        discord: discord.config ?? {},
-        discord_user: discordUser,
         themes: themes,
       });
     });
 
-    webUI.router?.post('/save_twitch', async (req: Request, res: Response) => {
-      const twitch = ModuleService.getStreamModule('twitch') as STwitch;
-      let newTwitch = req.body;
-      twitch.oauth = newTwitch;
-      fs.writeFileSync(userDir + '/settings/twitch.json', JSON.stringify(newTwitch));
-      res.send({ status: 'ok' });
-    });
-
     webUI.router?.post('/save_config', async (req: Request, res: Response) => {
       let newSettings = req.body;
-      var newMod = {
-        trusted_users: {},
-        trusted_users_pw: {},
-      };
       ConfigService.saveConfig(newSettings);
       res.send({ status: 'ok' });
     });

@@ -6,11 +6,14 @@ import { WebService } from '../service/WebService.ts';
 import ConfigService from '../service/ConfigService.ts';
 import { webLog } from '../Logging.ts';
 import OSCService from '../service/OSCService.ts';
+import { json } from 'express';
 
 export function ConfigRoutes() {
   const sconfig = ConfigService.getConfig();
   const router = Router();
   const publicRouter = Router();
+
+  router.use(json());
 
   router.get('/server_config', (req, res) => {
     res.send(sconfig);
@@ -61,9 +64,9 @@ export function ConfigRoutes() {
   });
 
   router.get('/udp_clients', (req: Request, res: Response) => {
-    const sconfig = ConfigService.getConfig();
+    const udpClients = OSCService.getUdpClients();
 
-    res.send(sconfig.network.udp_clients);
+    res.send(udpClients);
   });
 
   return {

@@ -27,7 +27,7 @@ export default class PluginService {
     try {
       const pluginFilePath = userDir + '/settings/plugins.json';
       if (!fs.existsSync(pluginFilePath)) {
-        PluginService.instance.savePluginSettings();
+        PluginService.instance.saveGlobalPluginSettings();
       } else {
         const pluginFile = fs.readFileSync(pluginFilePath, {
           encoding: 'utf8',
@@ -41,46 +41,73 @@ export default class PluginService {
     PluginService.refreshAllPlugins();
   }
 
-  private savePluginSettings() {
+  private saveGlobalPluginSettings() {
     fs.writeFileSync(
       userDir + '/settings/plugins.json',
       JSON.stringify(PluginService.instance.settings),
     );
   }
 
-  private settings = {
-    disabled: {},
-  };
+  static savePluginSettings(pluginName: string, settings: KeyedObject) {
+    try {
+      fs.writeFileSync(
+        path.join(userDir, 'plugins', pluginName, 'settings.json'),
+        JSON.stringify(settings),
+      );
+      return true;
+    } catch (e) {
+      console.error('Error saving plugin settings', e);
+      return false;
+    }
+  }
 
+  private settings = {} as KeyedObject;
   private activePlugins = {} as PluginMap;
 
   static getActivePlugins() {
     return PluginService.instance.activePlugins;
   }
 
-  static async refreshPlugin(pluginName: string) {
-    PluginService.instance.activePlugins[pluginName]?.destroy();
-    delete PluginService.instance.activePlugins[pluginName];
+  static setEnablePlugin(pluginName: string, isEnabled: boolean) {
+    console.log('ENABLING PLUGIN', pluginName);
+    if (PluginService.instance.settings[pluginName]) {
+      PluginService.instance.settings[pluginName].enabled = isEnabled;
+    } else {
+      PluginService.instance.settings[pluginName] = { enabled: isEnabled };
+    }
+    PluginService.instance.saveGlobalPluginSettings();
+    PluginService.refreshPlugin(pluginName);
+  }
+
+  static isPluginEnabled(pluginName: string) {
+    if (!PluginService.instance.settings[pluginName]) {
+      return true;
+    }
+    return PluginService.instance.settings[pluginName].enabled;
+  }
+
+  static refreshPlugin(pluginName: string) {
+    PluginService.stopPlugin(pluginName);
 
     const pluginPath = path.resolve(userDir, 'plugins', pluginName);
-    PluginService.instance.activePlugins[pluginName] = new Plugin(
-      PluginService.instance.require,
-      pluginName,
-      pluginPath,
-    );
+    const newPlugin = new Plugin(PluginService.instance.require, pluginName, pluginPath);
+
+    PluginService.instance.activePlugins[pluginName] = newPlugin;
+  }
+
+  static stopPlugin(pluginName: string) {
+    PluginService.instance.activePlugins[pluginName]?.destroy();
+    delete PluginService.instance.activePlugins[pluginName];
   }
 
   static refreshAllPlugins(onPluginsLoaded?: () => void) {
     try {
+      PluginService.stopAllPlugins();
       const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
-      console.log('Directory read for refreshing plugins');
 
       for (const dirent of dirents) {
         if (dirent.isDirectory()) {
-          console.log('Processing directory entry:', dirent.name);
-          PluginService.instance.activePlugins[dirent.name]?.destroy();
-          delete PluginService.instance.activePlugins[dirent.name];
-
+          console.log('Loading plugin', dirent.name);
           const pluginPath = path.resolve(userDir, 'plugins', dirent.name);
           const newPlugin = new Plugin(PluginService.instance.require, dirent.name, pluginPath);
           PluginService.instance.activePlugins[dirent.name] = newPlugin;
@@ -95,22 +122,17 @@ export default class PluginService {
     }
   }
 
-  static async stopAllPlugins() {
+  static stopAllPlugins() {
     try {
       const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
 
       for (const dirent of dirents) {
         if (dirent.isDirectory()) {
-          console.log('Processing directory entry:', dirent.name);
           PluginService.instance.activePlugins[dirent.name]?.destroy();
           delete PluginService.instance.activePlugins[dirent.name];
-
-          const pluginPath = path.resolve(userDir, 'plugins', dirent.name);
-          const newPlugin = new Plugin(PluginService.instance.require, dirent.name, pluginPath);
-          PluginService.instance.activePlugins[dirent.name] = newPlugin;
         }
       }
-      webLog('Plugins STOPPED!');
+      webLog('Plugins STOPPED!', Object.keys(PluginService.instance.activePlugins));
     } catch (err) {
       console.error(err);
     }
@@ -124,7 +146,7 @@ export default class PluginService {
         utility: true,
       };
     }
-    OSCService.sendToTCP('/frontend/plugin/install/progress', {
+    OSCService.sendToTCP('/spooder/plugin/install/progress', {
       pluginName: pluginDirName,
       status: 'progress',
       message: 'Copying folders...',
@@ -236,7 +258,7 @@ export default class PluginService {
     fs.rm(tempDir, { recursive: true });
     await PluginService.installPluginDependencies(pluginDirName, pluginDir);
     PluginService.refreshAllPlugins();
-    OSCService.sendToTCP('/frontend/plugin/install/complete', {
+    OSCService.sendToTCP('/spooder/plugin/install/complete', {
       pluginName: pluginDirName,
       status: 'complete',
       message: 'Complete!',
@@ -254,7 +276,7 @@ export default class PluginService {
       fs.rmSync(path.join(pluginPath, 'node_modules'), { recursive: true });
     }
     webLog('Installing dependencies on ' + pluginPath);
-    OSCService.sendToTCP('/frontend/plugin/install/progress', {
+    OSCService.sendToTCP('/spooder/plugin/install/progress', {
       pluginName: pluginDirName,
       status: 'progress',
       message: 'Installing dependencies...',
@@ -275,7 +297,7 @@ export default class PluginService {
       );
     }).catch((error) => {
       console.log('INSTALL DEPS FAILED');
-      OSCService.sendToTCP('/frontend/plugin/install/complete', {
+      OSCService.sendToTCP('/spooder/plugin/install/complete', {
         pluginName: pluginDirName,
         status: 'failed',
         message: error.message,

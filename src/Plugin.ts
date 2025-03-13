@@ -5,6 +5,7 @@ import ModuleService from './core/service/ModuleService.ts';
 import os from 'os';
 import OSC from 'osc-js';
 import { createRequire } from 'module';
+import PluginService from './core/service/PluginService.ts';
 
 interface PluginModule {
   streamModules: KeyedObject;
@@ -39,10 +40,22 @@ export default class Plugin {
 
   constructor(require: NodeJS.Require, pluginDirName: string, pluginPath: string) {
     this.require = require;
-    console.log(
-      'LOADING PLUGIN',
-      fs.existsSync(path.resolve(userDir, 'plugins', pluginDirName, 'package.json')),
-    );
+
+    if (!PluginService.isPluginEnabled(pluginDirName)) {
+      const pluginMeta = JSON.parse(
+        fs.readFileSync(userDir + '/plugins/' + pluginDirName + '/package.json', {
+          encoding: 'utf8',
+        }),
+      );
+      this.name = pluginMeta.name;
+      this.author = pluginMeta.author;
+      this.dirname = pluginDirName;
+      this.status = 'disabled';
+      this.description = pluginMeta.description;
+      this.dependencies = pluginMeta.dependencies;
+      return;
+    }
+
     try {
       if (fs.existsSync(path.resolve(pluginPath, 'package.json'))) {
         let pluginMeta = JSON.parse(
@@ -64,9 +77,9 @@ export default class Plugin {
         this.version = pluginMeta.version;
         this.description = pluginMeta.description;
         this.dependencies = pluginMeta.dependencies;
-        let overlayDir = path.join(userDir, 'web', 'overlay', pluginDirName);
-        let utilityDir = path.join(userDir, 'web', 'utility', pluginDirName);
-        let publicDir = path.join(userDir, 'web', 'public', pluginDirName);
+        const overlayDir = path.join(userDir, 'web', 'overlay', pluginDirName);
+        const utilityDir = path.join(userDir, 'web', 'utility', pluginDirName);
+        const publicDir = path.join(userDir, 'web', 'public', pluginDirName);
         this.hasOverlay = fs.existsSync(overlayDir);
         this.hasUtility = fs.existsSync(utilityDir);
         this.hasPublic = fs.existsSync(publicDir);
@@ -100,19 +113,19 @@ export default class Plugin {
           }
         }
 
-        console.log('ON LOAD', this.pluginModule.onLoad != null);
         if (this.pluginModule.onLoad != null) {
           this.pluginModule.onLoad();
         }
       }
     } catch (e: any) {
-      let pluginMeta = JSON.parse(
+      const pluginMeta = JSON.parse(
         fs.readFileSync(userDir + '/plugins/' + pluginDirName + '/package.json', {
           encoding: 'utf8',
         }),
       );
 
-      this.name = pluginDirName;
+      this.name = pluginMeta.name;
+      this.author = pluginMeta.author;
       this.dirname = pluginDirName;
       this.status = 'failed';
       this.description = e.code + ' - ' + e.message;
@@ -145,8 +158,6 @@ export default class Plugin {
       if (this.modulePath) {
         const resolvedPath = this.require.resolve(this.modulePath);
         const module = this.require.cache[resolvedPath];
-
-        console.log('DESTROYING PLUGIN', module);
 
         if (module) {
           // Remove children from cache

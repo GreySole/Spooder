@@ -1,9 +1,7 @@
-import bodyParser from 'body-parser';
 import path from 'path';
 import fs from 'fs-extra';
 import { Request, Response } from 'express';
 import AdmZip from 'adm-zip';
-import fileUpload, { UploadedFile } from 'express-fileupload';
 import express from 'express';
 import { userDir } from '../../Types.ts';
 import { webLog } from '../Logging.ts';
@@ -16,14 +14,12 @@ export function BackupRestoreRoutes() {
   const router = express.Router();
   const publicRouter = express.Router();
 
-  const memoryStorage = multer.memoryStorage();
-
   const tempStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-      cb(null, path.join(userDir, 'tmp'));
+      cb(null, path.join(userDir, 'tmp', 'multer'));
     },
   });
-  const restoreUpload = multer({ storage: memoryStorage });
+  const restoreUpload = multer({ storage: tempStorage });
 
   router.use(express.json());
   router.use('/delete_backup_settings', restoreUpload.none());
@@ -57,7 +53,7 @@ export function BackupRestoreRoutes() {
     res.download(path.join(userDir, 'backup', 'plugins', backupName));
   });
 
-  router.post('/checkin_settings', (req, res) => {
+  router.post('/checkin_settings', async (req, res) => {
     if (!req.files) {
       webLog('NO FILES FOUND');
       res.send({
@@ -65,21 +61,24 @@ export function BackupRestoreRoutes() {
         message: 'No file uploaded',
       });
     } else {
-      const file = req.files.file as UploadedFile;
+      const file = req.file as Express.Multer.File;
       if (!fs.existsSync(path.join(userDir, 'backup'))) {
         fs.mkdirSync(path.join(userDir, 'backup'));
       }
       if (!fs.existsSync(path.join(userDir, 'backup', 'settings'))) {
         fs.mkdirSync(path.join(userDir, 'backup', 'settings'));
       }
-      file.mv(path.join(userDir, 'backup', 'settings', file.name));
+      await fs.promises.writeFile(
+        path.join(userDir, 'backup', 'settings', file.originalname),
+        file.buffer,
+      );
       let newSettingsBackups = fs.readdirSync(path.join(userDir, 'backup', 'settings'));
 
       res.send({ newbackups: newSettingsBackups });
     }
   });
 
-  router.post('/checkin_plugins', (req: Request, res: Response) => {
+  router.post('/checkin_plugins', async (req: Request, res: Response) => {
     if (!req.files) {
       webLog('NO FILES FOUND');
       res.send({
@@ -87,14 +86,17 @@ export function BackupRestoreRoutes() {
         message: 'No file uploaded',
       });
     } else {
-      const file = req.files.file as UploadedFile;
+      const file = req.file as Express.Multer.File;
       if (!fs.existsSync(path.join(userDir, 'backup'))) {
         fs.mkdirSync(path.join(userDir, 'backup'));
       }
       if (!fs.existsSync(path.join(userDir, 'backup', 'plugins'))) {
         fs.mkdirSync(path.join(userDir, 'backup', 'plugins'));
       }
-      file.mv(path.join(userDir, 'backup', 'plugins', file.name));
+      await fs.promises.writeFile(
+        path.join(userDir, 'backup', 'plugins', file.originalname),
+        file.buffer,
+      );
       let newSettingsBackups = fs.readdirSync(path.join(userDir, 'backup', 'plugins'));
 
       res.send({ newbackups: newSettingsBackups });
@@ -271,41 +273,37 @@ export function BackupRestoreRoutes() {
 
   router.post('/prepare_restore_settings', async (req: Request, res: Response) => {
     let fileName = null;
-    if (!fs.existsSync(userDir + '/tmp')) {
-      fs.mkdirSync(userDir + '/tmp');
-    }
 
-    if (req.files) {
-      const file = req.files.file as UploadedFile;
-      console.log('FILE FOUND', req.files);
-      fileName = file.name;
-      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
-        await fs.rm(path.join(userDir, 'tmp', fileName));
-      }
-      await file.mv(path.join(userDir, 'tmp', fileName));
+    if (req.file) {
+      const file = req.file as Express.Multer.File;
+      fileName = req.file.originalname;
+      await fs.move(file.path, path.join(userDir, 'backup', 'settings', fileName), {
+        overwrite: true,
+      });
     } else if (req.body.backupName) {
       fileName = req.body.backupName;
-      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
-        await fs.rm(path.join(userDir, 'tmp', fileName));
-      }
-      fs.copySync(
-        path.join(userDir, 'backup', 'settings', fileName),
-        path.join(userDir, 'tmp', '_active_settings_backup.zip'),
-        { overwrite: true },
-      );
-
-      const zip = new AdmZip(path.join(userDir, 'tmp', '_active_settings_backup.zip'));
-      const zipEntries = zip.getEntries();
-      console.log(
-        'BACKUP SETTINGS ENTRIES',
-        zipEntries.map((e) => e.entryName),
-      );
-
-      res.send({
-        status: 'ok',
-        data: zipEntries.map((e) => e.entryName.substring(0, e.entryName.lastIndexOf('.'))),
-      });
     }
+
+    if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+      await fs.rm(path.join(userDir, 'tmp', fileName));
+    }
+    fs.copySync(
+      path.join(userDir, 'backup', 'settings', fileName),
+      path.join(userDir, 'tmp', '_active_settings_backup.zip'),
+      { overwrite: true },
+    );
+
+    const zip = new AdmZip(path.join(userDir, 'tmp', '_active_settings_backup.zip'));
+    const zipEntries = zip.getEntries();
+    console.log(
+      'BACKUP SETTINGS ENTRIES',
+      zipEntries.map((e) => e.entryName),
+    );
+
+    res.send({
+      status: 'ok',
+      data: zipEntries.map((e) => e.entryName.substring(0, e.entryName.lastIndexOf('.'))),
+    });
   });
 
   router.post('/restore_settings', async (req: Request, res: Response) => {
@@ -366,7 +364,10 @@ export function BackupRestoreRoutes() {
     if (req.file) {
       const file = req.file as Express.Multer.File;
       console.log('FILE FOUND', req.file);
-      await fs.promises.writeFile(path.join(userDir, 'backup', 'plugins', fileName), file.buffer);
+      fileName = req.file.originalname;
+      await fs.move(file.path, path.join(userDir, 'backup', 'plugins', fileName), {
+        overwrite: true,
+      });
     }
 
     if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {

@@ -33,22 +33,23 @@ export default function EventSoftwareCommand(
           continue;
         }
         for (let command in activeEvents[ae]) {
-          if (activeEvents[ae][command].etype == 'event') {
+          const eventCommand = activeEvents[ae][command];
+          if (eventCommand.etype == 'event') {
             continue;
           }
-          if (activeEvents[ae][command].event.address == eCommand.address) {
-            if (activeEvents[ae][command].event.valueOn.includes(',')) {
-              let valueID = activeEvents[ae][command].event.valueOn.split(',');
+          if (eventCommand.command.address == eCommand.address) {
+            if (eventCommand.command.valueOn.includes(',')) {
+              let valueID = eventCommand.command.valueOn.split(',');
               if (eCommand.valueOn.includes(',')) {
                 let valueID2 = eCommand.valueOn.split(',');
                 if (
                   valueID[0].trim() == valueID2[0].trim() &&
-                  eCommand.priority < activeEvents[ae][command].event.priority
+                  eCommand.priority < eventCommand.command.priority
                 ) {
                   commandUsed = true;
                 }
               }
-            } else if (eCommand.priority < activeEvents[ae][command].event.priority) {
+            } else if (eCommand.priority < eventCommand.command.priority) {
               commandUsed = true;
             }
 
@@ -71,19 +72,20 @@ export default function EventSoftwareCommand(
               continue;
             }
             for (let command in activeEvents[ae]) {
-              if (activeEvents[ae][command].etype == 'event') {
+              const eventCommand = activeEvents[ae][command];
+              if (eventCommand.etype == 'event') {
                 continue;
               }
-              if (activeEvents[ae][command].event.address == eCommand.address) {
-                if (activeEvents[ae][command].event.valueOn.includes(',')) {
-                  let valueID = activeEvents[ae][command].event.valueOn.split(',');
+              if (eventCommand.event.address == eCommand.address) {
+                if (eventCommand.event.valueOn.includes(',')) {
+                  let valueID = eventCommand.event.valueOn.split(',');
                   if (eCommand.valueOn.includes(',')) {
                     let valueID2 = eCommand.valueOn.split(',');
                     if (valueID[0].trim() == valueID2[0].trim()) {
                       OSCService.sendToUDP(
                         eCommand.dest_udp,
-                        activeEvents[ae][command].event.address,
-                        activeEvents[ae][command].event.valueOn,
+                        eventCommand.event.address,
+                        eventCommand.event.valueOn,
                       );
                     } else {
                       continue;
@@ -92,8 +94,8 @@ export default function EventSoftwareCommand(
                 } else {
                   OSCService.sendToUDP(
                     eCommand.dest_udp,
-                    activeEvents[ae][command].event.address,
-                    activeEvents[ae][command].event.valueOn,
+                    eventCommand.event.address,
+                    eventCommand.event.valueOn,
                   );
                 }
 

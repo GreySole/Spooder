@@ -2,6 +2,24 @@ import { userDir, KeyedObject } from 'src/Types.ts';
 import OSCService from './OSCService.ts';
 import si from 'systeminformation';
 
+export interface OSCLog {
+  address: string;
+  direction: 'send' | 'receive';
+  args: any[];
+  timestamp: string;
+}
+
+export enum MonitorDataType {
+  TCP = 'tcp',
+  UDP = 'udp',
+  Plugin = 'plugin',
+}
+
+export enum MonitorDirection {
+  Send = 'send',
+  Receive = 'receive',
+}
+
 export default class MonitorService {
   private static instance: MonitorService;
 
@@ -11,25 +29,19 @@ export default class MonitorService {
     }
 
     MonitorService.instance = this;
-
-    try {
-      const oscFilePath = userDir + '/settings/osc-tunnels.json';
-    } catch (e: any) {
-      console.log('OSC file error', e);
-    }
   }
-
-  /*private systemCheckInterval = setInterval(() => {
-    this.getSystemStatus().then((status) => {
-      console.log('System Status', status);
-      OSCService.sendToTCP('/monitor/system', JSON.stringify(status));
-    });
-  }, 3000);*/
 
   private monitorLogs = {
     logs: [] as KeyedObject[],
     pluginlogs: [] as KeyedObject[],
     liveLogging: 0,
+  };
+
+  private oscMessageLog: KeyedObject = {
+    udp: [] as OSCLog[],
+    tcp: [] as OSCLog[],
+    plugin: [] as OSCLog[],
+    liveLogEnabed: 0,
   };
 
   private systemStatus = {
@@ -47,30 +59,42 @@ export default class MonitorService {
     },
   };
 
-  static pluginError = (pluginName: string, type: string, message: string) => {
-    let timestamp = Date.now();
-    MonitorService.instance.monitorLogs.pluginlogs.push({
-      timestamp: timestamp,
-      name: pluginName,
+  static addLog(type: MonitorDataType, direction: MonitorDirection, address: string, args: any[]) {
+    const timestamp = new Date().toISOString();
+    const liveLogData = {
       type: type,
-      message: message,
-    });
-    if (MonitorService.instance.monitorLogs.pluginlogs.length > 1000) {
-      MonitorService.instance.monitorLogs.pluginlogs.shift();
+      address: address,
+      direction: direction,
+      args: args,
+      timestamp: timestamp,
+    };
+
+    switch (type) {
+      case MonitorDataType.TCP:
+        MonitorService.instance.oscMessageLog.tcp.push(liveLogData);
+        break;
+      case MonitorDataType.UDP:
+        MonitorService.instance.oscMessageLog.udp.push(liveLogData);
+        break;
+      case MonitorDataType.Plugin:
+        MonitorService.instance.oscMessageLog.plugin.push(liveLogData);
+        break;
     }
 
-    if (MonitorService.instance.monitorLogs.liveLogging == 1) {
-      OSCService.sendToTCP(
-        '/frontend/monitor/plugin',
-        JSON.stringify({
-          timestamp: timestamp,
-          name: pluginName,
-          type: type,
-          message: message,
-        }),
-      );
+    if (MonitorService.instance.oscMessageLog.tcp.length > 100) {
+      MonitorService.instance.oscMessageLog.tcp.shift();
     }
-  };
+    if (MonitorService.instance.oscMessageLog.udp.length > 100) {
+      MonitorService.instance.oscMessageLog.udp.shift();
+    }
+    if (MonitorService.instance.oscMessageLog.plugin.length > 100) {
+      MonitorService.instance.oscMessageLog.plugin.shift();
+    }
+
+    if (MonitorService.instance.oscMessageLog.liveLogging == 1) {
+      OSCService.sendToTCP('/spooder/monitor/log', JSON.stringify(liveLogData));
+    }
+  }
 
   static sendToMonitor = (proto: string, direction: string, data: KeyedObject) => {
     let timestamp = Date.now();
@@ -81,25 +105,10 @@ export default class MonitorService {
       direction: direction,
       data: data,
     });
-    if (MonitorService.instance.monitorLogs.logs.length > 1000) {
-      MonitorService.instance.monitorLogs.logs.shift();
-    }
-    if (MonitorService.instance.monitorLogs.liveLogging == 1) {
-      OSCService.sendToTCP(
-        '/frontend/monitor/osc',
-        JSON.stringify({
-          timestamp: timestamp,
-          type: 'osc',
-          protocol: proto,
-          direction: direction,
-          data: data,
-        }),
-      );
-    }
   };
 
   static getMonitorLogs = () => {
-    return MonitorService.instance.monitorLogs;
+    return MonitorService.instance.oscMessageLog;
   };
 
   static getSystemStatus = async () => {
