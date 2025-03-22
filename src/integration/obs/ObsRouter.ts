@@ -1,15 +1,17 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, json } from 'express';
 import ModuleService from 'src/core/service/ModuleService.ts';
 import { userDir, KeyedObject } from 'src/Types.ts';
 import OBS from './main.ts';
 import fs from 'fs';
-import bodyParser from 'body-parser';
+import ObsControlRouter from './ObsControlRouter.ts';
+import ObsFetchRouter from './ObsFetchRouter.ts';
+import { log } from 'console';
 
 export default function getObsRouters() {
   const obsModule = ModuleService.getControlModule('obs') as OBS;
+  const obsWebsocket = obsModule.websocket;
   const router = Router();
-  router.use(bodyParser.json());
-  router.use(bodyParser.urlencoded({ extended: true }));
+  router.use(json());
 
   router.get('/get_connection_status', (req: Request, res: Response) => {
     res.send({ connected: obsModule.websocket.connected });
@@ -39,6 +41,24 @@ export default function getObsRouters() {
       obsModule.saveLogin(connectObj.host, connectObj.port, connectObj.password);
     }
 
+    res.send({ status: 'ok' });
+  });
+
+  router.get('/connect_remote', (req: Request, res: Response) => {
+    if (obsModule.connected == false) {
+      res.send({ status: 'notconnected' });
+      return;
+    }
+    obsWebsocket.subscribeToInputVolumeMeters(req.ip ?? '');
+    res.send({ status: 'ok' });
+  });
+
+  router.get('/disconnect_remote', (req: Request, res: Response) => {
+    if (obsModule.connected == false) {
+      res.send({ status: 'notconnected' });
+      return;
+    }
+    obsWebsocket.unsubscribeToInputVolumeMeters(req.ip ?? '');
     res.send({ status: 'ok' });
   });
 
@@ -80,6 +100,9 @@ export default function getObsRouters() {
       res.send(obsReturn);
     }
   });
+
+  router.use('/fetch', ObsFetchRouter());
+  router.use('/control', ObsControlRouter());
 
   return router;
 }

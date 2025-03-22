@@ -158,7 +158,11 @@ export function processStreamMessage(streamMessage: StreamMessage, shareId?: str
       let commandsArray =
         EventService.getStreamChatCommands(true, streamMessage.platform, streamMessage.channel) ??
         [];
-      sayInChat("Here's the chat command list: " + commandsArray.join(', '), streamMessage.channel);
+      sayInChat(
+        "Here's the chat command list: " + commandsArray.join(', '),
+        streamMessage.platform,
+        streamMessage.channel,
+      );
       return;
     }
 

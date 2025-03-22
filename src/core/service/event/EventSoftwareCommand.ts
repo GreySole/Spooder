@@ -4,10 +4,10 @@ import OSCService from '../OSCService.ts';
 export default function EventSoftwareCommand(
   eCommand: any,
   isChat: boolean,
-  streamMessage: any,
   isOSC: boolean,
   event: any,
   activeEvents: any,
+  streamMessage: any,
   eventName: string,
 ) {
   return () => {

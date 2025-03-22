@@ -12,6 +12,7 @@ import ModuleService from './ModuleService.ts';
 import OSCService from './OSCService.ts';
 import fs from 'fs';
 import ShareService from './ShareService.ts';
+import EventDiscordCommand from './event/EventDiscordCommand.ts';
 
 export function sayInChat(message: string, platform?: string, channel?: string) {
   const activeStreams = ModuleService.getStreamModules();
@@ -188,7 +189,7 @@ export class EventService {
   ) {
     const events = EventService.getEvents();
     const shares = ShareService.getShares();
-    let chatCommands = {} as KeyedObject;
+    let chatCommands = [];
 
     for (let e in events) {
       if (sharePlatform && shareChannel) {
@@ -197,10 +198,7 @@ export class EventService {
         if (bangOnly && !events[e].triggers.chat.command.startsWith('!')) {
           continue;
         }
-        chatCommands[e] = {
-          name: events[e].name,
-          command: events[e].triggers.chat.command,
-        };
+        chatCommands.push(events[e].triggers.chat.command);
       }
     }
 
@@ -271,9 +269,12 @@ export class EventService {
     eventType: string,
     extra: KeyedObject = {},
   ) => {
+    console.log('runCommands', streamMessage, eventName, eventType, extra);
     const sconfig = ConfigService.getConfig();
     let isChat = eventType.includes('chat');
     let isOSC = eventType.includes('osc');
+
+    console.log(isChat, isOSC);
 
     if (isOSC) {
       streamMessage.username = sconfig.bot.bot_name;
@@ -413,6 +414,14 @@ export class EventService {
           break;
         case 'mod':
           thisCommand = EventModCommand(eCommand, eventName, streamMessage, extra);
+          if (eCommand.delay == 0) {
+            thisCommand();
+          } else {
+            setTimeout(thisCommand, eCommand.delay);
+          }
+          break;
+        case 'discord':
+          thisCommand = EventDiscordCommand(eCommand, eventName, streamMessage, extra);
           if (eCommand.delay == 0) {
             thisCommand();
           } else {

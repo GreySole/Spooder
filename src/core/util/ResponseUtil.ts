@@ -1,6 +1,7 @@
 import { KeyedObject, StreamMessage } from 'src/Types.ts';
-import { EventService } from '../service/EventService.ts';
+import { EventService, sayInChat } from '../service/EventService.ts';
 import { triggerExistsAndEnabled } from './EventTriggerUtil.ts';
+import ModuleService from '../service/ModuleService.ts';
 
 function matchConditions(a: string, b: string) {
   if (a.includes('|')) {
@@ -158,6 +159,67 @@ export function buildMockStreamMessage(message: string): StreamMessage {
   };
 }
 
+export async function runResponseScript(
+  eventName: string,
+  message: StreamMessage,
+  extra: string[],
+  script: string,
+  useFakeStorage = false,
+) {
+  const responseScript = String.raw`
+    async (findModule, runCommands, sayInChat) => {
+      const event = ${JSON.stringify(message)};
+      const extra = ${JSON.stringify(extra)};
+      function say(txt) {
+        sayInChat(txt, ${JSON.stringify(message.platform)}, ${JSON.stringify(message.channel)});
+      }
+      const toUser = ${JSON.stringify(message.message.split(' ')[1])};
+      const command = ${JSON.stringify(message.message.toLowerCase().split(' '))};
+      function getVar(key, defaultVal = 0) {
+        return eventstorage[${JSON.stringify(eventName)}]?.[key] ?? defaultVal;
+      }
+      function setVar(key, value, save = true) {
+        eventstorage[${JSON.stringify(eventName)}] ??= {};
+        eventstorage[${JSON.stringify(eventName)}][key] = value;
+        if (save == true && ${!useFakeStorage}) {
+          saveEventStorage();
+        }
+      }
+      function getSharedVar(eventname, key, defaultVal = 0) {
+        return eventstorage[eventname]?.[key] ?? defaultVal;
+      }
+      function setSharedVar(eventname, key, value, save = true) {
+        eventstorage[eventname] ??= {};
+        eventstorage[eventname][key] = value;
+      }
+      function chooseRandom(...randArray) {
+        return randArray[Math.floor(Math.random() * randArray.length)];
+      }
+      function chooseRandom(randArray) {
+        return randArray[Math.floor(Math.random() * randArray.length)];
+      }
+      function sanitize(text) {
+        return text.replace(/[\`!@#$%^&*()_+\\-=\\[\\]{};\':"\\\\|,.<>\\/?~]/,"",\'\');
+      }
+      function runEvent(eName) {
+        runCommands(event, eName);
+      }
+      function getModule(moduleName) {
+        return findModule(moduleName);
+      }
+      ${useFakeStorage ? `let eventstorage = ${JSON.stringify(EventService.getEventStorage())};` : ''}
+      ${script.replace(/\n/g, '')}
+    }
+  `;
+  const responseFunct = await eval(responseScript);
+  const response = await responseFunct(
+    ModuleService.findModule,
+    EventService.runCommands,
+    sayInChat,
+  );
+  return response;
+}
+
 export async function verifyResponseScript(
   eventName: string,
   message: StreamMessage,
@@ -165,41 +227,8 @@ export async function verifyResponseScript(
   script: string,
 ) {
   try {
-    let responseScript =
-      'async () => { let event = ' +
-      JSON.stringify(message) +
-      '; let extra = ' +
-      JSON.stringify(extra) +
-      '; function say(txt){sayInChat(txt,' +
-      JSON.stringify(message.platform) +
-      ',' +
-      JSON.stringify(message.channel) +
-      ');}' +
-      '; let toUser = ' +
-      JSON.stringify(message.message.split(' ')[1]) +
-      '' +
-      '; let command = ' +
-      JSON.stringify(message.message.toLowerCase().split(' ')) +
-      '' +
-      '; function getVar(key,defaultVal=0){return eventstorage[' +
-      JSON.stringify(eventName) +
-      ']?.[key]??defaultVal;}' +
-      '; function setVar(key, value, save=true){eventstorage[' +
-      JSON.stringify(eventName) +
-      ']??={}; eventstorage[eventname][key] = value;}' +
-      '; function getSharedVar(eventname, key,defaultVal=0){return eventstorage[eventname]?.[key]??defaultVal;}' +
-      '; function setSharedVar(eventname, key, value, save=true){eventstorage[eventname]??={}; eventstorage[eventname][key] = value;}' +
-      '; function chooseRandom(...randArray){return randArray[Math.floor(Math.random()*randArray.length)];}' +
-      '; function chooseRandom(randArray){return randArray[Math.floor(Math.random()*randArray.length)];}' +
-      '; function sanitize(text){return text.replace(/[`!@#$%^&*()_+\\-=\\[\\]{};\':"\\\\|,.<>\\/?~]/,"",\'\');}' +
-      '; function runEvent(eName){runCommands(event, eName)}' +
-      'let eventstorage = ' +
-      JSON.stringify(EventService.getEventStorage()) +
-      '; ' +
-      script.replace(/\n/g, '') +
-      '}';
-    let responseFunct = await eval(responseScript);
-    let response = await responseFunct();
+    const response = runResponseScript(eventName, message, extra, script, true);
+
     return {
       status: 'ok',
       response: response,

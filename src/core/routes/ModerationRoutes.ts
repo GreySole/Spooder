@@ -273,24 +273,6 @@ export function ModerationRoutes() {
           sub: false,
           broadcaster: false,
         },
-        osc: {
-          enabled: false,
-          handle: 'trigger',
-          address: '/',
-          type: 'single',
-          condition: '==',
-          value: '0',
-          condition2: '==',
-          value2: '0',
-        },
-        twitch: {
-          enabled: false,
-          type: 'redeem',
-          reward: {
-            id: '',
-            override: false,
-          },
-        },
       },
       commands: [
         {

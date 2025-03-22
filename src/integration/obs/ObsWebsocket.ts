@@ -10,6 +10,7 @@ export default class ObsWebsocket {
   constructor() {}
 
   obsClient = new OBSWebSocket();
+  deckClients = [] as string[];
   connected = false;
 
   async connect(host?: string, port?: number, password?: string) {
@@ -41,6 +42,7 @@ export default class ObsWebsocket {
       });
       console.log('OBS CONNECT SUCCESS');
       this.connected = true;
+      obsModule.connected = true;
       sendToTCP('/obs/status/connection', 1);
 
       obsClient.on('StreamStateChanged', (data: KeyedObject) => {
@@ -83,6 +85,10 @@ export default class ObsWebsocket {
       console.log('OBS ERROR', error.message);
       this.connected = false;
     }
+  }
+
+  onOSC(message: OSC.Message) {
+    onObsOscMessage(message);
   }
 
   setRecordingNameToStream() {
@@ -150,14 +156,32 @@ export default class ObsWebsocket {
     this.call('SetInputMute', { inputName: iName, inputMuted: iMute });
   }
 
+  subscribeToInputVolumeMeters(iName: string) {
+    this.deckClients.push(iName);
+    console.log('SUBSCRIBE', this.deckClients);
+    this.obsClient.on('InputVolumeMeters', (data: any) => {
+      OSCService.sendToTCP('/obs/sound/InputVolumeMeters', JSON.stringify(data), false);
+    });
+  }
+
+  unsubscribeToInputVolumeMeters(iName: string) {
+    this.deckClients.splice(this.deckClients.indexOf(iName), 1);
+    console.log('UNSUBSCRIBE', this.deckClients);
+    if (this.deckClients.length == 0) {
+      this.obsClient.off('InputVolumeMeters');
+      OSCService.sendToTCP('/obs/event/InputVolumeMeters', 1, false);
+    }
+  }
+
   async call(name: keyof OBSRequestTypes, data?: any) {
     const obsClient = this.obsClient;
     await this.connect();
-    if (!this.connected) {
-      console.log('OBS Not connected for ', name);
-      return;
-    }
+
     return new Promise((res, rej) => {
+      if (!this.connected) {
+        rej('OBS Not connected');
+        return;
+      }
       if (data) {
         obsClient
           .call(name, data)

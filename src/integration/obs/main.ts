@@ -24,7 +24,7 @@ export default class OBS implements ControlModuleInterface {
   websocket = new ObsWebsocket();
 
   onOSC(message: OSC.Message) {
-    onObsOscMessage(message);
+    this.websocket.onOSC(message);
   }
 
   call(command: string, data: KeyedObject) {
@@ -66,7 +66,7 @@ export default class OBS implements ControlModuleInterface {
 
   connected = this.websocket.connected;
   statusInterval: NodeJS.Timeout | undefined = undefined;
-  deckClients = {};
+  deckClients = [] as any[];
   streamReconnecting = false;
   streamBleeding = false;
   streamBleedCount = 0;
