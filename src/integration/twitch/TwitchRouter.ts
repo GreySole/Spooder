@@ -2,7 +2,7 @@ import { Request, Response, Router } from 'express';
 import Axios, { AxiosError, AxiosResponse } from 'axios';
 import path from 'path';
 import fs from 'fs';
-import STwitch, { twitchLog } from './main.ts';
+import Twitch, { twitchLog } from './main.ts';
 import { eventsubs, scopes } from './TwitchConstants.ts';
 import ConfigService from '../../core/service/ConfigService.ts';
 import { EventService, sayInChat } from '../../core/service/EventService.ts';
@@ -14,14 +14,15 @@ import Discord from '../discord/main.ts';
 
 export default function getTwitchRouters() {
   const sconfig = ConfigService.getConfig();
-  const twitchModule = ModuleService.getStreamModule('twitch') as STwitch;
+  const twitchModule = ModuleService.getStreamModule('twitch') as Twitch;
   const oauth = twitchModule.oauth;
-  const autoLogin = twitchModule.autoLogin;
+  const autoLogin = twitchModule.autoLogin.bind(twitchModule);
 
   const router = Router();
   const publicRouter = Router();
   let expressPort = sconfig.network.host_port;
-  router.get('/authorize', async (req: Request, res: Response) => {
+
+  async function authorizeTwitch(req: Request, res: Response, isBroadcaster?: boolean) {
     twitchLog('Got code');
     let code = req.query.code;
     var twitchParams =
@@ -34,8 +35,10 @@ export default function getTwitchRouters() {
       code +
       '&redirect_uri=http://localhost:' +
       expressPort +
-      '/twitch/authorize' +
+      `/twitch/authorize${isBroadcaster ? '/broadcaster' : '/bot'}` +
       '&response_type=code';
+
+    twitchLog(twitchParams, isBroadcaster);
 
     Axios.post('https://id.twitch.tv/oauth2/token' + twitchParams)
       .then((response: AxiosResponse) => {
@@ -43,12 +46,15 @@ export default function getTwitchRouters() {
         if (typeof response.data.access_token != 'undefined') {
           let token = response.data.access_token;
           let refreshToken = response.data.refresh_token;
-          oauth.token = token;
-          oauth.refreshToken = refreshToken;
-          if (oauth['broadcaster_token'] == null) {
-            oauth['broadcaster_token'] = oauth.token;
-            oauth['broadcaster_refreshToken'] = oauth.refreshToken;
+
+          if (isBroadcaster) {
+            oauth['broadcaster_token'] = token;
+            oauth['broadcaster_refreshToken'] = refreshToken;
+          } else {
+            oauth.token = token;
+            oauth.refreshToken = refreshToken;
           }
+
           fs.writeFile(
             userDir + '/settings/twitch.json',
             JSON.stringify(oauth),
@@ -66,7 +72,9 @@ export default function getTwitchRouters() {
         res.send({ status: 'error', error: error });
         return;
       });
-  });
+  }
+  router.get('/authorize/bot', (req, res) => authorizeTwitch(req, res, false));
+  router.get('/authorize/broadcaster', (req, res) => authorizeTwitch(req, res, true));
 
   router.get('/revoke', async (req, res) => {
     let cid = oauth['client-id'];
@@ -198,22 +206,8 @@ export default function getTwitchRouters() {
       res.send({ error: 'nologin' });
       return;
     }
-    await Axios({
-      url: 'https://api.twitch.tv/helix/eventsub/subscriptions?id=' + req.query.id,
-      method: 'DELETE',
-      headers: {
-        'Client-Id': oauth['client-id'],
-        Authorization: ' Bearer ' + twitchModule.api.appToken,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((response: AxiosResponse) => {
-        res.send(JSON.stringify({ status: 'SUCCESS' }));
-      })
-      .catch((error: AxiosError) => {
-        twitchLog('Eventsub delete error: ', error.message);
-        return;
-      });
+
+    await twitchModule.eventsub.deleteEventSub(req.query.id as string);
   });
 
   router.get('/refresh_eventsubs', async (req, res) => {
@@ -239,23 +233,19 @@ export default function getTwitchRouters() {
       res.send({ error: 'nologin' });
       return;
     }
+    const broadcasterToken = oauth.broadcaster_token;
     let twitchid = req.query.twitchid;
 
     if (twitchid == null) {
       twitchid = twitchModule.api.broadcasterUserID;
     }
 
-    await twitchModule.api.getAppToken();
-    if (twitchModule.api.appToken == '') {
-      twitchLog('NO APP TOKEN');
-      return;
-    }
     await Axios({
       url: 'https://api.twitch.tv/helix/eventsub/subscriptions?user_id=' + twitchid,
       method: 'GET',
       headers: {
         'Client-Id': oauth['client-id'],
-        Authorization: ' Bearer ' + twitchModule.api.appToken,
+        Authorization: ' Bearer ' + broadcasterToken,
         'Content-Type': 'application/json',
       },
     })

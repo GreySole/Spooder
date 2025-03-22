@@ -1,7 +1,7 @@
 import { sayInChat } from 'src/core/service/EventService';
 import ModuleService from 'src/core/service/ModuleService';
 import { KeyedObject } from 'src/Types';
-import STwitch from '../twitch/main';
+import Twitch from '../twitch/main';
 import OBS from './main';
 import OSCService from 'src/core/service/OSCService';
 
@@ -12,7 +12,7 @@ export default async function ObsStatusInterval() {
 
   let objects = ['stream', 'record'];
   let finalStatusObj: KeyedObject = {};
-  const twitch = ModuleService.getStreamModule('twitch') as STwitch;
+  const twitch = ModuleService.getStreamModule('twitch') as Twitch;
   for (let o in objects) {
     if (objects[o] == 'stream') {
       finalStatusObj[objects[o]] = await obsWebsocket.call('GetStreamStatus');

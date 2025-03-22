@@ -1,6 +1,6 @@
 import fs from 'fs';
 import tmi from 'tmi.js';
-import STwitch, { twitchLog } from './main.ts';
+import Twitch, { twitchLog } from './main.ts';
 import ConfigService from '../../core/service/ConfigService.ts';
 import { EventService } from '../../core/service/EventService.ts';
 import { ModerationService } from '../../core/service/ModerationService.ts';
@@ -22,7 +22,7 @@ export default class TwitchChat {
   chat: tmi.Client | undefined = undefined;
 
   getModule = () => {
-    return ModuleService.getStreamModule('twitch') as STwitch;
+    return ModuleService.getStreamModule('twitch') as Twitch;
   };
 
   twitchjsify = (channel: string, tags: KeyedObject, txt: string): StreamMessage => {

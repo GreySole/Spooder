@@ -1,11 +1,9 @@
 import Axios, { AxiosError, AxiosResponse } from 'axios';
-import { Request, Response } from 'express';
 import fs from 'fs';
-import crypto from 'crypto';
 import { scopes } from './TwitchConstants.ts';
 import ModuleService from '../../core/service/ModuleService.ts';
 import { KeyedObject, userDir } from '../../Types.ts';
-import STwitch, { twitchLog } from './main.ts';
+import Twitch, { twitchLog } from './main.ts';
 
 export default class TwitchApi {
   appToken = '';
@@ -15,7 +13,7 @@ export default class TwitchApi {
   broadcasterUserID = '';
 
   getModule = () => {
-    return ModuleService.getStreamModule('twitch') as STwitch;
+    return ModuleService.getStreamModule('twitch') as Twitch;
   };
 
   validateBroadcaster = async (): Promise<KeyedObject> => {
@@ -93,10 +91,11 @@ export default class TwitchApi {
     });
   };
 
-  getBroadcasterID = async () => {
+  getBroadcasterID() {
     const oauth = this.getModule().oauth;
-    if (this.broadcasterUserID == '') {
-      await Axios({
+
+    return new Promise<string>((res, rej) => {
+      Axios({
         url: 'https://api.twitch.tv/helix/users?login=' + this.homeChannel,
         method: 'get',
         headers: {
@@ -105,22 +104,26 @@ export default class TwitchApi {
         },
       })
         .then((response: AxiosResponse) => {
-          this.broadcasterUserID = response.data.data[0].id;
+          res(response.data.data[0].id);
         })
-        .catch((error: AxiosError) => {
+        .catch(async (error: AxiosError) => {
           twitchLog('Broadcaster auth error: ', error.message);
           if (error.response?.status == 401) {
-            this.onAuthenticationFailure();
+            await this.onAuthenticationFailure();
+            res(this.getBroadcasterID());
+          } else {
+            rej(error);
           }
           return;
         });
-    }
-  };
+    });
+  }
 
-  getBotID = async () => {
+  getBotID() {
     const oauth = this.getModule().oauth;
-    if (this.botUserID == '') {
-      await Axios({
+
+    return new Promise<string>((res, rej) => {
+      Axios({
         url: 'https://api.twitch.tv/helix/users?login=' + this.botUsername,
         method: 'get',
         headers: {
@@ -129,17 +132,20 @@ export default class TwitchApi {
         },
       })
         .then((response: AxiosResponse) => {
-          this.botUserID = response.data.data[0].id;
+          res(response.data.data[0].id);
         })
-        .catch((error: AxiosError) => {
+        .catch(async (error: AxiosError) => {
           twitchLog('Bot auth error: ', error.message);
           if (error.response?.status == 401) {
-            this.onAuthenticationFailure();
+            await this.onAuthenticationFailure();
+            res(this.getBotID());
+          } else {
+            rej(error);
           }
           return;
         });
-    }
-  };
+    });
+  }
 
   getAppToken = async () => {
     const oauth = this.getModule().oauth;
@@ -254,20 +260,20 @@ export default class TwitchApi {
   isStreamerLive = async (username: string) => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
+    const broadcasterToken = oauth.broadcaster_token;
     if (loggedIn == false) {
       return;
     }
     if (username == null) {
       username = this.homeChannel;
     }
-    await this.getAppToken();
 
     return new Promise((res, rej) => {
       Axios({
         url: 'https://api.twitch.tv/helix/streams?user_login=' + username,
         method: 'GET',
         headers: {
-          Authorization: 'Bearer ' + this.appToken,
+          Authorization: 'Bearer ' + broadcasterToken,
           'Client-Id': oauth['client-id'],
           user_login: username,
         },
@@ -288,7 +294,7 @@ export default class TwitchApi {
     });
   };
 
-  callBotAPI = (url: string, postBody: KeyedObject, method: string) => {
+  callBotAPI = (url: string, postBody?: KeyedObject, method?: string) => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
@@ -340,7 +346,7 @@ export default class TwitchApi {
     });
   };
 
-  callBroadcasterAPI = (url: string, postBody: KeyedObject, method: string) => {
+  callBroadcasterAPI = (url: string, postBody?: KeyedObject, method?: string) => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
@@ -367,49 +373,10 @@ export default class TwitchApi {
     });
   };
 
-  twitchSigningSecret = process.env.TWITCH_SIGNING_SECRET;
-
-  verifyTwitchSignature = (req: Request, res: Response, buf: Buffer) => {
-    const messageId = req.header('Twitch-Eventsub-Message-Id');
-    const timestamp = req.header('Twitch-Eventsub-Message-Timestamp');
-    const messageSignature = req.header('Twitch-Eventsub-Message-Signature');
-    const time = Math.floor(new Date().getTime() / 1000);
-    twitchLog(`Message ${messageId} Signature: `, messageSignature);
-
-    if (!messageId || !timestamp) {
-      twitchLog('Verification Failed: Headers not set properly', messageId, timestamp);
-      return;
-    }
-
-    if (Math.abs(time - parseInt(timestamp)) > 600) {
-      // needs to be < 10 minutes
-      twitchLog(`Verification Failed: timestamp > 10 minutes. Message Id: ${messageId}.`);
-      throw new Error('Ignore this request.');
-    }
-
-    if (!this.twitchSigningSecret) {
-      twitchLog(`Twitch signing secret is empty.`);
-      throw new Error('Twitch signing secret is empty.');
-    }
-
-    const computedSignature =
-      'sha256=' +
-      crypto
-        .createHmac('sha256', this.twitchSigningSecret)
-        .update(messageId + timestamp + buf)
-        .digest('hex');
-    twitchLog(`Message ${messageId} Computed Signature: `, computedSignature);
-
-    if (messageSignature !== computedSignature) {
-      throw new Error('Invalid signature.');
-    } else {
-      twitchLog('Verification successful');
-    }
-  };
-
   getChannelInfo = async (channel?: string | undefined): Promise<KeyedObject> => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
+    const broadcasterToken = oauth.broadcaster_token;
     return new Promise((res, rej) => {
       if (loggedIn == false) {
         rej({ error: 'Not logged in' });
@@ -424,7 +391,7 @@ export default class TwitchApi {
         url: 'https://api.twitch.tv/helix/channels?broadcaster_id=' + channel,
         method: 'GET',
         headers: {
-          Authorization: 'Bearer ' + this.appToken,
+          Authorization: 'Bearer ' + broadcasterToken,
           'Client-Id': oauth['client-id'],
         },
       })
@@ -444,19 +411,20 @@ export default class TwitchApi {
   getUserInfoById = (id: string): Promise<KeyedObject> => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
+    const broadcasterToken = oauth.broadcaster_token;
     return new Promise(async (res, rej) => {
       if (loggedIn == false) {
-        rej({ error: 'Not logged in' });
+        rej({ message: 'Not logged in' });
         return;
       }
       if (id === undefined) {
-        rej({ error: 'getUserInfoById error: No id' });
+        rej({ message: 'getUserInfoById error: No id' });
       }
       Axios('https://api.twitch.tv/helix/users?id=' + id, {
         method: 'GET',
         headers: {
           'Client-Id': oauth['client-id'],
-          Authorization: ' Bearer ' + this.appToken,
+          Authorization: ' Bearer ' + broadcasterToken,
           'Content-Type': 'application/json',
         },
       })
@@ -464,7 +432,7 @@ export default class TwitchApi {
           if (data != null) {
             res(data.data);
           } else {
-            res({ error: 'getUserInfo error: No data' });
+            res({ message: 'getUserInfo error: No data' });
           }
         })
         .catch((error: AxiosError) => {
@@ -476,6 +444,7 @@ export default class TwitchApi {
   getUserInfo = (user?: string | undefined): Promise<KeyedObject> => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
+    const broadcasterToken = oauth.broadcaster_token;
     return new Promise(async (res, rej) => {
       if (loggedIn == false) {
         rej({ error: 'Not logged in' });
@@ -488,7 +457,7 @@ export default class TwitchApi {
         method: 'GET',
         headers: {
           'Client-Id': oauth['client-id'],
-          Authorization: ' Bearer ' + this.appToken,
+          Authorization: ' Bearer ' + broadcasterToken,
           'Content-Type': 'application/json',
         },
       })

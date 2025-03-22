@@ -61,13 +61,14 @@ if (initMode) {
   ConfigService.refreshFiles();
   new ShareService();
   new WebService();
-  new ModuleService(() => {
+  new ModuleService(async () => {
     new EventService();
     new ModerationService();
     new OSCService();
     new MonitorService();
     new UserService();
     new PluginService();
+    await ModuleService.autoLoginModules();
     ShareService.refreshShareUsers();
   });
 }

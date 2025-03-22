@@ -1,4 +1,4 @@
-import STwitch from '../../integration/twitch/main.ts';
+import Twitch from '../../integration/twitch/main.ts';
 import { KeyedObject } from '../../Types.ts';
 import ConfigService from '../service/ConfigService.ts';
 import ModuleService from '../service/ModuleService.ts';
@@ -20,7 +20,7 @@ export function PublicRoutes() {
 
     //Only Twitch supported currently
     //TODO: Make this work on an Interface level
-    const twitch = ModuleService.getStreamModule('twitch') as STwitch;
+    const twitch = ModuleService.getStreamModule('twitch') as Twitch;
     res.send({
       botName: twitch.api.botUsername,
       homeChannel: twitch.api.homeChannel,

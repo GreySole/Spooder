@@ -39,7 +39,8 @@
     "systeminformation": "^5.23.5",
     "tmi.js": "^1.8.5",
     "typescript": "^5.5.3",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.5",

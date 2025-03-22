@@ -1,11 +1,8 @@
-import e, { Router } from 'express';
 import { StreamModuleInterface } from '../interface/StreamModuleInterface.ts';
 import TwitchApi from './TwitchApi.ts';
 import TwitchChat from './TwitchChat.ts';
-import { eventsubs } from './TwitchConstants.ts';
 import TwitchEventSub from './TwitchEventSub.ts';
 import { logEffects } from '../../core/Logging.ts';
-import ConfigService from '../../core/service/ConfigService.ts';
 import { EventService } from '../../core/service/EventService.ts';
 import { userDir, KeyedObject } from '../../Types.ts';
 import UserService from '../../core/service/UserService.ts';
@@ -17,7 +14,7 @@ export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
 }
 
-export default class STwitch implements StreamModuleInterface {
+export default class Twitch implements StreamModuleInterface {
   constructor() {
     if (fs.existsSync(userDir + '/settings/eventsub.json')) {
       twitchLog(
@@ -155,10 +152,8 @@ export default class STwitch implements StreamModuleInterface {
         }
       }
 
-      await this.api.getBotID();
-      await this.api.getBroadcasterID();
-      await this.api.getAppToken();
       this.chat.runChat();
+      this.eventsub.refreshEventSubs();
       this.loggedIn = true;
       res('success');
     });
@@ -176,97 +171,7 @@ export default class STwitch implements StreamModuleInterface {
   }
 
   async onEventFileSaved() {
-    const events = EventService.getEvents();
-    const sconfig = ConfigService.getConfig();
-    let subs = await this.eventsub.getEventSubs();
-
-    let usedEventsubs = [];
-    let redeemSet = false;
-    for (let e in events) {
-      if (
-        eventsubs[events[e].triggers.twitch.type] != null ||
-        events[e].triggers.twitch.type == 'redeem'
-      ) {
-        let subtype = events[e].triggers.twitch.type;
-        let bid = this.api.broadcasterUserID;
-        if (subtype == 'redeem') {
-          usedEventsubs.push('channel.channel_points_custom_reward_redemption.add');
-          usedEventsubs.push('channel.channel_points_custom_reward_redemption.update');
-        } else {
-          usedEventsubs.push(subtype);
-        }
-
-        let needsRefresh = true;
-
-        if (subtype == 'redeem') {
-          for (let s in subs.data) {
-            if (
-              subs.data[s].type == 'channel.channel_points_custom_reward_redemption.add' ||
-              subs.data[s].type == 'channel.channel_points_custom_reward_redemption.update'
-            ) {
-              if (
-                subs.data[s].transport.callback ==
-                sconfig.network.external_http_url + '/webhooks/eventsub'
-              ) {
-                needsRefresh = false;
-              } else {
-                twitchLog('Refreshing ' + subs.data[s].type);
-                await this.eventsub.deleteEventSub(subs.data[s].id);
-              }
-            }
-          }
-
-          if (needsRefresh == true && redeemSet == false) {
-            twitchLog('Setting up redeems');
-            await this.eventsub.initEventSub(
-              'channel.channel_points_custom_reward_redemption.add',
-              bid,
-            );
-            await this.eventsub.initEventSub(
-              'channel.channel_points_custom_reward_redemption.update',
-              bid,
-            );
-            redeemSet = true;
-          }
-        } else {
-          for (let s in subs.data) {
-            if (subs.data[s].type == subtype) {
-              if (
-                subs.data[s].transport.callback ==
-                sconfig.network.external_http_url + '/webhooks/eventsub'
-              ) {
-                needsRefresh = false;
-              } else {
-                twitchLog('Refreshing ' + subs.data[s].type);
-                await this.eventsub.deleteEventSub(subs.data[s].id);
-              }
-            }
-          }
-
-          if (needsRefresh == true) {
-            if (subtype == 'channel.raid') {
-              await this.eventsub.initEventSub(subtype + '-send', bid);
-              await this.eventsub.initEventSub(subtype + '-receive', bid);
-            } else {
-              await this.eventsub.initEventSub(subtype, bid);
-            }
-          }
-        }
-      }
-    }
-
-    for (let s in subs.data) {
-      if (
-        subs.data[s].condition.broadcaster_user_id == this.api.broadcasterUserID ||
-        subs.data[s].condition.to_broadcaster_user_id == this.api.broadcasterUserID ||
-        subs.data[s].condition.from_broadcaster_user_id == this.api.broadcasterUserID
-      ) {
-        if (!usedEventsubs.includes(subs.data[s].type)) {
-          twitchLog('Deleting sub no longer used: ' + subs.data[s].type);
-          await this.eventsub.deleteEventSub(subs.data[s].id);
-        }
-      }
-    }
+    this.eventsub.refreshEventSubs();
   }
 
   userVerify(username: string) {

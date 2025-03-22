@@ -75,6 +75,7 @@ export default class ShareService {
       for (const s in shares[l].streamPlatforms) {
         const streamModule = ModuleService.findModule(s) as StreamModuleInterface;
         if (streamModule) {
+          console.log('Refreshing share user info for', shares[l].streamPlatforms[s].userId);
           const newInfo = await streamModule.refreshShareUserInfo(
             shares[l].streamPlatforms[s].userId,
           );

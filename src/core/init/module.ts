@@ -8,7 +8,7 @@ import PluginService from '../service/PluginService.ts';
 import { WebService } from '../service/WebService.ts';
 import ShareService from '../service/ShareService.ts';
 import Discord from '../../integration/discord/main.ts';
-import STwitch from '../../integration/twitch/main.ts';
+import Twitch from '../../integration/twitch/main.ts';
 
 const nets = networkInterfaces();
 

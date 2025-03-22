@@ -105,12 +105,10 @@ export default class ModuleService {
         ModuleService.instance.activeStreams[name] =
           new newModule.default() as StreamModuleInterface;
         WebService.registerModuleApi(ModuleService.instance.activeStreams[name]);
-        await ModuleService.instance.activeStreams[name].autoLogin();
       } else if (platformType === PlatformType.community) {
         ModuleService.instance.activeCommunities[name] =
           new newModule.default() as CommunityModuleInterface;
         WebService.registerModuleApi(ModuleService.instance.activeCommunities[name]);
-        await ModuleService.instance.activeCommunities[name].autoLogin();
       } else if (platformType === PlatformType.control) {
         ModuleService.instance.activeControls[name] =
           new newModule.default() as ControlModuleInterface;
@@ -118,5 +116,14 @@ export default class ModuleService {
       }
       res(undefined);
     }).catch((e) => console.log('Module load error', e.message));
+  }
+
+  static async autoLoginModules() {
+    for (let s in ModuleService.instance.activeStreams) {
+      await ModuleService.instance.activeStreams[s].autoLogin();
+    }
+    for (let s in ModuleService.instance.activeCommunities) {
+      await ModuleService.instance.activeCommunities[s].autoLogin();
+    }
   }
 }
