@@ -2,6 +2,19 @@ import crypto, { verify } from 'crypto';
 import { KeyedObject, userDir, PermissionType } from '../../Types.ts';
 import fs from 'fs';
 import { spooderLog } from '../Logging.ts';
+import { v4 } from 'uuid';
+
+interface TrustedUsers {
+  user_names: KeyedObject;
+  display_names: KeyedObject;
+  pending: KeyedObject;
+  permissions: KeyedObject;
+}
+
+interface UserFile {
+  trusted_users: TrustedUsers;
+  trusted_users_pw: KeyedObject;
+}
 
 export default class UserService {
   private static instance: UserService;
@@ -22,13 +35,9 @@ export default class UserService {
           encoding: 'utf8',
         });
 
-        const parsedUsers = JSON.parse(userFile);
-        if (!parsedUsers.trusted_users.verify) {
+        const parsedUsers: UserFile = JSON.parse(userFile);
+        if (!parsedUsers.trusted_users.pending) {
           spooderLog('Upgrading users file');
-          const newVerifyObj = {
-            twitch: parsedUsers.trusted_users.twitch,
-            discord: parsedUsers.trusted_users.discord,
-          };
 
           const newUsernames = {} as KeyedObject;
           const newDisplayNames = {} as KeyedObject;
@@ -38,13 +47,13 @@ export default class UserService {
           }
 
           parsedUsers.trusted_users = {
-            usernames: newUsernames,
-            displaynames: newDisplayNames,
-            verify: newVerifyObj,
+            user_names: newUsernames,
+            display_names: newDisplayNames,
+            pending: {},
             permissions: parsedUsers.trusted_users.permissions,
-          };
+          } as TrustedUsers;
         }
-        UserService.instance.users = parsedUsers;
+        UserService.instance.users = parsedUsers as UserFile;
       }
     } catch (e: any) {
       console.log('Users file error', e);
@@ -52,15 +61,11 @@ export default class UserService {
   }
 
   users = {
-    trusted_users: {} as KeyedObject,
+    trusted_users: {} as TrustedUsers,
     trusted_users_pw: {} as KeyedObject,
   };
 
   activeUsers = {} as KeyedObject;
-  activeMods = {} as KeyedObject;
-
-  pendingUsers = {} as KeyedObject;
-  pendingMods = {} as KeyedObject;
 
   private saveUsers() {
     fs.writeFileSync(userDir + '/settings/users.json', JSON.stringify(UserService.instance.users));
@@ -70,8 +75,8 @@ export default class UserService {
     const users = UserService.instance.users;
     const hasPassword = {} as KeyedObject;
 
-    for (let u in users.trusted_users.userId) {
-      const userId = users.trusted_users.userId[u];
+    for (let u in Object.values(users.trusted_users.user_names)) {
+      const userId = users.trusted_users.user_names[u];
       hasPassword[userId] = users.trusted_users_pw[userId] !== undefined;
     }
 
@@ -81,10 +86,54 @@ export default class UserService {
     };
   }
 
-  static deletePassword(username: string) {
-    const userId = UserService.instance.users.trusted_users.userId[username];
-    delete UserService.instance.users.trusted_users_pw[userId];
-    fs.writeFileSync(userDir + '/settings/users.json', JSON.stringify(UserService.instance.users));
+  static setTrustedUsers(newUsers: TrustedUsers) {
+    UserService.instance.users.trusted_users = newUsers;
+    UserService.instance.saveUsers();
+  }
+
+  private generateInviteCode() {
+    return crypto.randomBytes(16).toString('hex');
+  }
+
+  static createUser(permissions: PermissionType[]) {
+    const code = UserService.instance.generateInviteCode();
+    const userId = v4();
+    UserService.instance.users.trusted_users.pending[code] = {
+      userId: userId,
+      permissions,
+    };
+    UserService.instance.saveUsers();
+  }
+
+  static verifyUserInviteCode(registerInfo: KeyedObject, code: string) {
+    const pendingUser = UserService.instance.users.trusted_users.pending[code];
+    if (pendingUser == null) {
+      return false;
+    }
+
+    const userId = pendingUser.userId;
+    const newPermissions = pendingUser.permissions;
+    const newUserName = registerInfo.username;
+    const newDisplayName = registerInfo.display_name;
+    const newPassword = registerInfo.password;
+
+    UserService.instance.users.trusted_users.user_names[newUserName] = userId;
+    UserService.instance.users.trusted_users.display_names[userId] = newDisplayName;
+    UserService.instance.users.trusted_users.permissions[userId] = newPermissions;
+    UserService.instance.saveUsers();
+    UserService.instance.setPassword(userId, newPassword, false);
+    delete UserService.instance.users.trusted_users.pending[code];
+
+    return true;
+  }
+
+  static resetPassword(username: string) {
+    const userId = UserService.instance.users.trusted_users.user_names[username];
+    const newPassword = crypto.randomBytes(8).toString('hex');
+    UserService.instance.setPassword(userId, newPassword, true);
+    UserService.instance.saveUsers();
+
+    return newPassword;
   }
 
   static getActiveUsers() {
@@ -105,53 +154,37 @@ export default class UserService {
 
   static checkPermission(username: string, permissionTypes: PermissionType[]) {
     return permissionTypes.every((permissionType) =>
-      UserService.instance.users.trusted_users.permission[username].includes(permissionType),
+      UserService.instance.users.trusted_users.permissions[username].includes(permissionType),
     );
   }
 
-  static setPendingUser(type: string, username: string) {
-    UserService.instance.pendingUsers[username] = {
-      vtype: type,
-      sUsername: username,
-      verified: false,
-    };
-  }
-
-  static getPendingUser(username: string) {
-    return UserService.instance.pendingUsers[username];
-  }
-
-  static cancelPendingUser(username: string) {
-    delete UserService.instance.pendingUsers[username];
-  }
-
-  static verifyUser(username: string) {
-    UserService.instance.pendingUsers[username].verified = true;
-  }
-
-  static isVerified(username: string) {
-    return UserService.instance.pendingUsers[username].verified;
+  static cancelPendingUser(code: string) {
+    delete UserService.instance.users.trusted_users.pending[code];
   }
 
   static hasPassword(username: string) {
-    return UserService.instance.users.trusted_users_pw[username] !== undefined;
+    return UserService.instance.users.trusted_users_pw[username].temporary;
   }
 
-  static setPassword(username: string, newPassword: string) {
-    if (UserService.isVerified(username)) {
-      delete UserService.instance.pendingUsers[username];
-      const newSalt = crypto.randomBytes(16).toString('hex');
-      const newHash = crypto.pbkdf2Sync(newPassword, newSalt, 1000, 64, `sha512`).toString('hex');
-      UserService.instance.users.trusted_users_pw[username] = {
-        salt: newSalt,
-        hash: newHash,
-      };
-    }
-    fs.writeFileSync(userDir + '/settings/users.json', JSON.stringify(UserService.instance.users));
+  static isPasswordTemporary(username: string) {
+    const userId = UserService.instance.users.trusted_users.user_names[username];
+    return UserService.instance.users.trusted_users_pw[userId].temporary;
+  }
+
+  private setPassword(userId: string, newPassword: string, temporary: boolean) {
+    const newSalt = crypto.randomBytes(16).toString('hex');
+    const newHash = crypto.pbkdf2Sync(newPassword, newSalt, 1000, 64, `sha512`).toString('hex');
+    UserService.instance.users.trusted_users_pw[userId] = {
+      salt: newSalt,
+      hash: newHash,
+      temporary: temporary,
+    };
+
+    UserService.instance.saveUsers();
   }
 
   static matchPassword(username: string, password: string) {
-    const userId = UserService.instance.users.trusted_users.usernames[username];
+    const userId = UserService.instance.users.trusted_users.user_names[username];
     const pwInfo = UserService.instance.users.trusted_users_pw[userId];
     return (
       crypto.pbkdf2Sync(password, pwInfo.salt, 1000, 64, `sha512`).toString(`hex`) === pwInfo.hash
@@ -160,11 +193,11 @@ export default class UserService {
 
   static changeUsername(oldUsername: string, newUsername: string) {
     const users = UserService.instance.users.trusted_users;
-    if (users.usernames[newUsername] !== undefined) {
+    if (users.user_names[newUsername] !== undefined) {
       return false;
     }
 
-    users.usernames[newUsername] = users.usernames[oldUsername];
-    delete users.usernames[oldUsername];
+    users.user_names[newUsername] = users.user_names[oldUsername];
+    delete users.user_names[oldUsername];
   }
 }

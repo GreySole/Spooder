@@ -11,6 +11,7 @@ import { EventService } from '../service/EventService.ts';
 import OSCService from '../service/OSCService.ts';
 import PluginService from '../service/PluginService.ts';
 import multer from 'multer';
+import { WebService } from '../service/WebService.ts';
 
 const pluginApi = {
   local: {
@@ -106,7 +107,7 @@ export function PluginRoutes() {
 
     if (isLocal(req)) {
       oscInfo = {
-        host: sconfig.network.external_tcp_url,
+        host: WebService.getPublicOSCUrl(),
         name: pluginName,
         port: null,
         settings: pluginSettings,
@@ -115,7 +116,7 @@ export function PluginRoutes() {
       oscInfo = {
         host: sconfig.network.host,
         name: pluginName,
-        port: sconfig.network.osc_tcp_port,
+        port: sconfig.network.osc.osc_tcp_port,
         settings: pluginSettings,
       };
     }
@@ -628,7 +629,7 @@ export function PluginRoutes() {
     plugin = {
       settings: JSON.parse(thisPlugin),
       assets: thisPluginAssets,
-      udpClients: sconfig.network['udp_clients'],
+      udpClients: OSCService.getUdpClients(),
       icon: thisPluginIcon,
     };
 

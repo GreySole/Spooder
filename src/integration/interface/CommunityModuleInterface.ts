@@ -5,6 +5,7 @@ export interface CommunityModuleInterface {
   getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
   autoLogin: () => void;
   sendDM: (userId: string, message: string) => void;
+  getResponseHandlers: () => KeyedObject;
   lastMessage: KeyedObject;
   onExternalNetworkChanged: () => void;
 }

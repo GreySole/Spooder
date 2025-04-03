@@ -6,11 +6,14 @@ import os from 'os';
 import OSC from 'osc-js';
 import { createRequire } from 'module';
 import PluginService from './core/service/PluginService.ts';
+import OSCService from './core/service/OSCService.ts';
 
 interface PluginModule {
   streamModules: KeyedObject;
   communityModules: KeyedObject;
   controlModules: KeyedObject;
+  sendToTCP: (address: string, oscValue: any, log?: boolean) => void;
+  sendToUDP: (address: string, oscValue: any, log?: boolean) => void;
   settings?: KeyedObject;
   onSettings?: (settings: KeyedObject) => void;
   onLoad?: () => void;
@@ -100,6 +103,8 @@ export default class Plugin {
         this.pluginModule.registerExtra = (key: string, value: any) => {
           this.extra[key] = value;
         };
+        this.pluginModule.sendToTCP = OSCService.sendToTCP;
+        this.pluginModule.sendToUDP = OSCService.sendToUDP;
 
         if (fs.existsSync(userDir + '/plugins/' + pluginDirName + '/settings.json')) {
           this.pluginModule.settings = JSON.parse(

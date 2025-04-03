@@ -7,7 +7,7 @@
   "scripts": {
     "start": "tsx spooder.ts",
     "dev": "node spooder.ts -d",
-    "init": "node spooder.ts -i",
+    "init": "tsx spooder.ts -i",
     "safe": "node spooder.ts -e",
     "start-noautologin": "node spooder.ts -a",
     "build": "tsc"

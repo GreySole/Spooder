@@ -2,17 +2,16 @@ import ngrok from 'ngrok';
 import { webLog } from 'src/core/Logging.ts';
 import ConfigService from '../ConfigService.ts';
 import ModuleService from '../ModuleService.ts';
+import { WebService } from '../WebService.ts';
 
 export default class Ngrok {
   public async start() {
     const sconfig = ConfigService.getConfig();
-    if (ConfigService.getFlags().safeMode == true) {
-      return;
-    }
 
     try {
       await ngrok.connect({
-        authtoken: sconfig.network.ngrokauthtoken,
+        authtoken: sconfig.network.ngrok.authtoken,
+        subdomain: sconfig.network.ngrok.subdomain,
       });
     } catch (e) {
       console.log('Error creating Ngrok tunnel', e);
@@ -48,7 +47,7 @@ export default class Ngrok {
     let oscURL = await napi.startTunnel({
       name: 'modui',
       proto: 'http',
-      addr: sconfig.network.osc_tcp_port,
+      addr: sconfig.network.osc.osc_tcp_port,
     });
 
     tunnels = await napi.listTunnels();
@@ -59,19 +58,11 @@ export default class Ngrok {
       }
     }
 
-    sconfig.network.external_http_url = httpURL.public_url;
-    sconfig.network.external_tcp_url = oscURL.public_url;
+    WebService.setPublicHTTPUrl(httpURL.public_url);
+    WebService.setPublicOSCUrl(oscURL.public_url);
 
-    const streamModules = ModuleService.getStreamModules();
-    const communityModules = ModuleService.getCommunityModules();
-
-    for (let s in streamModules) {
-      streamModules[s].onNgrokStart();
-    }
-
-    for (let c in communityModules) {
-      communityModules[c].onNgrokStart();
-    }
+    ModuleService.onExternalNetworkChanged();
+    webLog('Ngrok Tunnels Ready');
   }
 
   public stop() {

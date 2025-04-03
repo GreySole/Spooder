@@ -1,6 +1,5 @@
-import { NextFunction, Request, Response, Router } from 'express';
+import { json, NextFunction, Request, Response, Router } from 'express';
 import express from 'express';
-import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { userDir, frontendDir } from '../../Types.ts';
@@ -20,32 +19,10 @@ import { PublicRoutes } from '../routes/PublicRoutes.ts';
 import { ControlModuleInterface } from 'src/integration/interface/ControlModuleInterface.ts';
 import { ServerRoutes } from '../routes/ServerRoutes.ts';
 import Ngrok from './webui/Ngrok.ts';
+import MotherwolfTunnel from './webui/Motherwolf.ts';
 import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
 import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
 import multer from 'multer';
-
-const nets = networkInterfaces();
-const results = Object.create({});
-var suggestedNet: string | undefined = undefined;
-
-if (nets !== undefined) {
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name]!) {
-      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
-      // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
-      const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4;
-      if (net.family === familyV4Value && !net.internal) {
-        if (!results[name]) {
-          results[name] = [];
-        }
-        results[name].push(net.address);
-        if (net.address.startsWith('192')) {
-          suggestedNet = net.address;
-        }
-      }
-    }
-  }
-}
 
 export class WebService {
   private static instance: WebService;
@@ -62,6 +39,10 @@ export class WebService {
   publicRouter: Router | undefined = undefined;
 
   private ngrok: Ngrok = new Ngrok();
+  private motherwolf: MotherwolfTunnel = new MotherwolfTunnel();
+
+  private publicHTTPUrl: string | undefined = undefined;
+  private publicOSCUrl: string | undefined = undefined;
 
   startServer(initMode: boolean) {
     let expressPort = null;
@@ -118,8 +99,6 @@ export class WebService {
       expressPort = 3000;
       console.log('STARTING SERVER IN INIT MODE');
       router.use('/', express.static(frontendDir + '/init/build'));
-      router.use(bodyParser.urlencoded({ extended: true }));
-      router.use(bodyParser.json({ limit: '100mb' }));
       router.use('/restore_settings', fileUpload.single('file'));
       router.use('/restore_plugins', fileUpload.single('file'));
     } else {
@@ -134,6 +113,7 @@ export class WebService {
       router.use('/assets', express.static(userDir + '/web/assets'));
       router.use('/icons', express.static(userDir + '/web/icons'));
 
+      router.use(json());
       router.use(cookieParser());
 
       publicRouter.use('/', express.static(frontendDir + '/public/build'));
@@ -146,8 +126,7 @@ export class WebService {
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));
       publicRouter.use('/icons', express.static(userDir + '/web/icons'));
 
-      publicRouter.use(bodyParser.urlencoded({ extended: true }));
-      publicRouter.use(bodyParser.json());
+      publicRouter.use(json());
       publicRouter.use(cookieParser());
 
       const systemRoutes = ServerRoutes();
@@ -198,22 +177,96 @@ export class WebService {
 
     app.listen(expressPort);
 
+    const nets = WebService.getNetworkInterfaces();
+    let suggestedNet = 'localhost';
+    for (const name in nets) {
+      if (nets[name].startsWith('192.168.')) {
+        suggestedNet = nets[name];
+        break;
+      }
+    }
+
     webLog(
       'Spooder Web UI is running at',
       'http://localhost:' + expressPort + ' and http://' + suggestedNet + ':' + expressPort,
     );
 
-    if (sconfig.network.externalhandle == 'ngrok' && sconfig.network.ngrokauthtoken != '') {
+    if (sconfig.network.externalhandle == 'ngrok' && sconfig.network.ngrok.authtoken != '') {
       this.ngrok.start();
+    } else if (
+      sconfig.network.externalhandle == 'motherwolf' &&
+      sconfig.network.motherwolf.token != ''
+    ) {
+      this.motherwolf.startTunnels();
     }
   }
 
-  static startNgrok() {
-    this.instance.ngrok.start();
+  static getNetworkInterfaces() {
+    const nets = networkInterfaces();
+    const results = Object.create({});
+
+    if (nets !== undefined) {
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]!) {
+          // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+          // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
+          const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4;
+          if (net.family === familyV4Value && !net.internal) {
+            if (!results[name]) {
+              results[name] = [];
+            }
+
+            results[name] = net.address;
+          }
+        }
+      }
+      return results;
+    }
   }
 
-  static stopNgrok() {
-    this.instance.ngrok.stop();
+  static getPublicHTTPUrl() {
+    return this.instance.publicHTTPUrl;
+  }
+
+  static setPublicHTTPUrl(url: string | undefined) {
+    this.instance.publicHTTPUrl = url;
+  }
+
+  static getPublicOSCUrl() {
+    return this.instance.publicOSCUrl;
+  }
+
+  static setPublicOSCUrl(url: string | undefined) {
+    this.instance.publicOSCUrl = url;
+  }
+
+  static startPublicHosting() {
+    const config = ConfigService.getConfig();
+    if (config.network.externalhandle == 'disabled') {
+      return;
+    } else if (config.network.externalhandle == 'ngrok') {
+      this.instance.ngrok.start();
+    } else if (config.network.externalhandle == 'motherwolf') {
+      this.instance.ngrok.stop();
+    } else if (config.network.externalhandle == 'manual') {
+      this.setPublicHTTPUrl(config.network.manual.http_url);
+      this.setPublicOSCUrl(config.network.manual.tcp_url);
+      webLog('Public hosting is set to manual mode');
+    }
+  }
+
+  static stopPublicHosting() {
+    const config = ConfigService.getConfig();
+    this.setPublicHTTPUrl(undefined);
+    this.setPublicOSCUrl(undefined);
+    if (config.network.externalhandle == 'disabled') {
+      return;
+    } else if (config.network.externalhandle == 'ngrok') {
+      this.instance.ngrok.stop();
+    } else if (config.network.externalhandle == 'motherwolf') {
+      this.instance.motherwolf.stopTunnels();
+    } else if (config.network.externalhandle == 'manual') {
+    }
   }
 
   static registerModuleApi(

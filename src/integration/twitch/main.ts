@@ -9,6 +9,7 @@ import UserService from '../../core/service/UserService.ts';
 import fs from 'fs';
 import getTwitchRouters from './TwitchRouter.ts';
 import ShareService from 'src/core/service/ShareService.ts';
+import getResponseHandlers from './TwitchResponseHandlers.ts';
 
 export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
@@ -90,7 +91,10 @@ export default class Twitch implements StreamModuleInterface {
   getChannelInfo = this.api.getChannelInfo;
   getUserInfo = this.api.getUserInfo;
   getChannels = this.api.getChannels;
+  joinChannel = this.chat.joinChannel;
+  leaveChannel = this.chat.leaveChannel;
   refreshEventSubs = this.eventsub.refreshEventSubs;
+  getResponseHandlers = getResponseHandlers;
   refreshShareUserInfo(id: string): Promise<KeyedObject> {
     return new Promise((res, rej) => {
       this.api

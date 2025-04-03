@@ -172,7 +172,7 @@ export default function getTwitchRouters() {
       return;
     }
 
-    await twitchModule.api.getBroadcasterID();
+    await twitchModule.api.getBroadcasterId();
     await twitchModule.api.validateBroadcaster();
 
     if (twitchModule.api.broadcasterUserID == '') {
@@ -333,7 +333,7 @@ export default function getTwitchRouters() {
     }
 
     if (type == 'channel.raid') {
-      await twitchModule.api.getBroadcasterID();
+      await twitchModule.api.getBroadcasterId();
       if (event.to_broadcaster_user_id == twitchModule.api.broadcasterUserID) {
         event.raidType = 'receive';
         event.username = event.from_broadcaster_user_login;

@@ -91,12 +91,12 @@ export default class TwitchApi {
     });
   };
 
-  getBroadcasterID() {
+  getUserId(channelName: string) {
     const oauth = this.getModule().oauth;
 
     return new Promise<string>((res, rej) => {
       Axios({
-        url: 'https://api.twitch.tv/helix/users?login=' + this.homeChannel,
+        url: 'https://api.twitch.tv/helix/users?login=' + channelName,
         method: 'get',
         headers: {
           Authorization: 'Bearer ' + oauth.token,
@@ -110,7 +110,7 @@ export default class TwitchApi {
           twitchLog('Broadcaster auth error: ', error.message);
           if (error.response?.status == 401) {
             await this.onAuthenticationFailure();
-            res(this.getBroadcasterID());
+            res(this.getUserId(channelName));
           } else {
             rej(error);
           }
@@ -119,31 +119,20 @@ export default class TwitchApi {
     });
   }
 
-  getBotID() {
-    const oauth = this.getModule().oauth;
-
+  getBroadcasterId() {
     return new Promise<string>((res, rej) => {
-      Axios({
-        url: 'https://api.twitch.tv/helix/users?login=' + this.botUsername,
-        method: 'get',
-        headers: {
-          Authorization: 'Bearer ' + oauth.token,
-          'Client-Id': oauth['client-id'],
-        },
-      })
-        .then((response: AxiosResponse) => {
-          res(response.data.data[0].id);
-        })
-        .catch(async (error: AxiosError) => {
-          twitchLog('Bot auth error: ', error.message);
-          if (error.response?.status == 401) {
-            await this.onAuthenticationFailure();
-            res(this.getBotID());
-          } else {
-            rej(error);
-          }
-          return;
-        });
+      this.getUserId(this.homeChannel).then((id) => {
+        this.broadcasterUserID = id;
+        res(id);
+      });
+    });
+  }
+
+  getBotId() {
+    return new Promise<string>((res, rej) => {
+      this.getUserId(this.botUsername).then((id) => {
+        res(id);
+      });
     });
   }
 
@@ -257,18 +246,14 @@ export default class TwitchApi {
     });
   };
 
-  isStreamerLive = async (username: string) => {
+  getStreamInfo(username: string) {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
     if (loggedIn == false) {
       return;
     }
-    if (username == null) {
-      username = this.homeChannel;
-    }
-
-    return new Promise((res, rej) => {
+    return new Promise<KeyedObject>((res, rej) => {
       Axios({
         url: 'https://api.twitch.tv/helix/streams?user_login=' + username,
         method: 'GET',
@@ -279,19 +264,29 @@ export default class TwitchApi {
         },
       })
         .then((response: AxiosResponse) => {
-          twitchLog(
-            response.data.data[0] != null ? username + ' IS LIVE' : username + ' IS NOT LIVE',
-          );
           if (response.data.data[0] != null) {
-            res(true);
+            res(response.data.data[0]);
           } else {
-            res(false);
+            res({ error: `No data for ${username}. They is not live.` });
           }
         })
         .catch((error: AxiosError) => {
           twitchLog('isStreamerLive fail', error.message);
         });
     });
+  }
+
+  isStreamerLive = async (username: string) => {
+    const loggedIn = this.getModule().loggedIn;
+    if (loggedIn == false) {
+      return;
+    }
+    if (username == null) {
+      username = this.homeChannel;
+    }
+
+    const streamInfo = await this.getStreamInfo(username);
+    return streamInfo?.error ? false : true;
   };
 
   callBotAPI = (url: string, postBody?: KeyedObject, method?: string) => {

@@ -27,7 +27,7 @@ export default function EventDiscordCommand(
         false,
       );
 
-      sayInChat(response, streamMessage.platform, streamMessage.channel);
+      sayInChat(response.response, streamMessage.platform, streamMessage.channel);
       discord.sendToChannel(eCommand.guild, eCommand.channel, response);
     } catch (e) {
       spooderLog('Failed to run response script. Check the event settings to verify it.', e);

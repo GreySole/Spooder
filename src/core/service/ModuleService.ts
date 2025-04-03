@@ -1,7 +1,7 @@
 import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface.ts';
 import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface.ts';
 import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
-import { CoreModule, PlatformType } from '../../Types.ts';
+import { CoreModule, KeyedObject, PlatformType } from '../../Types.ts';
 import ConfigService from './ConfigService.ts';
 import { WebService } from './WebService.ts';
 
@@ -78,6 +78,18 @@ export default class ModuleService {
     }
 
     return undefined;
+  }
+
+  static getResponseHandlers() {
+    const masterHandlers = {} as KeyedObject;
+    for (let s in ModuleService.instance.activeStreams) {
+      masterHandlers[s] = ModuleService.instance.activeStreams[s].getResponseHandlers();
+    }
+    for (let s in ModuleService.instance.activeCommunities) {
+      masterHandlers[s] = ModuleService.instance.activeCommunities[s].getResponseHandlers();
+    }
+
+    return masterHandlers;
   }
 
   static onExternalNetworkChanged() {

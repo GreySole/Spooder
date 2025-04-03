@@ -167,7 +167,7 @@ export async function runResponseScript(
   useFakeStorage = false,
 ) {
   const responseScript = String.raw`
-    async (findModule, runCommands, sayInChat) => {
+    async (runCommands, sayInChat, modules, saveEventStorage) => {
       const event = ${JSON.stringify(message)};
       const extra = ${JSON.stringify(extra)};
       function say(txt) {
@@ -191,6 +191,9 @@ export async function runResponseScript(
       function setSharedVar(eventname, key, value, save = true) {
         eventstorage[eventname] ??= {};
         eventstorage[eventname][key] = value;
+        if (save == true && ${!useFakeStorage}) {
+          saveEventStorage();
+        }
       }
       function chooseRandom(...randArray) {
         return randArray[Math.floor(Math.random() * randArray.length)];
@@ -199,25 +202,35 @@ export async function runResponseScript(
         return randArray[Math.floor(Math.random() * randArray.length)];
       }
       function sanitize(text) {
-        return text.replace(/[\`!@#$%^&*()_+\\-=\\[\\]{};\':"\\\\|,.<>\\/?~]/,"",\'\');
+        return text.replace(/[\`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g, '');
       }
       function runEvent(eName) {
         runCommands(event, eName);
       }
-      function getModule(moduleName) {
-        return findModule(moduleName);
-      }
+        console.log("RUNNING SCRIPT");
       ${useFakeStorage ? `let eventstorage = ${JSON.stringify(EventService.getEventStorage())};` : ''}
-      ${script.replace(/\n/g, '')}
+      console.log("BEGIN SCRIPT");
+      ${script}
     }
   `;
-  const responseFunct = await eval(responseScript);
-  const response = await responseFunct(
-    ModuleService.findModule,
-    EventService.runCommands,
-    sayInChat,
-  );
-  return response;
+
+  const responseHandlers = ModuleService.getResponseHandlers();
+  const responseHandlerFunctions = {} as KeyedObject;
+  Object.entries(responseHandlers).forEach(([key, value]) => {
+    responseHandlerFunctions[key] = value.functions;
+  });
+  try {
+    const responseFunct = await eval(responseScript);
+    const response = await responseFunct(
+      EventService.runCommands,
+      sayInChat,
+      responseHandlerFunctions,
+      EventService.saveEventStorage,
+    );
+    return { status: 'ok', response };
+  } catch (e: any) {
+    return { status: 'error', response: typeof e == 'object' ? e.message : e };
+  }
 }
 
 export async function verifyResponseScript(
@@ -226,17 +239,5 @@ export async function verifyResponseScript(
   extra: string[],
   script: string,
 ) {
-  try {
-    const response = runResponseScript(eventName, message, extra, script, true);
-
-    return {
-      status: 'ok',
-      response: response,
-    };
-  } catch (e: any) {
-    return {
-      status: 'error',
-      response: e.stack != null ? e.stack : e,
-    };
-  }
+  return await runResponseScript(eventName, message, extra, script, true);
 }

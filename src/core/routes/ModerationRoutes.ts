@@ -15,6 +15,7 @@ import {
   checkResponseTrigger,
   verifyResponseScript,
 } from '../util/ResponseUtil.ts';
+import { WebService } from '../service/WebService.ts';
 
 export function ModerationRoutes() {
   const storage = multer.memoryStorage();
@@ -76,8 +77,6 @@ export function ModerationRoutes() {
     }
 
     const themes = ConfigService.getThemes();
-    const defaultTheme = themes.webui;
-    const modTheme = themes.modui[moduser];
 
     let oscURL = null;
     let oscPort = null;
@@ -85,9 +84,9 @@ export function ModerationRoutes() {
 
     if (isLocalHost) {
       oscURL = sconfig.network.host;
-      oscPort = sconfig.network.osc_tcp_port;
+      oscPort = sconfig.network.osc.osc_tcp_port;
     } else {
-      oscURL = sconfig.network.external_tcp_url;
+      oscURL = WebService.getPublicOSCUrl();
     }
 
     const modlocks = ModerationService.getModlocks();

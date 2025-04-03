@@ -30,6 +30,9 @@ export default class Discord implements CommunityModuleInterface {
   getRouters = getDiscordRouters;
 
   onExternalNetworkChanged() {}
+  getResponseHandlers() {
+    return { descriptions: [], functions: {} };
+  }
 
   config = fs.existsSync(userDir + '/settings/discord.json')
     ? JSON.parse(fs.readFileSync(userDir + '/settings/discord.json', { encoding: 'utf-8' }))
@@ -69,43 +72,6 @@ export default class Discord implements CommunityModuleInterface {
         discordLog('No Discord token. You can set this in the Config tab.');
       }
     });
-  }
-
-  async userVerify(username: string) {
-    const users = UserService.getUsers();
-    if (Object.keys(users['trusted_users'].discord).includes(username)) {
-      let sUsername = username;
-
-      UserService.setPendingUser('discord', sUsername.toLowerCase());
-
-      const response = (await this.sendInteraction(users.trusted_users.verify.discord[username], {
-        content: "Hi, it looks like you're creating a login for me. If this is you, click confirm.",
-        components: [this.makeConfirmCancelButtons('Yes :D', 'No D:')],
-        fetchReply: true,
-      })) as any;
-
-      const collectorFilter = (i: any) => i.user.id === users['trusted_users'].discord[username];
-
-      try {
-        const confirmation = await response.awaitMessageComponent({
-          filter: collectorFilter,
-          time: 60000,
-        });
-        if (confirmation.customId === 'confirm') {
-          UserService.verifyUser(username);
-          await confirmation.update({ content: 'Verified!', components: [] });
-        } else if (confirmation.customId === 'cancel') {
-          UserService.cancelPendingUser(username);
-          await confirmation.update({ content: 'Declined!', components: [] });
-        }
-      } catch (e) {
-        console.log(e);
-        UserService.cancelPendingUser(username);
-      }
-      return { status: 'found' };
-    } else {
-      return { status: 'notfound' };
-    }
   }
 
   async getCommands() {
@@ -360,8 +326,8 @@ export default class Discord implements CommunityModuleInterface {
         };
       }, initialValue);
     };
-    let guildCache = this.client?.guilds.cache;
-    let guilds = convertArrayToObject(
+    const guildCache = this.client?.guilds.cache;
+    const guilds = convertArrayToObject(
       guildCache?.map((g) => {
         let channels = g.channels.cache.map((c) => {
           return {
@@ -398,9 +364,9 @@ export default class Discord implements CommunityModuleInterface {
   }
 
   sendToChannel(server: string, channel: string, message: KeyedObject) {
-    let client = this.client;
-    let targetServer = client?.guilds.cache.get(server);
-    let targetChannel = targetServer?.channels.cache.get(channel);
+    const client = this.client;
+    const targetServer = client?.guilds.cache.get(server);
+    const targetChannel = targetServer?.channels.cache.get(channel);
     if (targetChannel?.isTextBased) {
       (targetChannel as TextChannel).send(message);
     }

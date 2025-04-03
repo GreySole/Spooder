@@ -58,7 +58,8 @@ const initMode = ConfigService.getFlags().initMode;
 if (initMode) {
   new ModuleService(() => {});
 } else {
-  ConfigService.refreshFiles();
+  ConfigService.refreshConfig();
+  ConfigService.refreshThemes();
   new ShareService();
   new WebService();
   new ModuleService(async () => {

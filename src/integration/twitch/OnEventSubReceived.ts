@@ -52,7 +52,7 @@ export default async function OnEventSubReceived(data: KeyedObject) {
   }
 
   if (type == 'channel.raid') {
-    await twitchModule.api.getBroadcasterID();
+    await twitchModule.api.getBroadcasterId();
     if (event.to_broadcaster_user_id == twitchModule.api.broadcasterUserID) {
       event.raidType = 'receive';
       event.username = event.from_broadcaster_user_login;
@@ -63,45 +63,6 @@ export default async function OnEventSubReceived(data: KeyedObject) {
       event.displayName = event.to_broadcaster_user_name;
     }
   }
-
-  /*if (type == 'stream.online') {
-    twitchModule.startReoccuringMessage();
-    let onlineEvent = twitchModule.getStreamOnlineEvent();
-    const discord = ModuleService.getCommunityModule('discord') as Discord;
-    if (!discord) {
-      return;
-    }
-    if (onlineEvent != null) {
-      if (onlineEvent.special?.discord?.enabled == true) {
-        if (discord.loggedIn == true) {
-          let channelInfo: any = await twitchModule.api.getChannelInfo(
-            twitchModule.api.broadcasterUserID,
-          );
-          let onlineMessage =
-            '@everyone ' +
-            channelInfo[0].broadcaster_name +
-            ' is live: ' +
-            channelInfo[0].title +
-            '!';
-          let watchButton = discord.makeLinkButton(
-            'Watch',
-            'https://twitch.tv/' + twitchModule.api.homeChannel,
-          );
-          discord.sendToChannel(
-            onlineEvent.special.discord.guild,
-            onlineEvent.special.discord.channel,
-            { content: onlineMessage, components: [watchButton] },
-          );
-        }
-      }
-    }
-  }*/
-
-  /*if (type == 'stream.offline') {
-    if (twitchModule.streamChatInterval != null) {
-      clearInterval(twitchModule.streamChatInterval);
-    }
-  }*/
 
   if (type == 'channel.channel_points_custom_reward_redemption.add') {
     const modlocks = ModerationService.getModlocks();
@@ -157,7 +118,6 @@ export default async function OnEventSubReceived(data: KeyedObject) {
             event.eventType = 'twitch-redeem';
             EventService.runCommands(event, e, 'event');
           } else {
-            //rejectChannelPointReward(event.reward.id, event.id);
             twitchModule.chat.sayInChat(event.reward.title + ' is locked on my end. Sorry.');
             return;
           }

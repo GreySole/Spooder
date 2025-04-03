@@ -4,6 +4,7 @@ import ConfigService from '../service/ConfigService.ts';
 import PluginService from '../service/PluginService.ts';
 import ShareService from '../service/ShareService.ts';
 import { EventService } from '../service/EventService.ts';
+import OSCService from '../service/OSCService.ts';
 
 export function ServerRoutes() {
   const router = express.Router();
@@ -17,8 +18,8 @@ export function ServerRoutes() {
 
     res.send({
       host: sconfig.network.host,
-      port: sconfig.network.osc_tcp_port,
-      udp_clients: sconfig.network['udp_clients'],
+      port: sconfig.network.osc.osc_tcp_port,
+      udp_clients: OSCService.getUdpClients(),
       plugins: Object.keys(activePlugins),
       themes: themes,
       activeShares: activeShares,

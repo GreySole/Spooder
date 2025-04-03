@@ -48,28 +48,11 @@ export default class OSCService {
     fs.writeFileSync(userDir + '/settings/osc-tunnels.json', JSON.stringify(newTunnels), 'utf-8');
   }
 
-  private oscUDP = new OSC({
-    plugin: new OSC.DatagramPlugin({
-      type: 'udp4',
-      open: {
-        host: ConfigService.getConfig().network.host,
-        port: ConfigService.getConfig().network.osc_udp_port,
-        exclusive: false,
-      },
-      send: {
-        port: ConfigService.getConfig().network.osc_udp_port,
-      },
-    } as KeyedObject),
-  });
+  private oscUDP!: OSC;
 
-  private oscTCP = new OSC({
-    plugin: new OSC.WebsocketServerPlugin({
-      host: '0.0.0.0',
-      port: ConfigService.getConfig().network.osc_tcp_port,
-    }),
-  });
+  private oscTCP!: OSC;
 
-  private udpClients = ConfigService.getConfig().network.udp_clients;
+  private udpClients = ConfigService.getConfig().network.osc.udp_clients;
 
   static getUdpClients() {
     return OSCService.instance.udpClients;
@@ -97,7 +80,7 @@ export default class OSCService {
   };
 
   static sendToUDP = (dest: string, address: string, oscValue: any) => {
-    var udpClients = ConfigService.getConfig().network.udp_clients;
+    const udpClients = OSCService.getUdpClients();
 
     let valueType = 'i';
     if (typeof oscValue == 'string') {
@@ -259,11 +242,11 @@ export default class OSCService {
       type: 'udp4',
       open: {
         host: sconfig.network.host,
-        port: sconfig.network.osc_udp_port,
+        port: sconfig.network.osc.osc_udp_port,
         exclusive: false,
       },
       send: {
-        port: sconfig.network.osc_udp_port,
+        port: sconfig.network.osc.osc_udp_port,
       },
     };
 
@@ -416,7 +399,7 @@ export default class OSCService {
     this.oscTCP = new OSC({
       plugin: new OSC.WebsocketServerPlugin({
         host: '0.0.0.0',
-        port: sconfig.network.osc_tcp_port,
+        port: sconfig.network.osc.osc_tcp_port,
       }),
     });
     var oscTCP = this.oscTCP;
@@ -469,7 +452,6 @@ export default class OSCService {
         }
       }
 
-      //Tell the overlay it's connected
       if (message.address.endsWith('/connect')) {
         oscTCP.send(new OSC.Message(message.address.split('/')[1] + '/connect/success', 1.0));
         return;

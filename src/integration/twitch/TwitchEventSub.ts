@@ -34,7 +34,7 @@ export default class TwitchEventSub {
       } else if (data.metadata.message_type === 'session_keepalive') {
         // Do nothing
       } else if (data.metadata.message_type === 'session_reconnect') {
-        twitchLog('Eventsub reconnect requested');
+        twitchLog('Eventsub reconnect requested', data.payload);
         this.websocket?.close();
         this.websocket = new WebSocket(data.payload.session.reconnect_url);
         this.setupWebSocketHandlers();
@@ -81,8 +81,8 @@ export default class TwitchEventSub {
   refreshEventSubs = async () => {
     const events = EventService.getEvents();
     const api = this.getModule().api;
-    const broadcasterId = await api.getBroadcasterID();
-    const botId = await api.getBotID();
+    const broadcasterId = await api.getBroadcasterId();
+    const botId = await api.getBotId();
     const subs = await this.getEventSubs();
 
     twitchLog(subs);
@@ -168,7 +168,7 @@ export default class TwitchEventSub {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
-    const broadcasterUserID = broadcasterId ?? (await this.getModule().api.getBroadcasterID());
+    const broadcasterUserID = broadcasterId ?? (await this.getModule().api.getBroadcasterId());
     if (loggedIn == false) {
       return;
     }

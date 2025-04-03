@@ -20,36 +20,22 @@ export function ConfigRoutes() {
   });
 
   router.post('/save_config', async (req, res) => {
-    let statusMsg = '';
-    if (sconfig.network.externalhandle == 'ngrok' && req.body.network.externalhandle != 'ngrok') {
-      WebService.stopNgrok();
-      statusMsg += ' (Ngrok stopped)';
-    } else if (
-      sconfig.network.externalhandle != 'ngrok' &&
-      req.body.network.externalhandle == 'ngrok'
-    ) {
-      sconfig.network.ngrokauthtoken = req.body.network.ngrokauthtoken;
-      await WebService.startNgrok();
-      statusMsg += ' (Ngrok started)';
-    }
-
-    if (sconfig.network.externalhandle != req.body.network.externalhandle) {
-      sconfig.network.externalhandle = req.body.network.externalhandle;
-      sconfig.network.external_http_url = req.body.network.external_http_url;
-      sconfig.network.ngrokauthtoken = sconfig.network.ngrokauthtoken;
-    }
-
     ConfigService.saveConfig(req.body);
 
-    res.send({ status: 'CONFIG SAVED ' + statusMsg });
-    webLog('SAVED THE CONFIG');
+    res.send({ status: 'ok' });
+    webLog('Config Saved!');
+
+    webLog('Restarting Public Hosting');
+    WebService.stopPublicHosting();
+    setTimeout(() => {
+      WebService.startPublicHosting();
+    }, 2000);
   });
 
   router.post('/save_custom_spooder', async (req: Request, res: Response) => {
-    let statusMsg = 'Spooder Saved!';
     ConfigService.saveThemes(req.body);
-    res.send({ status: statusMsg });
-    webLog('SAVED THE SPOODER');
+    res.send({ status: 'ok' });
+    webLog('Spooder Saved!');
   });
 
   router.get('/osc_tunnels', async (req: Request, res: Response) => {
@@ -59,13 +45,12 @@ export function ConfigRoutes() {
 
   router.post('/save_osc_tunnels', async (req: Request, res: Response) => {
     OSCService.saveTunnels(req.body);
-    res.send({ status: 'SAVE SUCCESS' });
-    webLog('SAVED THE TUNNELS');
+    res.send({ status: 'ok' });
+    webLog('Tunnels Saved!');
   });
 
   router.get('/udp_clients', (req: Request, res: Response) => {
     const udpClients = OSCService.getUdpClients();
-
     res.send(udpClients);
   });
 

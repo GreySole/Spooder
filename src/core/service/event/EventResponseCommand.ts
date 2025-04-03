@@ -22,7 +22,11 @@ export default function EventResponseCommand(
         false,
       );
 
-      sayInChat(response, streamMessage.platform, streamMessage.channel);
+      if (response.status === 'error') {
+        throw new Error(response.response);
+      }
+
+      sayInChat(response.response, streamMessage.platform, streamMessage.channel);
     } catch (e) {
       spooderLog('Failed to run response script. Check the event settings to verify it.', e);
     }

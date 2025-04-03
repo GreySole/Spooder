@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { spooderLog } from '../Logging.ts';
 import { userDir, KeyedObject } from '../../Types.ts';
+import { config } from 'process';
 
 export interface ConfigBotSection {
   owner_name: string;
@@ -13,13 +14,32 @@ export interface ConfigBotSection {
 export interface ConfigNetworkSection {
   host: string;
   host_port: number;
-  externalhandle: 'manual' | 'ngrok';
-  ngrokauthtoken: string;
-  external_http_url: string;
-  external_tcp_url: string;
+  osc: OSCConfig;
+  externalhandle: 'manual' | 'ngrok' | 'motherwolf' | 'disabled';
+  ngrok: NgrokConfig;
+  motherwolf: MotherwolfConfig;
+  manual: ManualConfig;
+}
+
+interface OSCConfig {
   udp_clients: KeyedObject;
   osc_udp_port: number;
   osc_tcp_port: number;
+}
+
+interface NgrokConfig {
+  authtoken: string;
+  subdomain: string;
+}
+
+interface MotherwolfConfig {
+  token: string;
+  subdomain: string;
+}
+
+interface ManualConfig {
+  http_url: string;
+  tcp_url: string;
 }
 
 export interface ConfigFile {
@@ -51,51 +71,58 @@ export default class ConfigService {
     noAutoLogin: process.argv.length > 2 ? process.argv[2] == '-a' : false,
   };
 
-  private settings = {
-    config: {
-      bot: { owner_name: '', bot_name: '', help_command: '', introduction: '' },
-      network: { host_port: 3000 },
-    } as ConfigFile,
-    themes: {
-      webui: {},
-      modui: {},
-      spooderpet: {
-        parts: {
-          bigeyeleft: 'o',
-          bigeyeright: 'o',
-          littleeyeleft: 'º',
-          littleeyeright: 'º',
-          fangleft: ' ',
-          fangright: ' ',
-          mouth: 'ω',
-          bodyleft: '(',
-          bodyright: ')',
-          shortlegleft: '/\\',
-          longlegleft: '/╲',
-          shortlegright: '/\\',
-          longlegright: '╱\\',
-        },
-        colors: {
-          bigeyeleft: '#FFFFFF',
-          bigeyeright: '#FFFFFF',
-          littleeyeleft: '#FFFFFF',
-          littleeyeright: '#FFFFFF',
-          fangleft: '#FFFFFF',
-          fangright: '#FFFFFF',
-          mouth: '#FFFFFF',
-          bodyleft: '#FFFFFF',
-          bodyright: '#FFFFFF',
-          shortlegleft: '#FFFFFF',
-          shortlegright: '#FFFFFF',
-          longlegleft: '#FFFFFF',
-          longlegright: '#FFFFFF',
-        },
+  private config: ConfigFile = {
+    bot: { owner_name: '', bot_name: '', help_command: '', introduction: '' },
+    network: {
+      host: '',
+      host_port: 3000,
+      osc: { udp_clients: {}, osc_udp_port: 9000, osc_tcp_port: 3333 },
+      externalhandle: 'disabled',
+      ngrok: { authtoken: '', subdomain: '' },
+      motherwolf: { token: '', subdomain: '' },
+      manual: { http_url: '', tcp_url: '' },
+    },
+  };
+
+  private themes = {
+    webui: {},
+    modui: {},
+    spooderpet: {
+      parts: {
+        bigeyeleft: 'o',
+        bigeyeright: 'o',
+        littleeyeleft: 'º',
+        littleeyeright: 'º',
+        fangleft: ' ',
+        fangright: ' ',
+        mouth: 'ω',
+        bodyleft: '(',
+        bodyright: ')',
+        shortlegleft: '/\\',
+        longlegleft: '/╲',
+        shortlegright: '/\\',
+        longlegright: '╱\\',
+      },
+      colors: {
+        bigeyeleft: '#FFFFFF',
+        bigeyeright: '#FFFFFF',
+        littleeyeleft: '#FFFFFF',
+        littleeyeright: '#FFFFFF',
+        fangleft: '#FFFFFF',
+        fangright: '#FFFFFF',
+        mouth: '#FFFFFF',
+        bodyleft: '#FFFFFF',
+        bodyright: '#FFFFFF',
+        shortlegleft: '#FFFFFF',
+        shortlegright: '#FFFFFF',
+        longlegleft: '#FFFFFF',
+        longlegright: '#FFFFFF',
       },
     },
   } as KeyedObject;
 
   static getConfig(): ConfigFile {
-    return ConfigService.instance.settings.config;
+    return ConfigService.instance.config;
   }
 
   static saveConfig(newConfig: KeyedObject) {
@@ -110,120 +137,91 @@ export default class ConfigService {
       );
     }
 
-    ConfigService.refreshFiles();
+    ConfigService.refreshConfig();
   }
 
   static getThemes() {
-    return ConfigService.instance.settings.themes;
+    return ConfigService.instance.themes;
   }
 
   static saveThemes(newThemes: KeyedObject) {
     fs.writeFileSync(userDir + '/settings/themes.json', JSON.stringify(newThemes), 'utf-8');
 
-    ConfigService.refreshFiles();
+    ConfigService.refreshThemes();
   }
 
   static getFlags() {
     return ConfigService.instance.flags;
   }
 
-  static refreshFiles = () => {
-    let settingsFiles = {
-      config: 'config.json',
-      themes: 'themes.json',
-    } as KeyedObject;
+  static refreshConfig() {
+    try {
+      const configFile = fs.readFileSync(userDir + '/settings/config.json', {
+        encoding: 'utf8',
+      });
+      const configObj = JSON.parse(configFile);
+      if (configObj.network.osc_udp_port) {
+        spooderLog('Upgrading config file to new format');
 
-    for (let s in settingsFiles) {
-      try {
-        const settingsFile = fs.readFileSync(userDir + '/settings/' + settingsFiles[s], {
-          encoding: 'utf8',
-        });
+        const newNetworkConfig = {
+          host: configObj.network.host,
+          host_port: configObj.network.host_port,
+          externalhandle: configObj.network.externalhandle,
+          osc: {
+            udp_clients: configObj.network.udp_clients,
+            osc_udp_port: configObj.network.osc_udp_port,
+            osc_tcp_port: configObj.network.osc_tcp_port,
+          },
+          ngrok: {
+            authtoken: configObj.network.ngrokauthtoken,
+            subdomain: configObj.network.mw_subdomain,
+          },
+          motherwolf: {
+            token: configObj.network.mw_token,
+            subdomain: configObj.network.mw_subdomain,
+          },
+          manual: {
+            http_url: configObj.network.external_http_url,
+            tcp_url: configObj.network.external_tcp_url,
+          },
+        };
 
-        const settingsObj = JSON.parse(settingsFile);
+        const newConfig = {
+          bot: configObj.bot as ConfigBotSection,
+          network: newNetworkConfig as ConfigNetworkSection,
+        };
 
-        if (s === 'themes') {
-          if (settingsObj.spooderpet.parts == null) {
-            const parts = {} as KeyedObject;
-            for (let t in settingsObj.spooderpet) {
-              if (t === 'colors') {
-                continue;
-              }
-              parts[t] = JSON.parse(JSON.stringify(settingsObj.spooderpet[t]));
-              delete settingsObj.spooderpet[t];
-            }
-
-            settingsObj.spooderpet.parts = parts;
-          }
-          console.log('THEMES', settingsObj);
-        }
-
-        ConfigService.instance.settings[s] = settingsObj;
-        spooderLog('Got ' + settingsFiles[s]);
-      } catch (e: any) {
-        if (e.code == 'ENOENT') {
-          let newFile = {} as any;
-          if (s == 'users') {
-            newFile = {
-              trusted_users: {
-                permissions: {},
-                twitch: {},
-                discord: {},
-              },
-              trusted_users_pw: {},
-            };
-          } else if (s == 'themes') {
-            newFile = {
-              webui: {},
-              spooderpet: {
-                parts: {
-                  bigeyeleft: 'o',
-                  bigeyeright: 'o',
-                  littleeyeleft: 'º',
-                  littleeyeright: 'º',
-                  fangleft: ' ',
-                  fangright: ' ',
-                  mouth: 'ω',
-                  bodyleft: '(',
-                  bodyright: ')',
-                  shortlegleft: '/\\',
-                  longlegleft: '/╲',
-                  shortlegright: '/\\',
-                  longlegright: '╱\\',
-                },
-                colors: {
-                  bigeyeleft: '#FFFFFF',
-                  bigeyeright: '#FFFFFF',
-                  littleeyeleft: '#FFFFFF',
-                  littleeyeright: '#FFFFFF',
-                  fangleft: '#FFFFFF',
-                  fangright: '#FFFFFF',
-                  mouth: '#FFFFFF',
-                  bodyleft: '#FFFFFF',
-                  bodyright: '#FFFFFF',
-                  shortlegleft: '#FFFFFF',
-                  shortlegright: '#FFFFFF',
-                  longlegleft: '#FFFFFF',
-                  longlegright: '#FFFFFF',
-                },
-              },
-              modui: {},
-            };
-          }
-
-          let newFileString = JSON.stringify(newFile);
-          if (newFileString == '') {
-            newFileString = '{}';
-          }
-
-          ConfigService.instance.settings[s] = JSON.parse(newFileString);
-          fs.writeFile(userDir + '/settings/' + settingsFiles[s], newFileString, 'utf-8', () => {
-            spooderLog(settingsFiles[s] + ' not found. New file created.', s);
-          });
-        } else {
-          console.error(e);
-          console.error("There's a problem with the " + s + ' file.');
-        }
+        ConfigService.instance.config = newConfig;
+      } else {
+        ConfigService.instance.config = configObj;
       }
+    } catch (e) {
+      console.error(e);
     }
-  };
+  }
+
+  static refreshThemes() {
+    try {
+      const themesFile = fs.readFileSync(userDir + '/settings/themes.json', {
+        encoding: 'utf8',
+      });
+      const themesObj = JSON.parse(themesFile);
+      if (themesObj.spooderpet.parts == null) {
+        spooderLog('Upgrading themes file to new format');
+        const parts = {} as KeyedObject;
+        for (let t in themesObj.spooderpet) {
+          if (t === 'colors') {
+            continue;
+          }
+          parts[t] = JSON.parse(JSON.stringify(themesObj.spooderpet[t]));
+          delete themesObj.spooderpet[t];
+        }
+
+        themesObj.spooderpet.parts = parts;
+      }
+      ConfigService.instance.themes = themesObj;
+    } catch (e) {
+      console.error(e);
+    }
+  }
 }
