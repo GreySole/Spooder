@@ -3,10 +3,10 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { userDir, frontendDir } from '../../Types.ts';
-import { webLog } from '../Logging.ts';
+import { logToFile, webLog } from '../Logging.ts';
 import ConfigService from './ConfigService.ts';
 import { ConfigRoutes } from '../routes/ConfigRoutes.ts';
-import { isLocal, PluginRoutes } from '../routes/PluginRoutes.ts';
+import { PluginRoutes } from '../routes/PluginRoutes.ts';
 import fs from 'fs-extra';
 import { networkInterfaces } from 'os';
 import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
@@ -23,6 +23,36 @@ import MotherwolfTunnel from './webui/Motherwolf.ts';
 import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
 import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
 import multer from 'multer';
+
+export function isLocal(req: Request) {
+  if (req.headers['x-forwarded-for'] === undefined) {
+    //console.log('isLocal?', req.headers);
+    return false;
+  }
+
+  const remoteAddress = Array.isArray(req.headers['x-forwarded-for'])
+    ? (req.headers['x-forwarded-for'][0] as string)
+    : (req.headers['x-forwarded-for'] as string);
+
+  if (remoteAddress == null) {
+    console.log('Remote adderess null', req.ip);
+    return false;
+  }
+  const isLocal =
+    remoteAddress.startsWith('192.168.') ||
+    remoteAddress.startsWith('10.') ||
+    remoteAddress == '1' ||
+    req.headers.host?.startsWith('localhost');
+
+  if (isLocal == false) {
+    logToFile(
+      'external_connections',
+      `IP: ${remoteAddress} Path: ${req.path} Cookie: ${req.cookies?.access != null ? 'PRESENT' : 'NONE'}`,
+      300,
+    );
+  }
+  return isLocal;
+}
 
 export class WebService {
   private static instance: WebService;
@@ -190,15 +220,6 @@ export class WebService {
       'Spooder Web UI is running at',
       'http://localhost:' + expressPort + ' and http://' + suggestedNet + ':' + expressPort,
     );
-
-    if (sconfig.network.externalhandle == 'ngrok' && sconfig.network.ngrok.authtoken != '') {
-      this.ngrok.start();
-    } else if (
-      sconfig.network.externalhandle == 'motherwolf' &&
-      sconfig.network.motherwolf.token != ''
-    ) {
-      this.motherwolf.startTunnels();
-    }
   }
 
   static getNetworkInterfaces() {
@@ -247,7 +268,7 @@ export class WebService {
     } else if (config.network.externalhandle == 'ngrok') {
       this.instance.ngrok.start();
     } else if (config.network.externalhandle == 'motherwolf') {
-      this.instance.ngrok.stop();
+      this.instance.motherwolf.startTunnels();
     } else if (config.network.externalhandle == 'manual') {
       this.setPublicHTTPUrl(config.network.manual.http_url);
       this.setPublicOSCUrl(config.network.manual.tcp_url);

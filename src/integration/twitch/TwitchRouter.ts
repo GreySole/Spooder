@@ -11,6 +11,7 @@ import ModuleService from '../../core/service/ModuleService.ts';
 import ShareService from '../../core/service/ShareService.ts';
 import { userDir, KeyedObject } from '../../Types.ts';
 import Discord from '../discord/main.ts';
+import UserService from 'src/core/service/UserService.ts';
 
 export default function getTwitchRouters() {
   const sconfig = ConfigService.getConfig();
@@ -276,6 +277,59 @@ export default function getTwitchRouters() {
       .catch((error: AxiosError) => {
         twitchLog('Chat restart error: ', error.message);
       });
+  });
+
+  async function validateViewer(token: string, req: Request, res: Response) {
+    const response = await twitchModule.api.validateViewer(token);
+    if (response.status === 'ok') {
+      twitchModule.activeViewers[token] = response.data;
+      const expirationTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      res.cookie('public_module', 'twitch', {
+        expires: expirationTime,
+        httpOnly: true,
+        secure: true,
+      });
+      res.cookie('access_token', token, { expires: expirationTime, httpOnly: true, secure: true });
+      UserService.registerActiveViewer(
+        { username: response.data.username, userId: response.data.user_id },
+        'twitch',
+        token,
+        expirationTime.getTime(),
+      );
+      const userInfo = await twitchModule.api.getUserInfo(response.data.username);
+      if (userInfo.error) {
+        res.send({ status: 'error', message: userInfo.error });
+        return;
+      }
+      res.send({ status: 'ok', data: userInfo });
+    } else {
+      res.send({ status: 'error', message: response.message });
+    }
+  }
+
+  publicRouter.post('/viewer/validate', async (req: Request, res: Response) => {
+    if (req.cookies.access_token && req.cookies.public_module) {
+      const token = req.cookies.access_token;
+      const platform = req.cookies.public_module;
+      const userIdentity = UserService.getActiveViewerFromCookie(platform, token);
+
+      if (userIdentity) {
+        const userInfo = await twitchModule.api.getUserInfo(userIdentity.username);
+        res.send({ status: 'ok', data: userInfo });
+        return;
+      } else {
+        validateViewer(token, req, res);
+        return;
+      }
+    }
+
+    if (!req.body.access_token) {
+      res.send({ status: 'error', message: 'Unauthorized' });
+      return;
+    }
+
+    const token = req.body.access_token;
+    validateViewer(token, req, res);
   });
 
   router.get('/eventsub_types', (req, res) => {

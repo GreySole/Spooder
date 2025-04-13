@@ -22,9 +22,19 @@ export interface ConfigNetworkSection {
 }
 
 interface OSCConfig {
-  udp_clients: KeyedObject;
+  udp_servers: UdpServerObject;
   osc_udp_port: number;
   osc_tcp_port: number;
+}
+
+interface UdpServerObject {
+  [key: string]: UdpClient;
+}
+
+interface UdpClient {
+  name: string;
+  ip: string;
+  port: number;
 }
 
 interface NgrokConfig {
@@ -72,11 +82,11 @@ export default class ConfigService {
   };
 
   private config: ConfigFile = {
-    bot: { owner_name: '', bot_name: '', help_command: '', introduction: '' },
+    bot: { owner_name: '', bot_name: '', help_command: '!help', introduction: "I'm a Spooder!" },
     network: {
       host: '',
       host_port: 3000,
-      osc: { udp_clients: {}, osc_udp_port: 9000, osc_tcp_port: 3333 },
+      osc: { udp_servers: {}, osc_udp_port: 9000, osc_tcp_port: 3333 },
       externalhandle: 'disabled',
       ngrok: { authtoken: '', subdomain: '' },
       motherwolf: { token: '', subdomain: '' },
@@ -168,7 +178,7 @@ export default class ConfigService {
           host_port: configObj.network.host_port,
           externalhandle: configObj.network.externalhandle,
           osc: {
-            udp_clients: configObj.network.udp_clients,
+            udp_servers: configObj.network.udp_clients,
             osc_udp_port: configObj.network.osc_udp_port,
             osc_tcp_port: configObj.network.osc_tcp_port,
           },

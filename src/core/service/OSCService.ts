@@ -52,10 +52,10 @@ export default class OSCService {
 
   private oscTCP!: OSC;
 
-  private udpClients = ConfigService.getConfig().network.osc.udp_clients;
+  private udpServers = ConfigService.getConfig().network.osc.udp_servers;
 
-  static getUdpClients() {
-    return OSCService.instance.udpClients;
+  static getUdpServers() {
+    return OSCService.instance.udpServers;
   }
 
   static sendToTCP = (address: string, oscValue: any, log?: boolean) => {
@@ -80,7 +80,7 @@ export default class OSCService {
   };
 
   static sendToUDP = (dest: string, address: string, oscValue: any) => {
-    const udpClients = OSCService.getUdpClients();
+    const udpServers = OSCService.getUdpServers();
 
     let valueType = 'i';
     if (typeof oscValue == 'string') {
@@ -134,10 +134,10 @@ export default class OSCService {
       } else {
         allMessage = new OSC.Message(address, oscValue);
       }
-      for (let u in udpClients) {
+      for (let u in udpServers) {
         OSCService.instance.oscUDP.send(allMessage, {
-          host: udpClients[u].ip,
-          port: udpClients[u].port,
+          host: udpServers[u].ip,
+          port: udpServers[u].port,
         });
       }
     } else {
@@ -148,8 +148,8 @@ export default class OSCService {
         message = new OSC.Message(address, oscValue);
       }
       OSCService.instance.oscUDP.send(message, {
-        host: udpClients[dest].ip,
-        port: udpClients[dest].port,
+        host: udpServers[dest].ip,
+        port: udpServers[dest].port,
       });
     }
 
@@ -183,7 +183,7 @@ export default class OSCService {
               OSCService.sendToTCP(address, message.args);
               break;
             case 'udp':
-              if (OSCService.instance.udpClients[osctunnels[o]['clientTo']] != null) {
+              if (OSCService.instance.udpServers[osctunnels[o]['clientTo']] != null) {
                 OSCService.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
               } else {
                 OSCService.sendToUDP('-2', address, message.args.join(','));
@@ -215,7 +215,7 @@ export default class OSCService {
               OSCService.sendToTCP(address, message.args);
               break;
             case 'udp':
-              if (OSCService.instance.udpClients[osctunnels[o]['clientTo']] != null) {
+              if (OSCService.instance.udpServers[osctunnels[o]['clientTo']] != null) {
                 OSCService.sendToUDP(osctunnels[o]['clientTo'], address, message.args.join(','));
               } else {
                 OSCService.sendToUDP('-2', address, message.args.join(','));

@@ -65,6 +65,7 @@ export default class MotherwolfTunnel {
     this.socket = new WebSocket(`wss://${this.subdomain}.spooder.me?token=${this.token}`);
     this.oscReceiver = new WebSocket(`wss://${this.subdomain}.spooder.me/osc?token=${this.token}`);
     this.oscSender = new WebSocket(`ws://localhost:${this.osc_tcp_port}`);
+    webLog('Connecting to Motherwolf Tunnels...', this.subdomain, this.token);
 
     const checkIfReady = () => {
       if (this.isHTTPConnected && this.isOSCReceiverConnected && this.isOSCSenderConnected) {
@@ -172,17 +173,14 @@ export default class MotherwolfTunnel {
 
     this.socket.on('close', () => {
       console.log('HTTP Socket Disconnected');
-      this.reconnect();
     });
 
     this.oscReceiver.on('close', () => {
       console.log('OSC Cloud Socket Disconnected');
-      this.reconnect();
     });
 
     this.oscSender.on('close', () => {
       console.log('OSC Local Socket Disconnected');
-      this.reconnect();
     });
 
     this.socket.on('error', (error) => {

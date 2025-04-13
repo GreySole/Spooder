@@ -95,7 +95,7 @@ export default class ModuleService {
   static onExternalNetworkChanged() {
     const streamModules = ModuleService.getStreamModules();
     for (let s in streamModules) {
-      streamModules.onExternalNetworkChanged();
+      streamModules[s].onExternalNetworkChanged();
     }
   }
 

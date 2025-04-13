@@ -1,34 +1,31 @@
-import express, { Request, Response } from 'express';
+import { json, Request, Response } from 'express';
 import { networkInterfaces } from 'os';
-import fs from 'fs';
-import { userDir, frontendDir, PlatformType } from '../../Types.ts';
+import { KeyedObject, userDir } from '../../Types.ts';
 import ConfigService from '../service/ConfigService.ts';
-import ModuleService from '../service/ModuleService.ts';
-import PluginService from '../service/PluginService.ts';
 import { WebService } from '../service/WebService.ts';
-import ShareService from '../service/ShareService.ts';
-import Discord from '../../integration/discord/main.ts';
-import Twitch from '../../integration/twitch/main.ts';
+import AdmZip from 'adm-zip';
+import path from 'path';
+import { webLog } from '../Logging.ts';
+import fs from 'fs-extra';
+import multer from 'multer';
 
-const nets = networkInterfaces();
+interface NetworkInterface {
+  name: string;
+  address: string;
+}
 
 export default class Initializer {
   constructor() {
     new ConfigService();
-    const sconfig = ConfigService.getConfig();
     const webUI = new WebService();
-    new PluginService();
-    new ShareService();
 
     webUI.router?.get('/init', async (req, res) => {
-      const sconfig = fs.existsSync(userDir + '/settings/config.json')
-        ? JSON.parse(fs.readFileSync(userDir + '/settings/config.json', { encoding: 'utf-8' }))
-        : null;
-      const themes = fs.existsSync(userDir + '/settings/themes.json')
-        ? JSON.parse(fs.readFileSync(userDir + '/settings/themes.json', { encoding: 'utf-8' }))
-        : null;
+      const config = ConfigService.getConfig();
+      const themes = ConfigService.getThemes();
 
-      const results = Object.create(null); // Or just '{}', an empty object
+      const nets = networkInterfaces();
+
+      const results = [] as NetworkInterface[];
 
       if (nets !== undefined) {
         for (const name of Object.keys(nets)) {
@@ -37,32 +34,126 @@ export default class Initializer {
             // 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
             const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4;
             if (net.family === familyV4Value && !net.internal) {
-              if (!results[name]) {
-                results[name] = [];
-              }
-              results[name].push(net.address);
+              results.push({
+                name: name,
+                address: net.address,
+              } as NetworkInterface);
             }
           }
         }
       }
 
       res.send({
-        config: sconfig,
+        config: config,
         nets: results,
         themes: themes,
       });
     });
 
+    fs.existsSync(path.join(userDir, 'tmp', 'multer')) ||
+      fs.mkdirSync(path.join(userDir, 'tmp', 'multer'));
+
+    webUI.router?.use(json());
+    const tempStorage = multer.diskStorage({
+      destination: (req, file, cb) => {
+        cb(null, path.join(userDir, 'tmp', 'multer'));
+      },
+    });
+    const restoreUpload = multer({ storage: tempStorage });
+    webUI.router?.use('/prepare_restore_settings', restoreUpload.single('file'));
+
     webUI.router?.post('/save_config', async (req: Request, res: Response) => {
-      let newSettings = req.body;
+      const newSettings = req.body;
+      console.log('Saving new settings', newSettings);
       ConfigService.saveConfig(newSettings);
       res.send({ status: 'ok' });
     });
 
     webUI.router?.post('/save_themes', async (req: Request, res: Response) => {
-      let newSettings = req.body;
+      const newSettings = req.body;
+      const currentThemes = Object.assign({}, ConfigService.getThemes());
+      currentThemes.webui = newSettings.webui;
+      currentThemes.spooderpet = newSettings.spooderpet;
+      console.log('Saving new themes', newSettings);
       ConfigService.saveThemes(newSettings);
       res.send({ status: 'ok' });
+    });
+
+    webUI.router?.post('/prepare_restore_settings', async (req: Request, res: Response) => {
+      let fileName = null;
+
+      if (req.file) {
+        const file = req.file as Express.Multer.File;
+        fileName = req.file.originalname;
+        await fs.move(file.path, path.join(userDir, 'backup', 'settings', fileName), {
+          overwrite: true,
+        });
+      } else if (req.body.backupName) {
+        fileName = req.body.backupName;
+      }
+
+      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+        await fs.rm(path.join(userDir, 'tmp', fileName));
+      }
+      fs.copySync(
+        path.join(userDir, 'backup', 'settings', fileName),
+        path.join(userDir, 'tmp', '_active_settings_backup.zip'),
+        { overwrite: true },
+      );
+
+      const zip = new AdmZip(path.join(userDir, 'tmp', '_active_settings_backup.zip'));
+      const zipEntries = zip.getEntries();
+
+      res.send({
+        status: 'ok',
+        data: zipEntries.map((e) => e.entryName.substring(0, e.entryName.lastIndexOf('.'))),
+      });
+    });
+
+    webUI.router?.post('/restore_settings', async (req: Request, res: Response) => {
+      const selections = req.body.selections;
+
+      if (!fs.existsSync(userDir + '/tmp')) {
+        fs.mkdirSync(userDir + '/tmp');
+      }
+
+      const tempDir = path.join(userDir, 'tmp');
+      const tempBackupDirectory = path.join(tempDir, '_active_settings_backup');
+      const tempBackupFileName = '_active_settings_backup.zip';
+
+      const zip = new AdmZip(path.join(tempDir, tempBackupFileName));
+      zip.extractAllTo(tempDir);
+      for (let s in selections) {
+        if (selections[s] !== true) {
+          continue;
+        }
+        webLog('CHECKING', s + '.json');
+        if (fs.existsSync(path.join(tempDir, s + '.json'))) {
+          webLog('OVERWRITE ' + s + '.json');
+          fs.copySync(
+            path.join(tempDir, s + '.json'),
+            path.join(userDir, 'settings', s + '.json'),
+            {
+              overwrite: true,
+            },
+          );
+        } else {
+          webLog(path.join(tempDir, s + '.json'), 'NOT FOUND');
+        }
+      }
+
+      if (fs.existsSync(tempBackupDirectory)) {
+        await fs.rm(tempBackupDirectory, { recursive: true });
+      }
+
+      if (fs.existsSync(tempBackupFileName)) {
+        await fs.rm(tempBackupFileName);
+      }
+
+      webLog('COMPLETE');
+      ConfigService.refreshConfig();
+      ConfigService.refreshThemes();
+      res.send({ status: 'SUCCESS' });
     });
 
     console.log('Init UI ready! You must open this on localhost to set up Twitch.');

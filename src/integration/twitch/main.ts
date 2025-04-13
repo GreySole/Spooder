@@ -80,13 +80,14 @@ export default class Twitch implements StreamModuleInterface {
   }
 
   onExternalNetworkChanged() {
-    this.eventsub.refreshEventSubs();
+    //this.eventsub.refreshEventSubs();
   }
 
   oauth = {} as KeyedObject;
   api = new TwitchApi();
   eventsub = new TwitchEventSub();
   chat = new TwitchChat();
+  activeViewers = {} as KeyedObject;
 
   getChannelInfo = this.api.getChannelInfo;
   getUserInfo = this.api.getUserInfo;
@@ -176,25 +177,6 @@ export default class Twitch implements StreamModuleInterface {
 
   async onEventFileSaved() {
     this.eventsub.refreshEventSubs();
-  }
-
-  userVerify(username: string) {
-    const users = UserService.getUsers();
-    if (Object.values(users.trusted_users.verify.twitch).includes(username)) {
-      let sUsername = Object.keys(users.trusted_users.verify.twitch)[
-        Object.values(users.trusted_users.verify.twitch).indexOf(username)
-      ];
-
-      UserService.setPendingUser('twitch', username.toLowerCase());
-      this.sayInChat(
-        username +
-          " it looks like you're trying to set a login for me. If this is you, please call '!verify'",
-        'twitch',
-      );
-      return { status: 'found' };
-    } else {
-      return { status: 'notfound' };
-    }
   }
 
   startReoccuringMessage() {

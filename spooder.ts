@@ -69,7 +69,11 @@ if (initMode) {
     new MonitorService();
     new UserService();
     new PluginService();
+    console.log('Logging into modules');
     await ModuleService.autoLoginModules();
+    console.log('Refreshing share users');
     ShareService.refreshShareUsers();
+    console.log('Starting Public Hosting');
+    WebService.startPublicHosting();
   });
 }

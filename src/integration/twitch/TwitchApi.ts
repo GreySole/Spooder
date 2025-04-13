@@ -91,6 +91,25 @@ export default class TwitchApi {
     });
   };
 
+  validateViewer = async (token: string): Promise<KeyedObject> => {
+    return new Promise((res, rej) => {
+      Axios({
+        url: 'https://id.twitch.tv/oauth2/validate',
+        method: 'get',
+        headers: {
+          Authorization: 'Bearer ' + token,
+        },
+      })
+        .then((response: AxiosResponse) => {
+          twitchLog('Validated Viewer: ' + response.data.login + '!');
+          res({ status: 'ok', data: response.data });
+        })
+        .catch((error: AxiosError) => {
+          twitchLog('Viewer validate error: ', error);
+        });
+    });
+  };
+
   getUserId(channelName: string) {
     const oauth = this.getModule().oauth;
 
@@ -464,7 +483,7 @@ export default class TwitchApi {
           }
         })
         .catch((error: AxiosError) => {
-          rej(error);
+          res({ error: 'getUserInfo error: ' + error.message });
         });
     });
   };

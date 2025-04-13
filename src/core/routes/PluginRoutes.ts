@@ -1,5 +1,4 @@
-import express from 'express';
-import { Request, Response } from 'express';
+import express, { Request, Response } from 'express';
 import AdmZip from 'adm-zip';
 import chmodr from 'chmodr';
 import path from 'path';
@@ -7,11 +6,11 @@ import fs from 'fs-extra';
 import { KeyedObject, userDir } from '../../Types.ts';
 import { logToFile, webLog } from '../Logging.ts';
 import ConfigService from '../service/ConfigService.ts';
-import { EventService } from '../service/EventService.ts';
 import OSCService from '../service/OSCService.ts';
 import PluginService from '../service/PluginService.ts';
 import multer from 'multer';
-import { WebService } from '../service/WebService.ts';
+import { isLocal, WebService } from '../service/WebService.ts';
+import { webJoin } from '../util/PathUtil.ts';
 
 const pluginApi = {
   local: {
@@ -24,49 +23,24 @@ const pluginApi = {
   },
 };
 
-export function isLocal(req: Request) {
-  if (req.ip === undefined) {
-    return false;
-  }
-  const remoteAddressRaw = req.ip.split(':');
-  const remoteAddress = remoteAddressRaw[remoteAddressRaw.length - 1];
-  if (remoteAddress == null) {
-    console.log('Remote adderess null', req.ip);
-    return false;
-  }
-  const isLocal =
-    remoteAddress.startsWith('192.168.') ||
-    remoteAddress.startsWith('10.') ||
-    remoteAddress == '1' ||
-    req.headers.host?.startsWith('localhost');
-  if (isLocal == false) {
-    logToFile(
-      'external_connections',
-      `IP: ${remoteAddress} Path: ${req.path} Cookie: ${req.cookies?.access != null ? 'PRESENT' : 'NONE'}`,
-      300,
-    );
-  }
-  return isLocal;
-}
-
 export function registerPluginApi(
   context: any,
   router: 'local' | 'public',
   method: 'get' | 'post' | 'put' | 'delete',
   address: string,
-  funct: (req: Request, res: Response) => void,
+  funct: (req: express.Request, res: express.Response) => void,
 ) {
   if (router === 'local') {
     if (method.toLowerCase() === 'get') {
-      pluginApi.local.get[path.join(context.dirname, address)] = funct.bind(context);
+      pluginApi.local.get[webJoin(context.dirname, address)] = funct.bind(context);
     } else if (method.toLowerCase() === 'post') {
-      pluginApi.local.post[path.join(context.dirname, address)] = funct.bind(context);
+      pluginApi.local.post[webJoin(context.dirname, address)] = funct.bind(context);
     }
   } else if (router === 'public') {
     if (method.toLowerCase() === 'get') {
-      pluginApi.public.get[path.join(context.dirname, address)] = funct.bind(context);
+      pluginApi.public.get[webJoin(context.dirname, address)] = funct.bind(context);
     } else if (method.toLowerCase() === 'post') {
-      pluginApi.public.post[path.join(context.dirname, address)] = funct.bind(context);
+      pluginApi.public.post[webJoin(context.dirname, address)] = funct.bind(context);
     }
   } else {
     throw new Error(`Unknown router: ${router}. There's only local and public routers.`);
@@ -91,13 +65,16 @@ export function PluginRoutes() {
   router.use('/upload_plugin_icon', fileUpload.single('file'));
 
   async function pluginGet(req: Request, res: Response) {
-    var pluginName = req.query.plugin;
+    var pluginName = req.query.plugin as string;
     var pluginSettings = null;
 
     try {
-      var thisPlugin = fs.readFileSync(userDir + 's/' + pluginName + '/settings.json', {
-        encoding: 'utf8',
-      });
+      const thisPlugin = fs.readFileSync(
+        path.join(userDir, 'plugins', pluginName, 'settings.json'),
+        {
+          encoding: 'utf8',
+        },
+      );
       pluginSettings = JSON.parse(thisPlugin);
     } catch (e) {
       webLog(pluginName + ' has no settings');
@@ -141,7 +118,7 @@ export function PluginRoutes() {
         dependencies: thisPlugin.dependencies == null ? {} : thisPlugin.dependencies,
         status: thisPlugin.status,
         assetBrowserPath: '/',
-        assetPath: path.join('assets', a),
+        assetPath: webJoin('assets', a),
         hasOverlay: thisPlugin.hasOverlay,
         hasUtility: thisPlugin.hasUtility,
       };
@@ -193,7 +170,13 @@ export function PluginRoutes() {
   });
 
   publicRouter.get('/public', (req: Request, res: Response) => {
-    const activePlugins = EventService.getActiveEvents();
+    const platform = req.cookies.public_module;
+    const accessToken = req.cookies.access_token;
+    if (!platform || !accessToken) {
+      res.status(401).send({ status: 'error', message: 'Unauthorized' });
+      return;
+    }
+    const activePlugins = PluginService.getActivePlugins();
     let publicPlugins = [];
     for (let p in activePlugins) {
       if (activePlugins[p].hasPublic) {
@@ -204,7 +187,7 @@ export function PluginRoutes() {
   });
 
   router.get('/public', (req: Request, res: Response) => {
-    const activePlugins = EventService.getActiveEvents();
+    const activePlugins = PluginService.getActivePlugins();
     let publicPlugins = [];
     for (let p in activePlugins) {
       if (activePlugins[p].hasPublic) {
@@ -294,7 +277,7 @@ export function PluginRoutes() {
         let tempFile = path.join(userDir, 'tmp', pluginDirName, pluginZip.originalname);
         //Cleanup before install
         if (fs.existsSync(tempFile)) {
-          await fs.rmSync(tempFile);
+          fs.rmSync(tempFile);
         }
 
         OSCService.sendToTCP('/spooder/install/progress', {
@@ -303,7 +286,9 @@ export function PluginRoutes() {
           message: 'Extracting...',
         });
         //Start installing
-        await fs.promises.writeFile(tempFile, pluginZip.buffer);
+        await fs.move(pluginZip.path, tempFile, {
+          overwrite: true,
+        });
         webLog('EXTRACT ZIP');
         res.send({
           status: true,
@@ -629,35 +614,36 @@ export function PluginRoutes() {
     plugin = {
       settings: JSON.parse(thisPlugin),
       assets: thisPluginAssets,
-      udpClients: OSCService.getUdpClients(),
+      udpServers: OSCService.getUdpServers(),
       icon: thisPluginIcon,
     };
 
     res.send(plugin);
   });
 
-  router.get('/*', (req: Request, res: Response) => {
+  router.get('/api/*', (req: Request, res: Response) => {
+    console.log(pluginApi, req.params[0]);
     if (pluginApi.local.get[`${req.params[0]}`] != null) {
       pluginApi.local.get[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });
 
-  router.post('/*', (req: Request, res: Response) => {
+  router.post('/api/*', (req: Request, res: Response) => {
     if (pluginApi.local.post[`${req.params[0]}`] != null) {
       pluginApi.local.post[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });
 
-  publicRouter.get('/*', (req: Request, res: Response) => {
+  publicRouter.get('/api/*', (req: Request, res: Response) => {
     if (pluginApi.public.get[`${req.params[0]}`] != null) {
       pluginApi.public.get[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });
 
-  publicRouter.post('/*', (req: Request, res: Response) => {
+  publicRouter.post('/api/*', (req: Request, res: Response) => {
     if (pluginApi.public.post[`${req.params[0]}`] != null) {
       pluginApi.public.post[`${req.params[0]}`](res, res);
     }

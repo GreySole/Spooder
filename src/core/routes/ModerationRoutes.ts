@@ -5,7 +5,6 @@ import { EventService, sayInChat } from '../service/EventService.ts';
 import { ModerationService } from '../service/ModerationService.ts';
 import PluginService from '../service/PluginService.ts';
 import UserService from '../service/UserService.ts';
-import { isLocal } from './PluginRoutes.ts';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -15,7 +14,7 @@ import {
   checkResponseTrigger,
   verifyResponseScript,
 } from '../util/ResponseUtil.ts';
-import { WebService } from '../service/WebService.ts';
+import { isLocal, WebService } from '../service/WebService.ts';
 
 export function ModerationRoutes() {
   const storage = multer.memoryStorage();

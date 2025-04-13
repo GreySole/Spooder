@@ -25,6 +25,7 @@ export function PublicRoutes() {
       botName: twitch.api.botUsername,
       homeChannel: twitch.api.homeChannel,
       theme: ConfigService.getThemes().public,
+      spooderpet: ConfigService.getThemes().spooderpet,
       plugins: publicPlugins,
     });
   }

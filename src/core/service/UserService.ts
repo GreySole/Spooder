@@ -3,6 +3,7 @@ import { KeyedObject, userDir, PermissionType } from '../../Types.ts';
 import fs from 'fs';
 import { spooderLog } from '../Logging.ts';
 import { v4 } from 'uuid';
+import { Request } from 'express';
 
 interface TrustedUsers {
   user_names: KeyedObject;
@@ -66,6 +67,7 @@ export default class UserService {
   };
 
   activeUsers = {} as KeyedObject;
+  activeViewers = {} as KeyedObject;
 
   private saveUsers() {
     fs.writeFileSync(userDir + '/settings/users.json', JSON.stringify(UserService.instance.users));
@@ -150,6 +152,29 @@ export default class UserService {
 
   static isActive(token: string) {
     return UserService.instance.activeUsers[token] !== undefined;
+  }
+
+  static getActiveViewerFromCookie(platform: string, cookie: string) {
+    return UserService.instance.activeViewers[platform]?.[cookie];
+  }
+
+  static getActiveViewer(req: Request) {
+    return UserService.getActiveViewerFromCookie(
+      req.cookies.public_module,
+      req.cookies.access_token,
+    );
+  }
+
+  static registerActiveViewer(
+    userData: KeyedObject,
+    platform: string,
+    access_token: string,
+    expiration_time: number,
+  ) {
+    if (UserService.instance.activeViewers[platform] === undefined) {
+      UserService.instance.activeViewers[platform] = {} as KeyedObject;
+    }
+    UserService.instance.activeViewers[platform][access_token] = { ...userData, expiration_time };
   }
 
   static checkPermission(username: string, permissionTypes: PermissionType[]) {

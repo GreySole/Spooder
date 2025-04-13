@@ -7,13 +7,26 @@ import OSC from 'osc-js';
 import { createRequire } from 'module';
 import PluginService from './core/service/PluginService.ts';
 import OSCService from './core/service/OSCService.ts';
+import { WebService } from './core/service/WebService.ts';
+import { registerPluginApi } from './core/routes/PluginRoutes.ts';
+import { Request, Response } from 'express';
+import UserService from './core/service/UserService.ts';
 
 interface PluginModule {
+  dirname: string;
   streamModules: KeyedObject;
   communityModules: KeyedObject;
   controlModules: KeyedObject;
   sendToTCP: (address: string, oscValue: any, log?: boolean) => void;
   sendToUDP: (address: string, oscValue: any, log?: boolean) => void;
+  publicHostUrl?: string;
+  registerPluginApi: (
+    router: 'local' | 'public',
+    method: 'get' | 'post' | 'put' | 'delete',
+    address: string,
+    funct: (req: Request, res: Response) => void,
+  ) => void;
+  getActiveViewer: (req: Request) => KeyedObject | undefined;
   settings?: KeyedObject;
   onSettings?: (settings: KeyedObject) => void;
   onLoad?: () => void;
@@ -97,6 +110,8 @@ export default class Plugin {
           throw new Error('Plugin not found');
         }
 
+        this.pluginModule.dirname = pluginDirName;
+
         this.pluginModule.streamModules = ModuleService.getStreamModules();
         this.pluginModule.communityModules = ModuleService.getCommunityModules();
         this.pluginModule.controlModules = ModuleService.getControlModules();
@@ -105,6 +120,15 @@ export default class Plugin {
         };
         this.pluginModule.sendToTCP = OSCService.sendToTCP;
         this.pluginModule.sendToUDP = OSCService.sendToUDP;
+        this.pluginModule.publicHostUrl = WebService.getPublicHTTPUrl();
+        this.pluginModule.registerPluginApi = (
+          router,
+          method,
+          address,
+          funct: (req: Request, res: Response) => void,
+        ) => registerPluginApi(this.pluginModule, router, method, address, funct);
+
+        this.pluginModule.getActiveViewer = UserService.getActiveViewer;
 
         if (fs.existsSync(userDir + '/plugins/' + pluginDirName + '/settings.json')) {
           this.pluginModule.settings = JSON.parse(
@@ -117,7 +141,7 @@ export default class Plugin {
             this.pluginModule.onSettings(this.pluginModule.settings ?? {});
           }
         }
-
+        console.log('Checking for onLoad for ' + pluginMeta.name, this.pluginModule.onLoad);
         if (this.pluginModule.onLoad != null) {
           this.pluginModule.onLoad();
         }
