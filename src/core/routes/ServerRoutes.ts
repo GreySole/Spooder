@@ -5,6 +5,7 @@ import PluginService from '../service/PluginService.ts';
 import ShareService from '../service/ShareService.ts';
 import { EventService } from '../service/EventService.ts';
 import OSCService from '../service/OSCService.ts';
+import { WebService } from '../service/WebService.ts';
 
 export function ServerRoutes() {
   const router = express.Router();
@@ -40,6 +41,12 @@ export function ServerRoutes() {
   router.get('/status', async (req, res) => {
     const status = await MonitorService.getSystemStatus();
     res.send(status);
+  });
+
+  router.get('/public_url', (req, res) => {
+    const publicHttpUrl = WebService.getPublicHTTPUrl();
+    const publicOscUrl = WebService.getPublicOSCUrl();
+    res.send({ http: publicHttpUrl, osc: publicOscUrl });
   });
 
   return {

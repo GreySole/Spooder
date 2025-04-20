@@ -283,7 +283,7 @@ export default class TwitchApi {
         },
       })
         .then((response: AxiosResponse) => {
-          if (response.data.data[0] != null) {
+          if (response.data.data?.[0]) {
             res(response.data.data[0]);
           } else {
             res({ error: `No data for ${username}. They is not live.` });
@@ -329,32 +329,6 @@ export default class TwitchApi {
         .then((data: AxiosResponse) => res(data.data))
         .catch((error: AxiosError) => {
           twitchLog('Bot API use error: ', error.message);
-          rej(error);
-        });
-    });
-  };
-
-  callAppAPI = (url: string, postBody?: KeyedObject, method?: string) => {
-    const oauth = this.getModule().oauth;
-    const loggedIn = this.getModule().loggedIn;
-    method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
-    if (loggedIn == false) {
-      return;
-    }
-    return new Promise((res, rej) => {
-      Axios({
-        url: url,
-        method: method,
-        headers: {
-          'Client-Id': oauth['client-id'],
-          Authorization: 'Bearer ' + this.appToken,
-          'Content-Type': 'application/json',
-        },
-        data: postBody,
-      })
-        .then((data: AxiosResponse) => res(data.data))
-        .catch((error: AxiosError) => {
-          twitchLog('App API use error: ', error.message);
           rej(error);
         });
     });
@@ -410,8 +384,8 @@ export default class TwitchApi {
         },
       })
         .then((response: AxiosResponse) => {
-          if (response.data.data[0] != null) {
-            res(response.data.data);
+          if (response.data.data?.[0]) {
+            res(response.data.data[0]);
           } else {
             res({ error: 'getChannelInfo error: No data' });
           }
@@ -442,11 +416,12 @@ export default class TwitchApi {
           'Content-Type': 'application/json',
         },
       })
-        .then((data: AxiosResponse) => {
-          if (data != null) {
-            res(data.data);
+        .then((response: AxiosResponse) => {
+          if (response.data.data?.[0]) {
+            twitchLog('Got user info', response.data.data[0]);
+            res(response.data.data[0]);
           } else {
-            res({ message: 'getUserInfo error: No data' });
+            res({ error: 'getUserInfo error: No data' });
           }
         })
         .catch((error: AxiosError) => {
@@ -475,9 +450,10 @@ export default class TwitchApi {
           'Content-Type': 'application/json',
         },
       })
-        .then((data: AxiosResponse) => {
-          if (data != null) {
-            res(data.data);
+        .then((response: AxiosResponse) => {
+          if (response.data.data) {
+            twitchLog('Got user info', response.data.data[0]);
+            res(response.data.data[0]);
           } else {
             res({ error: 'getUserInfo error: No data' });
           }

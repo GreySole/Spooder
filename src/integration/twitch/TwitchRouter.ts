@@ -156,11 +156,12 @@ export default function getTwitchRouters() {
     const twitchBotUser = await twitchModule.api.getUserInfo(twitchModule.api.botUsername);
     const twitchBroadcasterUser = await twitchModule.api.getUserInfo(twitchModule.api.homeChannel);
 
-    res.send({ botUser: twitchBotUser.data[0], broadcasterUser: twitchBroadcasterUser.data[0] });
+    res.send({ botUser: twitchBotUser, broadcasterUser: twitchBroadcasterUser });
   });
 
   router.get('/get_eventsubs', async (req, res) => {
-    res.send(twitchModule.eventsub.getEventSubs());
+    const currentSubs = await twitchModule.eventsub.getEventSubs();
+    res.send(currentSubs);
   });
 
   router.get('/get_channelpoint_rewards', async (req, res) => {
@@ -333,10 +334,10 @@ export default function getTwitchRouters() {
   });
 
   router.get('/eventsub_types', (req, res) => {
-    res.send(twitchModule.eventsub.getEventSubs());
+    res.send(eventsubs);
   });
 
-  //HTTPS ROUTER
+  //Obsolete, but keeping for now
   publicRouter.post('/webhooks/eventsub', async (req, res) => {
     const messageType = req.header('Twitch-Eventsub-Message-Type');
     if (messageType === 'webhook_callback_verification') {

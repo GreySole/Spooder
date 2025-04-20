@@ -50,7 +50,7 @@ export function ConfigRoutes() {
   });
 
   router.get('/udp_clients', (req: Request, res: Response) => {
-    const udpClients = OSCService.getUdpClients();
+    const udpClients = OSCService.getUdpServers();
     res.send(udpClients);
   });
 

@@ -101,11 +101,11 @@ export default class Twitch implements StreamModuleInterface {
       this.api
         .getUserInfoById(id)
         .then((data) => {
-          //twitchLog('Got user info', data);
+          twitchLog('Got user info', data);
           res({
-            username: data.data[0].login,
-            displayName: data.data[0].display_name,
-            profilePic: data.data[0].profile_image_url,
+            username: data.login,
+            displayName: data.display_name,
+            profilePic: data.profile_image_url,
           });
         })
         .catch((e) => {
