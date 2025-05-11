@@ -7,9 +7,10 @@ export interface StreamModuleInterface {
   sayInChat: (message: string, channel: string) => void;
   onEventFileSaved: () => void;
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;
+  getActiveShares: () => Promise<KeyedObject>;
   getUserInfo: (user?: string) => Promise<KeyedObject>;
-  joinChannel: (channelname: string, joinmsg: string) => Promise<void>;
-  leaveChannel: (channelname: string, leavemsg: string) => Promise<void>;
+  joinChannel: (channelname: string, joinmsg: string | undefined) => Promise<void>;
+  leaveChannel: (channelname: string, leavemsg: string | undefined) => Promise<void>;
   refreshShareUserInfo(id: string): Promise<KeyedObject>;
   onExternalNetworkChanged: () => void;
   onSharesChanged: () => void;

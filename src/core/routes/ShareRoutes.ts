@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { json, Request, Response } from 'express';
 import { KeyedObject } from '../../Types.ts';
 import { EventService } from '../service/EventService.ts';
 import ModuleService from '../service/ModuleService.ts';
@@ -31,12 +31,13 @@ export function ShareRoutes() {
   });
 
   router.get('/active_shares', async (req: Request, res: Response) => {
-    const activeShares = ShareService.getActiveShares();
+    const activeShares = await ShareService.getActiveShares();
+    console.log('ACTIVE SHARES', activeShares);
     res.send(activeShares);
   });
 
   router.get('/verify_share_target', async (req: Request, res: Response) => {
-    const shareUser = req.query.shareuser;
+    const shareUser = req.query.shareuser as string;
     const sharePlatform = req.query.shareplatform as string;
     const streamModules = ModuleService.getStreamModules();
     if (!streamModules[sharePlatform]) {
@@ -66,9 +67,10 @@ export function ShareRoutes() {
   router.post('/set_share', (req: Request, res: Response) => {
     const shareUser = req.body.shareId;
     const isEnabled = req.body.enabled;
-    const message = req.body.message;
+    const joinMessage = req.body.joinMessage;
+    const leaveMessage = req.body.leaveMessage;
 
-    ShareService.setShare(shareUser, isEnabled, message);
+    ShareService.setShare(shareUser, isEnabled, isEnabled ? joinMessage : leaveMessage);
 
     res.send({ status: 'ok' });
   });

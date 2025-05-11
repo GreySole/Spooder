@@ -62,12 +62,16 @@ export default class Twitch implements StreamModuleInterface {
   onSharesChanged() {
     const shares = ShareService.getShares();
     this.shareUsers = {};
+    console.log('ON SHARES CHANGED');
     for (const s in shares) {
-      if (!shares[s].platforms.twitch) {
+      if (!shares[s].streamPlatforms.twitch) {
         continue;
       }
-      this.shareUsers[shares[s].platforms.twitch.twitchUsername] = s;
+      console.log('ON SHARES CHANGED', shares[s].streamPlatforms.twitch.username, s);
+      this.shareUsers[shares[s].streamPlatforms.twitch.username] = s;
     }
+
+    console.log('TWITCH SHARE USERS', this.shareUsers);
   }
 
   getRouters() {
@@ -91,7 +95,27 @@ export default class Twitch implements StreamModuleInterface {
 
   getChannelInfo = this.api.getChannelInfo;
   getUserInfo = this.api.getUserInfo;
-  getChannels = this.api.getChannels;
+  getActiveShares = async () => {
+    const shares = ShareService.getShares();
+    const channels = await this.api.getSharedChannels();
+    console.log('GET ACTIVE SHARES', this.shareUsers);
+    const activeShares = {} as KeyedObject;
+    for (let c in channels) {
+      const channel = channels[c];
+      const shareId = this.shareUsers[channel];
+      if (shareId == null) {
+        continue;
+      }
+      activeShares[shareId] = {
+        platform: 'twitch',
+        username: shares[shareId].streamPlatforms.twitch.username,
+        displayName: shares[shareId].streamPlatforms.twitch.displayName,
+        userId: shares[shareId].streamPlatforms.twitch.userId,
+      };
+    }
+    console.log('TWITCH ACTIVE SHARES', activeShares, channels);
+    return activeShares;
+  };
   joinChannel = this.chat.joinChannel;
   leaveChannel = this.chat.leaveChannel;
   refreshEventSubs = this.eventsub.refreshEventSubs;
@@ -101,7 +125,7 @@ export default class Twitch implements StreamModuleInterface {
       this.api
         .getUserInfoById(id)
         .then((data) => {
-          twitchLog('Got user info', data);
+          //twitchLog('Got user info', data);
           res({
             username: data.login,
             displayName: data.display_name,

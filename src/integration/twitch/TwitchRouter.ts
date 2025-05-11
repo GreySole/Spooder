@@ -78,54 +78,51 @@ export default function getTwitchRouters() {
   router.get('/authorize/broadcaster', (req, res) => authorizeTwitch(req, res, true));
 
   router.get('/revoke', async (req, res) => {
-    let cid = oauth['client-id'];
+    const account = req.query.account as string;
+    const cid = oauth['client-id'];
 
-    await Axios({
-      url:
-        'https://id.twitch.tv/oauth2/revoke?client_id=' + cid + '&token=' + oauth.broadcaster_token,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    })
-      .then((response: AxiosResponse) => {})
-      .catch((error: AxiosError) => {
-        twitchLog('Twitch revoke error: ', error.message);
-        return;
-      });
+    if (account == 'bot') {
+      await Axios({
+        url: 'https://id.twitch.tv/oauth2/revoke?client_id=' + cid + '&token=' + oauth.token,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      })
+        .then((response: AxiosResponse) => {})
+        .catch((error: AxiosError) => {
+          twitchLog('Twitch revoke error: ', error.message);
+          return;
+        });
+      oauth.token = '';
+      oauth.refreshToken = '';
+      twitchLog('Both oauth revoked');
+    } else {
+      await Axios({
+        url:
+          'https://id.twitch.tv/oauth2/revoke?client_id=' +
+          cid +
+          '&token=' +
+          oauth.broadcaster_token,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      })
+        .then((response: AxiosResponse) => {})
+        .catch((error: AxiosError) => {
+          twitchLog('Twitch revoke error: ', error.message);
+          return;
+        });
+      oauth.broadcaster_token = '';
+      oauth.broadcaster_refreshToken = '';
+      twitchLog('Broadcaster oauth revoked');
+    }
 
-    twitchLog('Revoking: ' + cid);
-    await Axios({
-      url: 'https://id.twitch.tv/oauth2/revoke?client_id=' + cid + '&token=' + oauth.token,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    })
-      .then((response: AxiosResponse) => {})
-      .catch((error: AxiosError) => {
-        twitchLog('Twitch revoke error: ', error.message);
-        return;
-      });
-
-    oauth.broadcaster_token = '';
-    oauth.broadcaster_refreshToken = '';
-    oauth.token = '';
-    oauth.refreshToken = '';
-    twitchLog('Both oauth revoked');
-    res.send({ status: 'Both oauth revoked' });
+    res.send({ status: 'ok' });
 
     fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
       twitchLog('oauth saved!');
-    });
-  });
-
-  router.get('/save_auth_to_broadcaster', async (req, res) => {
-    oauth['broadcaster_token'] = oauth.token;
-    oauth['broadcaster_refreshToken'] = oauth.refreshToken;
-    fs.writeFile(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8', () => {
-      twitchLog('oauth saved!');
-      res.send({ status: 'SUCCESS' });
     });
   });
 

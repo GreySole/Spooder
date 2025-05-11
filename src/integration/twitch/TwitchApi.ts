@@ -4,6 +4,7 @@ import { scopes } from './TwitchConstants.ts';
 import ModuleService from '../../core/service/ModuleService.ts';
 import { KeyedObject, userDir } from '../../Types.ts';
 import Twitch, { twitchLog } from './main.ts';
+import ShareService from 'src/core/service/ShareService.ts';
 
 export default class TwitchApi {
   appToken = '';
@@ -418,7 +419,7 @@ export default class TwitchApi {
       })
         .then((response: AxiosResponse) => {
           if (response.data.data?.[0]) {
-            twitchLog('Got user info', response.data.data[0]);
+            //twitchLog('Got user info', response.data.data[0]);
             res(response.data.data[0]);
           } else {
             res({ error: 'getUserInfo error: No data' });
@@ -452,7 +453,7 @@ export default class TwitchApi {
       })
         .then((response: AxiosResponse) => {
           if (response.data.data) {
-            twitchLog('Got user info', response.data.data[0]);
+            //twitchLog('Got user info', response.data.data[0]);
             res(response.data.data[0]);
           } else {
             res({ error: 'getUserInfo error: No data' });
@@ -464,7 +465,7 @@ export default class TwitchApi {
     });
   };
 
-  getChannels = async () => {
+  getSharedChannels = async () => {
     const loggedIn = this.getModule().loggedIn;
     const chat = this.getModule().chat;
     if (loggedIn == false || chat == null) {
@@ -472,9 +473,42 @@ export default class TwitchApi {
     }
     await this.validateChatbot();
     if (chat.chat?.readyState() == 'OPEN') {
-      return chat.chat.getChannels();
+      const channels = chat.activeChannels;
+      if (channels.includes('#' + this.homeChannel)) {
+        channels.splice(channels.indexOf('#' + this.homeChannel), 1);
+      }
+      channels.forEach((channel, index) => {
+        if (channel.startsWith('#')) {
+          channels[index] = channel.substring(1);
+        }
+      });
+      return channels;
     } else {
       return [];
     }
+  };
+
+  getActiveShares = async () => {
+    const shares = ShareService.getShares();
+    const channels = await this.getSharedChannels();
+
+    const activeShares = {} as KeyedObject;
+
+    for (let c in channels) {
+      const channel = channels[c];
+
+      for (let s in shares) {
+        if (shares[s].streamPlatforms.twitch.username == channel) {
+          activeShares[s] = {
+            platform: 'twitch',
+            username: shares[s].streamPlatforms.twitch.username,
+            displayName: shares[s].streamPlatforms.twitch.displayName,
+            userId: shares[s].streamPlatforms.twitch.userId,
+          };
+        }
+      }
+    }
+
+    return activeShares;
   };
 }

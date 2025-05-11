@@ -9,6 +9,18 @@ interface ModuleContainer {
   [key: string]: any;
 }
 
+interface StreamModuleContainer {
+  [key: string]: StreamModuleInterface;
+}
+
+interface CommunityModuleContainer {
+  [key: string]: CommunityModuleInterface;
+}
+
+interface ControlModuleContainer {
+  [key: string]: ControlModuleInterface;
+}
+
 export default class ModuleService {
   private static instance: ModuleService;
 
@@ -55,15 +67,15 @@ export default class ModuleService {
   }
 
   static getControlModules() {
-    return ModuleService.instance.activeControls;
+    return ModuleService.instance.activeControls as ControlModuleContainer;
   }
 
   static getStreamModules() {
-    return ModuleService.instance.activeStreams;
+    return ModuleService.instance.activeStreams as StreamModuleContainer;
   }
 
   static getCommunityModules() {
-    return ModuleService.instance.activeCommunities;
+    return ModuleService.instance.activeCommunities as CommunityModuleContainer;
   }
 
   static findModule(

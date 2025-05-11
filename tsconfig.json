@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2018",
     "module": "ESNext",
     "allowJs": true,
     "skipLibCheck": true,
@@ -14,10 +14,19 @@
     "allowImportingTsExtensions": true,
     "baseUrl": "./",
     "paths": {
-      "@frontend/*": ["webui"],
-      "@backend/*": ["backend"]
+      "@frontend/*": [
+        "webui"
+      ],
+      "@backend/*": [
+        "backend"
+      ]
     }
   },
-  "include": ["src"], // Specify files to include in compilation
-  "exclude": ["node_modules"] // Specify files to exclude from compilation
+  "include": [
+    "src/**/*.ts",
+    "spooder.ts"
+  ], // Specify files to include in compilation
+  "exclude": [
+    "node_modules"
+  ] // Specify files to exclude from compilation
 }

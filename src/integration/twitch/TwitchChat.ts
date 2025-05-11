@@ -20,6 +20,7 @@ function stringifyArray(a: string[]) {
 export default class TwitchChat {
   lastMessage: KeyedObject = {};
   chat: tmi.Client | undefined = undefined;
+  activeChannels: string[] = [];
 
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
@@ -113,18 +114,6 @@ export default class TwitchChat {
       shareId = this.getModule().shareUsers[streamMessage.channel];
     }
 
-    if (streamMessage.message == '!verify') {
-      const pendingUser = UserService.getPendingUser(streamMessage.username);
-      if (pendingUser.vtype == 'twitch' && pendingUser.verified == false) {
-        pendingUser.verified = true;
-        this.sayInChat(
-          streamMessage.displayName +
-            " You're verified! Now set a username and password for my records.",
-        );
-        return;
-      }
-    }
-
     processStreamMessage(streamMessage, shareId);
 
     this.lastMessage = {
@@ -190,7 +179,7 @@ export default class TwitchChat {
 
           if (subtype == 'stream.online' && bid != broadcasterUserID) {
             for (let s in shares) {
-              if (shares[s].twitchid == bid) {
+              if (shares[s].streamPlatforms.twitch?.userId == bid) {
                 isStreamerLive(s).then((isLive) => {
                   if (isLive == true) {
                     ShareService.setShare(s, true);
@@ -235,7 +224,7 @@ export default class TwitchChat {
     return commandsArray;
   };
 
-  sayInChat = async (message: string, chatChannel?: string) => {
+  sayInChat = async (message?: string, chatChannel?: string) => {
     const loggedIn = this.getModule().loggedIn;
     const homeChannel = this.getModule().api.homeChannel;
     if (loggedIn == false) {
@@ -244,7 +233,7 @@ export default class TwitchChat {
     if (chatChannel == null) {
       chatChannel = homeChannel;
     }
-    if (message == null || message == '') {
+    if (!message || message == null || message == '') {
       twitchLog('EMPTY MESSAGE');
       return;
     }
@@ -291,26 +280,37 @@ export default class TwitchChat {
     this.chat?.disconnect();
   };
 
-  joinChannel = async (channelname: string, joinmsg: string) => {
+  joinChannel = async (channelname: string, joinmsg: string | undefined) => {
     const loggedIn = this.getModule().loggedIn;
     if (loggedIn == false) {
       return;
     }
-    await this.chat?.join(channelname).catch((e) => {
-      twitchLog('Twitch chat join fail', e.message);
-    });
-    this.sayInChat(joinmsg, channelname);
+    this.chat
+      ?.join(channelname)
+      .then(() => {
+        this.sayInChat(joinmsg, channelname);
+        this.activeChannels.push(channelname);
+      })
+      .catch((e) => {
+        twitchLog('Twitch chat join fail', e);
+      });
   };
 
-  leaveChannel = async (channelname: string, partmsg: string) => {
+  leaveChannel = async (channelname: string, partmsg: string | undefined) => {
     const loggedIn = this.getModule().loggedIn;
     if (loggedIn == false) {
       return;
     }
     this.sayInChat(partmsg, channelname);
-    await this.chat?.part(channelname).catch((e) => {
-      twitchLog('Twitch chat leave fail', e.message);
-    });
+
+    //part() is a promise, but it keeps catching "No response from Twitch" despite leaving successfully.
+    //We'll just say they left successfully.
+    this.chat?.part(channelname);
+
+    const index = this.activeChannels.indexOf(channelname);
+    if (index > -1) {
+      this.activeChannels.splice(index, 1);
+    }
   };
 
   restartChat = async (message: string) => {

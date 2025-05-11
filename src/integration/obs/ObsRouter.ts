@@ -11,7 +11,6 @@ export default function getObsRouters() {
   const obsModule = ModuleService.getControlModule('obs') as OBS;
   const obsWebsocket = obsModule.websocket;
   const router = Router();
-  router.use(json());
 
   router.get('/get_connection_status', (req: Request, res: Response) => {
     res.send({ connected: obsModule.websocket.connected });

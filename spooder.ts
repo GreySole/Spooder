@@ -1,4 +1,4 @@
-import { spooderLog } from './src/core/Logging';
+import { spooderLog } from './src/core/Logging.ts';
 import fs from 'fs-extra';
 import path from 'path';
 import ConfigService from './src/core/service/ConfigService.ts';

@@ -15,7 +15,6 @@ interface PluginMap {
 
 export default class PluginService {
   private static instance: PluginService;
-  private require = createRequire(import.meta.url);
 
   constructor() {
     if (PluginService.instance) {
@@ -86,11 +85,29 @@ export default class PluginService {
     return PluginService.instance.settings[pluginName].enabled;
   }
 
+  static setDevMode(pluginName: string, isEnabled: boolean) {
+    console.log('ENABLING PLUGIN', pluginName);
+    if (PluginService.instance.settings[pluginName]) {
+      PluginService.instance.settings[pluginName].dev_mode = isEnabled;
+    } else {
+      PluginService.instance.settings[pluginName] = { dev_mode: isEnabled };
+    }
+    PluginService.instance.saveGlobalPluginSettings();
+    PluginService.refreshPlugin(pluginName);
+  }
+
+  static isPluginInDevMode(pluginName: string) {
+    if (!PluginService.instance.settings[pluginName]) {
+      return false;
+    }
+    return PluginService.instance.settings[pluginName].dev_mode ?? false;
+  }
+
   static refreshPlugin(pluginName: string) {
     PluginService.stopPlugin(pluginName);
 
     const pluginPath = path.resolve(userDir, 'plugins', pluginName);
-    const newPlugin = new Plugin(PluginService.instance.require, pluginName, pluginPath);
+    const newPlugin = new Plugin(pluginName, pluginPath);
 
     PluginService.instance.activePlugins[pluginName] = newPlugin;
   }
@@ -109,7 +126,7 @@ export default class PluginService {
         if (dirent.isDirectory()) {
           console.log('Loading plugin', dirent.name);
           const pluginPath = path.resolve(userDir, 'plugins', dirent.name);
-          const newPlugin = new Plugin(PluginService.instance.require, dirent.name, pluginPath);
+          const newPlugin = new Plugin(dirent.name, pluginPath);
           PluginService.instance.activePlugins[dirent.name] = newPlugin;
         }
       }
@@ -136,6 +153,10 @@ export default class PluginService {
     } catch (err) {
       console.error(err);
     }
+  }
+
+  static buildPlugin(pluginName: string) {
+    return this.getActivePlugins()[pluginName].buildPlugin();
   }
 
   static async installPluginFromTemp(pluginDirName: string, options?: KeyedObject) {

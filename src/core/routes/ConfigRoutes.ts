@@ -13,8 +13,6 @@ export function ConfigRoutes() {
   const router = Router();
   const publicRouter = Router();
 
-  router.use(json());
-
   router.get('/server_config', (req, res) => {
     res.send(sconfig);
   });

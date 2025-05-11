@@ -48,23 +48,27 @@ export default class ShareService {
         if (!loadedShares[Object.keys(loadedShares)[0]].streamPlatforms) {
           spooderLog('Upgrading shares file');
           for (const l in loadedShares) {
-            const newStreamPlatforms = {
-              twitch: {
-                username: l,
-                userId: loadedShares[l].twitchid,
-                displayName: loadedShares[l].displayName,
-                profilePic: loadedShares[l].profilepic,
-              },
-            };
+            const newStreamPlatforms = loadedShares[l].twitchid
+              ? {
+                  twitch: {
+                    username: l,
+                    userId: loadedShares[l].twitchid,
+                    displayName: loadedShares[l].displayName,
+                    profilePic: loadedShares[l].profilepic,
+                  },
+                }
+              : {};
 
-            const newNotificationPlatforms = {
-              discord: {
-                userId: loadedShares[l].discordId,
-                userName: loadedShares[l].discordName,
-                displayName: loadedShares[l].discordName,
-                profilePic: '',
-              },
-            };
+            const newNotificationPlatforms = loadedShares[l].discordId
+              ? {
+                  discord: {
+                    userId: loadedShares[l].discordId,
+                    userName: loadedShares[l].discordName,
+                    displayName: loadedShares[l].discordName,
+                    profilePic: '',
+                  },
+                }
+              : {};
 
             loadedShares[l] = {
               name: loadedShares[l].displayName,
@@ -104,6 +108,12 @@ export default class ShareService {
       }
     }
 
+    const streamModules = ModuleService.getStreamModules();
+    for (let s in streamModules) {
+      console.log('EMITTING SHARES CHANGED FOR', s);
+      streamModules[s].onSharesChanged();
+    }
+
     ShareService.instance.saveShares();
   }
 
@@ -117,12 +127,21 @@ export default class ShareService {
     );
   }
 
-  static getShares() {
+  static getShares(): ShareUserList {
     return ShareService.instance.shares;
   }
 
-  static getActiveShares() {
-    return ShareService.instance.activeShares;
+  static async getActiveShares() {
+    const streamModules = ModuleService.getStreamModules();
+    let activeShares = {} as KeyedObject;
+    for (let s in streamModules) {
+      const moduleActiveShares = await streamModules[s].getActiveShares();
+      activeShares = {
+        ...activeShares,
+        ...moduleActiveShares,
+      };
+    }
+    return activeShares;
   }
 
   static setShare(shareUser: string, isEnabled: boolean, message?: string) {
@@ -138,7 +157,9 @@ export default class ShareService {
     const sharePlatforms = userShare.streamPlatforms;
     const notificationPlatforms = userShare.notificationPlatforms;
 
-    if (message == null) {
+    console.log('MESSAGE', message);
+
+    if (typeof message === 'undefined') {
       if (isEnabled) {
         message = userShare.joinMessage;
       } else {
@@ -150,7 +171,7 @@ export default class ShareService {
       try {
         for (let p in sharePlatforms) {
           if (streamModules[p] != null) {
-            streamModules[p].joinChannel(sharePlatforms[p].userId, message);
+            streamModules[p].joinChannel(sharePlatforms[p].username, message);
           }
         }
       } catch (e) {
@@ -192,14 +213,14 @@ export default class ShareService {
       try {
         for (let p in sharePlatforms) {
           if (streamModules[p] != null) {
-            streamModules[p].leaveChannel(sharePlatforms[p].userId, message);
+            streamModules[p].leaveChannel(sharePlatforms[p].username, message);
           }
         }
       } catch (e) {
         console.log('Error leaving channel', e);
       }
     }
-    userShare.enabled = isEnabled;
+
     if (isEnabled) {
       sendToTCP('/spooder/share/activate', shareUser);
     } else {

@@ -71,7 +71,7 @@ export default class MotherwolfTunnel {
       if (this.isHTTPConnected && this.isOSCReceiverConnected && this.isOSCSenderConnected) {
         this.isReady = true;
         WebService.setPublicHTTPUrl(`https://${this.subdomain}.spooder.me`);
-        WebService.setPublicOSCUrl(`https://${this.subdomain}.spooder.me/osc`);
+        WebService.setPublicOSCUrl(`${this.subdomain}.spooder.me/osc`);
         ModuleService.onExternalNetworkChanged();
         webLog('Motherwolf Tunnels Ready');
       }

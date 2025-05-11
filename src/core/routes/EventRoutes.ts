@@ -13,8 +13,6 @@ import {
 export function EventRoutes() {
   const router = express.Router();
   const publicRouter = express.Router();
-  router.use(json());
-  publicRouter.use(json());
 
   router.get('/event_table', async (req: Request, res: Response) => {
     res.send({

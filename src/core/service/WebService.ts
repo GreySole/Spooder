@@ -26,8 +26,12 @@ import multer from 'multer';
 
 export function isLocal(req: Request) {
   if (req.headers['x-forwarded-for'] === undefined) {
-    //console.log('isLocal?', req.headers);
-    return false;
+    const remoteAddress = req.hostname;
+    const isLocal =
+      remoteAddress.startsWith('localhost') ||
+      remoteAddress.startsWith('192.168.') ||
+      remoteAddress.startsWith('10.');
+    return isLocal;
   }
 
   const remoteAddress = Array.isArray(req.headers['x-forwarded-for'])
@@ -39,10 +43,9 @@ export function isLocal(req: Request) {
     return false;
   }
   const isLocal =
+    remoteAddress.startsWith('127.0.0.1') ||
     remoteAddress.startsWith('192.168.') ||
-    remoteAddress.startsWith('10.') ||
-    remoteAddress == '1' ||
-    req.headers.host?.startsWith('localhost');
+    remoteAddress.startsWith('10.');
 
   if (isLocal == false) {
     logToFile(
@@ -143,7 +146,7 @@ export class WebService {
       router.use('/assets', express.static(userDir + '/web/assets'));
       router.use('/icons', express.static(userDir + '/web/icons'));
 
-      router.use(json());
+      router.use(json({ limit: '100mb' }));
       router.use(cookieParser());
 
       publicRouter.use('/', express.static(frontendDir + '/public/build'));
@@ -172,8 +175,8 @@ export class WebService {
       router.use('/events', eventRoutes.local);
 
       const pluginRoutes = PluginRoutes();
-      router.use('/plugins', pluginRoutes.local);
-      publicRouter.use('/plugins', pluginRoutes.public);
+      router.use('/plugin', pluginRoutes.local);
+      publicRouter.use('/plugin', pluginRoutes.public);
 
       const userRoutes = UserRoutes();
       router.use('/users', userRoutes.local);

@@ -59,14 +59,13 @@ export function PluginRoutes() {
   });
   const fileUpload = multer({ storage: tempStorage });
 
-  router.use(express.json());
   router.use('/install_plugin', fileUpload.single('file'));
   router.use('/upload_plugin_asset', fileUpload.array('files'));
   router.use('/upload_plugin_icon', fileUpload.single('file'));
 
   async function pluginGet(req: Request, res: Response) {
-    var pluginName = req.query.plugin as string;
-    var pluginSettings = null;
+    const pluginName = req.query.plugin as string;
+    let pluginSettings = null;
 
     try {
       const thisPlugin = fs.readFileSync(
@@ -84,16 +83,16 @@ export function PluginRoutes() {
 
     if (isLocal(req)) {
       oscInfo = {
-        host: WebService.getPublicOSCUrl(),
+        host: sconfig.network.host,
         name: pluginName,
-        port: null,
+        port: sconfig.network.osc.osc_tcp_port,
         settings: pluginSettings,
       };
     } else {
       oscInfo = {
-        host: sconfig.network.host,
+        host: WebService.getPublicOSCUrl(),
         name: pluginName,
-        port: sconfig.network.osc.osc_tcp_port,
+        port: null,
         settings: pluginSettings,
       };
     }
@@ -121,6 +120,9 @@ export function PluginRoutes() {
         assetPath: webJoin('assets', a),
         hasOverlay: thisPlugin.hasOverlay,
         hasUtility: thisPlugin.hasUtility,
+        hasPublic: thisPlugin.hasPublic,
+        pluginMode: thisPlugin.pluginMode,
+        devMode: thisPlugin.devMode,
       };
     }
 
@@ -456,7 +458,7 @@ export function PluginRoutes() {
         : [];
 
     dirs.forEach((value, index, array) => {
-      array[index] = currentPath === '/' ? `/${value}` : `${currentPath}/${value}`;
+      array[index] = currentPath === '/' ? `${value}` : `${currentPath}/${value}`;
     });
 
     res.send({ status: 'ok', dirs: dirs });
@@ -546,6 +548,29 @@ export function PluginRoutes() {
     res.send({ status: 'ok' });
   });
 
+  router.post('/set_plugin_dev_mode', (req: Request, res: Response) => {
+    const pluginName = req.body.pluginName;
+    const isEnabled = req.body.isEnabled;
+    PluginService.setDevMode(pluginName, isEnabled);
+
+    res.send({ status: 'ok' });
+  });
+
+  router.get('/build_plugin', async (req: Request, res: Response) => {
+    const pluginName = req.query.pluginname as string;
+    if (!pluginName) {
+      res.send({ status: 'error', error: 'No plugin name provided' });
+      return;
+    }
+    PluginService.buildPlugin(pluginName)
+      .then(() => {
+        res.send({ status: 'ok' });
+      })
+      .catch((e) => {
+        res.send({ status: 'error', error: e });
+      });
+  });
+
   router.post('/delete_plugin', async (req: Request, res: Response) => {
     const pluginName = req.body.pluginName;
     if (!pluginName) {
@@ -623,28 +648,28 @@ export function PluginRoutes() {
 
   router.get('/api/*', (req: Request, res: Response) => {
     console.log(pluginApi, req.params[0]);
-    if (pluginApi.local.get[`${req.params[0]}`] != null) {
+    if (pluginApi.local.get[`${req.params[0]}`]) {
       pluginApi.local.get[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });
 
   router.post('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.local.post[`${req.params[0]}`] != null) {
+    if (pluginApi.local.post[`${req.params[0]}`]) {
       pluginApi.local.post[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });
 
   publicRouter.get('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.public.get[`${req.params[0]}`] != null) {
+    if (pluginApi.public.get[`${req.params[0]}`]) {
       pluginApi.public.get[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });
 
   publicRouter.post('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.public.post[`${req.params[0]}`] != null) {
+    if (pluginApi.public.post[`${req.params[0]}`]) {
       pluginApi.public.post[`${req.params[0]}`](res, res);
     }
     res.status(200).end();
