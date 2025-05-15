@@ -200,19 +200,23 @@ export function PluginRoutes() {
   });
 
   router.post('/create_plugin', async (req: Request, res: Response) => {
-    let pluginName = req.body.pluginName;
-    let options = {
+    const pluginName = req.body.pluginName;
+    const author = req.body.author;
+    const description = req.body.description;
+    const typescript = req.body.typescript;
+    const pages = req.body.pages;
+
+    const options = {
       createInfo: {
         name: pluginName,
-        author: req.body.author,
-        description: req.body.description,
+        author: author,
+        description: description,
       },
-      overlay: true,
-      utility: true,
+      ...pages,
     };
-    let pluginDirName = req.body.internalName;
+    const pluginDirName = req.body.internalName;
 
-    let pluginPath = path.join(userDir, 'tmp', pluginDirName);
+    const pluginPath = path.join(userDir, 'tmp', pluginDirName);
 
     if (!fs.existsSync(pluginPath)) {
       fs.mkdirSync(pluginPath, { recursive: true });
@@ -220,7 +224,11 @@ export function PluginRoutes() {
       fs.rmSync(pluginPath, { recursive: true });
     }
 
-    fetch('https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/main')
+    const sampleURL = typescript
+      ? 'https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/0.5.0-dev-ts'
+      : 'https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/main';
+
+    fetch(sampleURL)
       .then((response) => response.arrayBuffer())
       .then(async (data) => {
         const tempDir = path.join(userDir, 'tmp', pluginDirName);
@@ -236,6 +244,21 @@ export function PluginRoutes() {
         zip.extractEntryTo(zip.getEntries()[0], tempDir);
 
         const fileDir = path.join(tempDir, zip.getEntries()[0].entryName);
+        const tempOverlayDir = path.join(fileDir, 'overlay');
+        const tempUtilityDir = path.join(fileDir, 'utility');
+        const tempPublicDir = path.join(fileDir, 'public');
+
+        if (pages.utility) {
+          if (fs.existsSync(tempOverlayDir)) {
+            await fs.copy(tempOverlayDir, tempUtilityDir);
+          }
+        }
+
+        if (pages.public) {
+          if (fs.existsSync(tempOverlayDir)) {
+            await fs.copy(tempOverlayDir, tempPublicDir);
+          }
+        }
 
         const files = fs.readdirSync(fileDir);
 

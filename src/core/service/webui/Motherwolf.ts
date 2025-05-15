@@ -29,6 +29,11 @@ export default class MotherwolfTunnel {
     this.oscReceiver.close();
     this.oscSender.close();
     this.isRunning = false;
+    this.isReady = false;
+    this.isHTTPConnected = false;
+    this.isOSCReceiverConnected = false;
+    this.isOSCSenderConnected = false;
+    webLog('Motherwolf Tunnels Stopped');
   }
 
   startTunnels() {
@@ -48,13 +53,22 @@ export default class MotherwolfTunnel {
     this.interval = setInterval(() => {
       if (this.socket.readyState === WebSocket.OPEN) {
         this.socket.ping();
+      } else {
+        this.reconnect();
+        return;
       }
       if (this.oscReceiver.readyState === WebSocket.OPEN) {
         this.oscReceiver.ping();
+      } else {
+        this.reconnect();
+        return;
       }
 
       if (this.oscSender.readyState === WebSocket.OPEN) {
         this.oscSender.ping();
+      } else {
+        this.reconnect();
+        return;
       }
     }, 30000); // Send a ping every 30 seconds
 
@@ -62,6 +76,20 @@ export default class MotherwolfTunnel {
   }
 
   connectSockets() {
+    if (this.socket && this.oscSender.readyState === WebSocket.OPEN) {
+      this.socket.close();
+      this.isHTTPConnected = false;
+    }
+    if (this.oscReceiver && this.oscSender.readyState === WebSocket.OPEN) {
+      this.oscReceiver.close();
+      this.isOSCReceiverConnected = false;
+    }
+    if (this.oscSender && this.oscSender.readyState === WebSocket.OPEN) {
+      this.oscSender.close();
+      this.isOSCSenderConnected = false;
+    }
+
+    this.isReady = false;
     this.socket = new WebSocket(`wss://${this.subdomain}.spooder.me?token=${this.token}`);
     this.oscReceiver = new WebSocket(`wss://${this.subdomain}.spooder.me/osc?token=${this.token}`);
     this.oscSender = new WebSocket(`ws://localhost:${this.osc_tcp_port}`);

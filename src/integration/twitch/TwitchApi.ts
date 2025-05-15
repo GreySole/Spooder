@@ -111,7 +111,8 @@ export default class TwitchApi {
     });
   };
 
-  getUserId(channelName: string) {
+  async getUserId(channelName: string) {
+    await this.validateChatbot();
     const oauth = this.getModule().oauth;
 
     return new Promise<string>((res, rej) => {
@@ -266,7 +267,8 @@ export default class TwitchApi {
     });
   };
 
-  getStreamInfo(username: string) {
+  async getStreamInfo(username: string) {
+    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -309,7 +311,8 @@ export default class TwitchApi {
     return streamInfo?.error ? false : true;
   };
 
-  callBotAPI = (url: string, postBody?: KeyedObject, method?: string) => {
+  callBotAPI = async (url: string, postBody?: KeyedObject, method?: string) => {
+    await this.validateChatbot();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
@@ -335,7 +338,8 @@ export default class TwitchApi {
     });
   };
 
-  callBroadcasterAPI = (url: string, postBody?: KeyedObject, method?: string) => {
+  callBroadcasterAPI = async (url: string, postBody?: KeyedObject, method?: string) => {
+    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
@@ -363,6 +367,7 @@ export default class TwitchApi {
   };
 
   getChannelInfo = async (channel?: string | undefined): Promise<KeyedObject> => {
+    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -397,7 +402,8 @@ export default class TwitchApi {
     });
   };
 
-  getUserInfoById = (id: string): Promise<KeyedObject> => {
+  getUserInfoById = async (id: string): Promise<KeyedObject> => {
+    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -431,7 +437,8 @@ export default class TwitchApi {
     });
   };
 
-  getUserInfo = (user?: string | undefined): Promise<KeyedObject> => {
+  getUserInfo = async (user?: string | undefined): Promise<KeyedObject> => {
+    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;

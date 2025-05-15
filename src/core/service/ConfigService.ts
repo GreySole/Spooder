@@ -216,6 +216,15 @@ export default class ConfigService {
         encoding: 'utf8',
       });
       const themesObj = JSON.parse(themesFile);
+      if (!themesObj.webui) {
+        themesObj.webui = ConfigService.instance.themes.webui;
+      }
+      if (!themesObj.modui) {
+        themesObj.modui = ConfigService.instance.themes.modui;
+      }
+      if (!themesObj.spooderpet) {
+        themesObj.spooderpet = ConfigService.instance.themes.spooderpet;
+      }
       if (themesObj.spooderpet.parts == null) {
         spooderLog('Upgrading themes file to new format');
         const parts = {} as KeyedObject;

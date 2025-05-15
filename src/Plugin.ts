@@ -67,6 +67,7 @@ interface PluginModule {
   onLoad?: () => void;
   onDestroy?: () => void;
   onChat?: (message: StreamMessage) => void;
+  onCommunityChat?: (type: string, data: any) => void;
   onOSC?: (message: OSC.Message) => void;
   onEvent?: (event: string, data: KeyedObject) => void;
   registerExtra: (key: string, value: any) => void;
@@ -348,6 +349,10 @@ export default class Plugin {
 
   onChat(message: StreamMessage) {
     this.pluginModule?.onChat?.(message);
+  }
+
+  onCommunityChat(type: string, data: any) {
+    this.pluginModule?.onCommunityChat?.(type, data);
   }
 
   onOSC(message: OSC.Message) {

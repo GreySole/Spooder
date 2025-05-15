@@ -136,7 +136,15 @@ export default class Discord implements CommunityModuleInterface {
   callPlugins(type: string, data: KeyedObject) {
     const activePlugins = PluginService.getActivePlugins();
     for (let a in activePlugins) {
-      activePlugins[a].onEvent(`discord-${type}`, data);
+      // Legacy support
+      // @ts-ignore
+      if (activePlugins[a].onDiscord) {
+        // @ts-ignore
+        activePlugins[a].onDiscord(type, data);
+        return;
+      }
+
+      activePlugins[a].onCommunityChat(type, data);
     }
   }
 

@@ -164,22 +164,22 @@ export default class PluginService {
       options = {
         createInfo: null,
         overlay: true,
-        utility: true,
       };
     }
+    console.log('Installing plugin from temp', options);
     OSCService.sendToTCP('/spooder/plugin/install/progress', {
       pluginName: pluginDirName,
       status: 'progress',
       message: 'Copying folders...',
     });
-    let tempDir = path.join(userDir, 'tmp', pluginDirName);
-    let pluginDir = path.join(userDir, 'plugins', pluginDirName);
-    let overlayDir = path.join(userDir, 'web', 'overlay', pluginDirName);
-    let utilityDir = path.join(userDir, 'web', 'utility', pluginDirName);
-    let publicDir = path.join(userDir, 'web', 'public', pluginDirName);
-    let settingsDir = path.join(userDir, 'web', 'settings', pluginDirName);
-    let assetsDir = path.join(userDir, 'web', 'assets', pluginDirName);
-    let iconDir = path.join(userDir, 'web', 'icons', pluginDirName + '.png');
+    const tempDir = path.join(userDir, 'tmp', pluginDirName);
+    const pluginDir = path.join(userDir, 'plugins', pluginDirName);
+    const overlayDir = path.join(userDir, 'web', 'overlay', pluginDirName);
+    const utilityDir = path.join(userDir, 'web', 'utility', pluginDirName);
+    const publicDir = path.join(userDir, 'web', 'public', pluginDirName);
+    const settingsDir = path.join(userDir, 'web', 'settings', pluginDirName);
+    const assetsDir = path.join(userDir, 'web', 'assets', pluginDirName);
+    const iconDir = path.join(userDir, 'web', 'icons', pluginDirName + '.png');
 
     if (!fs.existsSync(tempDir + '/command')) {
       return {

@@ -57,6 +57,7 @@ export default class TwitchEventSub {
   };
 
   getEventSubs = async () => {
+    await this.getModule().api.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -79,6 +80,7 @@ export default class TwitchEventSub {
   };
 
   refreshEventSubs = async () => {
+    await this.getModule().api.validateBroadcaster();
     const events = EventService.getEvents();
     const api = this.getModule().api;
     const broadcasterId = await api.getBroadcasterId();
@@ -144,6 +146,7 @@ export default class TwitchEventSub {
   };
 
   deleteEventSub = async (id: string) => {
+    await this.getModule().api.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -165,6 +168,7 @@ export default class TwitchEventSub {
   };
 
   initEventSub = async (eventType: string, broadcasterId?: string, botId?: string) => {
+    await this.getModule().api.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -174,7 +178,6 @@ export default class TwitchEventSub {
     }
 
     let condition = {} as KeyedObject;
-    let accessToken = broadcasterToken;
 
     if (!eventType.startsWith('channel.raid')) {
       condition = { broadcaster_user_id: broadcasterUserID };
@@ -212,7 +215,7 @@ export default class TwitchEventSub {
         method: 'post',
         headers: {
           'Client-ID': oauth['client-id'],
-          Authorization: 'Bearer ' + accessToken,
+          Authorization: 'Bearer ' + broadcasterToken,
           'Content-Type': 'application/json',
         },
         data: {

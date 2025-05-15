@@ -24,7 +24,9 @@ export function ThemeRoutes() {
     const accessCookie = req.cookies['access'];
     const modUser = UserService.getActiveUserFromCookie(accessCookie);
     const themes = ConfigService.getThemes();
-    res.send(modUser ? themes.modui[modUser] : themes.webui);
+    console.log('modUser', modUser, themes.modui);
+    const thisTheme = themes.modui?.[modUser] ? themes.modui[modUser] : themes.webui;
+    res.send(thisTheme);
   }
 
   function getCustomSpooder(req: Request, res: Response) {

@@ -83,6 +83,14 @@ export class ModerationService {
     return ModerationService.instance.modlocks.plugins[target] == 1;
   }
 
+  static isOnLockdown() {
+    return ModerationService.instance.modlocks.lockdown == 1;
+  }
+
+  static isSpamGuardOn() {
+    return ModerationService.instance.modlocks.spamguard == 1;
+  }
+
   static lockEvent(modCommand: ModCommand, target: string) {
     const events = EventService.getEvents();
 
@@ -106,6 +114,24 @@ export class ModerationService {
       }
     }
     return eventLocked;
+  }
+
+  static setLockdown(modCommand: ModCommand) {
+    if (typeof modCommand == 'number') {
+      modCommand = modCommand == 1 ? 'lock' : 'unlock';
+    } else if (typeof modCommand == 'boolean') {
+      modCommand = modCommand == true ? 'lock' : 'unlock';
+    }
+
+    if (modCommand == 'lock') {
+      ModerationService.instance.modlocks.lockdown = 1;
+      OSCService.sendToTCP('/mod/lockdown', 1);
+      return true;
+    } else {
+      ModerationService.instance.modlocks.lockdown = 0;
+      OSCService.sendToTCP('/mod/lockdown', 0);
+      return false;
+    }
   }
 
   static lockPlugin(modCommand: ModCommand, plugin: string, target?: string) {

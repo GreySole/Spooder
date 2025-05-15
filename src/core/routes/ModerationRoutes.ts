@@ -75,8 +75,6 @@ export function ModerationRoutes() {
       };
     }
 
-    const themes = ConfigService.getThemes();
-
     let oscURL = null;
     let oscPort = null;
     const sconfig = ConfigService.getConfig();
@@ -115,7 +113,7 @@ export function ModerationRoutes() {
   publicRouter.get('/modmap', getModmap);
 
   function modEventLock(req: Request, res: Response) {
-    const isLocked = req.body.isOn == 'true';
+    const isLocked = req.body.isOn === true;
     const target = req.body.eventName;
 
     if (!validateUser(req, res)) {
@@ -134,7 +132,7 @@ export function ModerationRoutes() {
   publicRouter.post('/lock/event', modEventLock);
 
   function modPluginLock(req: Request, res: Response) {
-    const isLocked = req.body.isOn == 'true';
+    const isLocked = req.body.isOn === true;
     const pluginName = req.body.pluginName;
     const subLockName = req.body.subLockName;
 
@@ -158,6 +156,23 @@ export function ModerationRoutes() {
 
   router.post('/lock/plugin', modPluginLock);
   publicRouter.post('/lock/plugin', modPluginLock);
+
+  function modLockdown(req: Request, res: Response) {
+    if (!validateUser(req, res)) {
+      return;
+    }
+    const isLocked = req.body.isOn === true;
+    const accessCookie = req.cookies['access'];
+    const modUser = UserService.getActiveUserFromCookie(accessCookie);
+    let lockString = isLocked === true ? 'locked' : 'unlocked';
+
+    ModerationService.setLockdown(isLocked);
+    sayInChat(`${modUser} ${lockString} the chat`);
+    res.send({ status: 'ok' });
+  }
+
+  router.post('/set_lockdown', modLockdown);
+  publicRouter.post('/set_lockdown', modLockdown);
 
   function modBlacklist(req: Request, res: Response) {
     if (!validateUser(req, res)) {
@@ -226,8 +241,8 @@ export function ModerationRoutes() {
     res.send({ status: 'ok', event_count: eventCount });
   }
 
-  router.post('/stop_all', modStopAll);
-  publicRouter.post('/stop_all', modStopAll);
+  router.post('/stop_all_events', modStopAll);
+  publicRouter.post('/stop_all_events', modStopAll);
 
   function validateUser(req: Request, res: Response) {
     const accessCookie = req.cookies['access'];
@@ -319,12 +334,12 @@ export function ModerationRoutes() {
       return;
     }
     const command = req.body.command;
-    const isSearchAndMatch = req.body.search == 'true';
+    const isSearchAndMatch = req.body.search;
     const permissions = {
-      vip: req.body.vip == 'true',
-      mod: req.body.mod == 'true',
-      sub: req.body.sub == 'true',
-      broadcaster: req.body.broadcaster == 'true',
+      vip: req.body.vip,
+      mod: req.body.mod,
+      sub: req.body.sub,
+      broadcaster: req.body.broadcaster,
     };
     const script = req.body.script;
 
@@ -340,14 +355,14 @@ export function ModerationRoutes() {
       return;
     }
     const commandId = req.body.commandId;
-    const enabled = req.body.enabled == 'true';
+    const enabled = req.body.enabled;
     const command = req.body.command;
-    const isSearchAndMatch = req.body.search == 'true';
+    const isSearchAndMatch = req.body.search;
     const permissions = {
-      vip: req.body.vip == 'true',
-      mod: req.body.mod == 'true',
-      sub: req.body.sub == 'true',
-      broadcaster: req.body.broadcaster == 'true',
+      vip: req.body.vip,
+      mod: req.body.mod,
+      sub: req.body.sub,
+      broadcaster: req.body.broadcaster,
     };
     const script = req.body.script;
 
