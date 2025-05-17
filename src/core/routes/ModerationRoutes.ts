@@ -250,7 +250,7 @@ export function ModerationRoutes() {
       return true;
     }
     if (!UserService.isActive(accessCookie)) {
-      res.redirect('/login?reason=notactive');
+      res.redirect('/login?reason=Not logged in');
       return false;
     } else if (
       !UserService.checkPermission(UserService.getActiveUserFromCookie(accessCookie), [
@@ -258,7 +258,7 @@ export function ModerationRoutes() {
         PermissionType.mod,
       ])
     ) {
-      res.redirect('/login?reason=nopermission');
+      res.redirect('/login?reason=Lacking permissions');
       return false;
     }
     return true;

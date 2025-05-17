@@ -19,7 +19,7 @@ export default function getResponseHandlers() {
   }
 
   async function callApi(url: string, postBody?: KeyedObject, method?: string) {
-    return await twitchModule.api.callBroadcasterAPI(url, postBody, method);
+    return await twitchModule.api.callBroadcasterApi(url, postBody, method);
   }
 
   return {

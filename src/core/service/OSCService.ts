@@ -254,7 +254,6 @@ export default class OSCService {
     var osc = this.oscUDP;
 
     osc.on('*', (message: OSC.Message) => {
-      console.log('OSC UDP MESSAGE', message.address);
       const events = EventService.getEvents();
 
       MonitorService.addLog(
@@ -263,6 +262,8 @@ export default class OSCService {
         message.address,
         message.args,
       );
+
+      console.log('OSC UDP', message.address, message.args);
 
       for (const e of Object.keys(events)) {
         if (triggerExistsAndEnabled(events[e].triggers, 'osc')) {
@@ -292,13 +293,15 @@ export default class OSCService {
               }
             }
           } else if (message.address == events[e].triggers.osc.address) {
-            const conditionsOn = events[e].triggers.osc.conditionsOn as OSCConditionGroup[];
-            const conditionsOff = events[e].triggers.osc.conditionsOff as OSCConditionGroup[];
+            const conditionsOn = events[e].triggers.osc.condition_groups_on as OSCConditionGroup[];
+            const conditionsOff = events[e].triggers.osc
+              .condition_groups_off as OSCConditionGroup[];
 
-            if (
-              message.args.length < conditionsOn.length ||
-              message.args.length < conditionsOff.length
-            ) {
+            if (!conditionsOn) {
+              return;
+            }
+
+            if (message.args.length < conditionsOn?.length) {
               return;
             }
 
@@ -307,7 +310,6 @@ export default class OSCService {
               for (let groupIndex = 0; groupIndex < conditionGroups.length; groupIndex++) {
                 const groupConditionMode = conditionGroups[groupIndex].mode;
                 const conditionValues = conditionGroups[groupIndex].conditions;
-
                 if (groupConditionMode === 'AND') {
                   for (
                     let conditionIndex = 0;
@@ -342,32 +344,32 @@ export default class OSCService {
                   return false;
                 }
               }
-
-              if (runConditions(message.args, conditionsOn)) {
-                const streamMessage = {
-                  userId: '',
-                  username: '',
-                  displayName: '',
-                  platform: 'osc',
-                  channel: 'udp',
-                  message: message.args[0],
-                  emotes: [],
-                  tags: {},
-                  isBroadcaster: false,
-                  isMod: false,
-                  isSubscriber: false,
-                  isVIP: false,
-                  isFirstMessage: false,
-                  isReturningChatter: false,
-                } as StreamMessage;
-
-                EventService.runCommands(streamMessage, e, 'osc');
-              }
-
-              if (runConditions(message.args, conditionsOff)) {
-                EventService.stopEvent(e);
-              }
             }
+
+            if (runConditions(message.args, conditionsOn)) {
+              const streamMessage = {
+                userId: '',
+                username: '',
+                displayName: '',
+                platform: 'osc',
+                channel: 'udp',
+                message: message.args[0],
+                emotes: [],
+                tags: {},
+                isBroadcaster: false,
+                isMod: false,
+                isSubscriber: false,
+                isVIP: false,
+                isFirstMessage: false,
+                isReturningChatter: false,
+              } as StreamMessage;
+
+              EventService.runCommands(streamMessage, e, 'osc');
+            }
+
+            /*if (runConditions(message.args, conditionsOff)) {
+              EventService.stopEvent(e);
+            }*/
           }
         }
 
@@ -378,10 +380,12 @@ export default class OSCService {
           }
         }
 
-        const activePlugins = PluginService.getActivePlugins();
-        for (const p in activePlugins) {
-          if (activePlugins[p].onOSC != null) {
-            activePlugins[p].onOSC(message);
+        if (PluginService.isReady) {
+          const activePlugins = PluginService.getActivePlugins();
+          for (const p in activePlugins) {
+            if (activePlugins[p].onOSC != null) {
+              activePlugins[p].onOSC(message);
+            }
           }
         }
       }

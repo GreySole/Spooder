@@ -23,6 +23,7 @@ import MotherwolfTunnel from './webui/Motherwolf.ts';
 import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
 import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
 import multer from 'multer';
+import net from 'net';
 
 export function isLocal(req: Request) {
   if (req.headers['x-forwarded-for'] === undefined) {
@@ -57,6 +58,25 @@ export function isLocal(req: Request) {
   return isLocal;
 }
 
+export async function findAvailablePort(startPort: number): Promise<number> {
+  let port = startPort;
+  while (true) {
+    const isAvailable = await new Promise<boolean>((resolve) => {
+      const tester = net
+        .createServer()
+        .once('error', () => resolve(false))
+        .once('listening', function () {
+          tester.close();
+          resolve(true);
+        })
+        .listen(port);
+    });
+    if (isAvailable) return port;
+    console.log('Port', port, 'is not available, trying next one');
+    port++;
+  }
+}
+
 export class WebService {
   private static instance: WebService;
   constructor() {
@@ -77,7 +97,7 @@ export class WebService {
   private publicHTTPUrl: string | undefined = undefined;
   private publicOSCUrl: string | undefined = undefined;
 
-  startServer(initMode: boolean) {
+  async startServer(initMode: boolean) {
     let expressPort = null;
 
     const pluginsDir = path.join(userDir, 'plugins');
@@ -129,13 +149,13 @@ export class WebService {
         },
       });
       const fileUpload = multer({ storage: tempStorage });
-      expressPort = 3000;
+      expressPort = await findAvailablePort(3000);
       console.log('STARTING SERVER IN INIT MODE');
       router.use('/', express.static(frontendDir + '/init/build'));
       router.use('/restore_settings', fileUpload.single('file'));
       router.use('/restore_plugins', fileUpload.single('file'));
     } else {
-      expressPort = sconfig.network.host_port;
+      expressPort = await findAvailablePort(sconfig.network.host_port);
       router.use('/', express.static(frontendDir + '/main/build'));
       router.use('/mod', express.static(frontendDir + '/mod/build'));
       router.use('/public', express.static(frontendDir + '/public/build'));
@@ -180,9 +200,11 @@ export class WebService {
 
       const userRoutes = UserRoutes();
       router.use('/users', userRoutes.local);
+      publicRouter.use('/users', userRoutes.public);
 
       const modRoutes = ModerationRoutes();
       router.use('/mod', modRoutes.local);
+      publicRouter.use('/mod', modRoutes.public);
 
       const themeRoutes = ThemeRoutes();
       router.use('/theme', themeRoutes.local);
@@ -193,7 +215,7 @@ export class WebService {
 
       const publicRoutes = PublicRoutes();
       router.use('/public', publicRoutes.local);
-      publicRouter.use('/', publicRoutes.public);
+      publicRouter.use('/public', publicRoutes.public);
     }
 
     app.use('/', (req: Request, res: Response, next: NextFunction) => {

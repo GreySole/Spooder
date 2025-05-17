@@ -171,8 +171,9 @@ export default function getTwitchRouters() {
       return;
     }
 
-    await twitchModule.api.getBroadcasterId();
+    console.log('Getting channel point rewards');
     await twitchModule.api.validateBroadcaster();
+    await twitchModule.api.getBroadcasterId();
 
     if (twitchModule.api.broadcasterUserID == '') {
       res.send({ status: 'NO BROADCASTER USER ID' });
@@ -277,9 +278,10 @@ export default function getTwitchRouters() {
       });
   });
 
-  async function validateViewer(token: string, req: Request, res: Response) {
+  async function registerViewer(token: string, req: Request, res: Response) {
     const response = await twitchModule.api.validateViewer(token);
     if (response.status === 'ok') {
+      console.log('Viewer registered', response.data);
       twitchModule.activeViewers[token] = response.data;
       const expirationTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
       res.cookie('public_module', 'twitch', {
@@ -289,7 +291,7 @@ export default function getTwitchRouters() {
       });
       res.cookie('access_token', token, { expires: expirationTime, httpOnly: true, secure: true });
       UserService.registerActiveViewer(
-        { username: response.data.username, userId: response.data.user_id },
+        { username: response.data.login, userId: response.data.user_id },
         'twitch',
         token,
         expirationTime.getTime(),
@@ -316,7 +318,7 @@ export default function getTwitchRouters() {
         res.send({ status: 'ok', data: userInfo });
         return;
       } else {
-        validateViewer(token, req, res);
+        registerViewer(token, req, res);
         return;
       }
     }
@@ -327,7 +329,7 @@ export default function getTwitchRouters() {
     }
 
     const token = req.body.access_token;
-    validateViewer(token, req, res);
+    registerViewer(token, req, res);
   });
 
   router.get('/eventsub_types', (req, res) => {

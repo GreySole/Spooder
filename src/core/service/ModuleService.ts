@@ -116,6 +116,31 @@ export default class ModuleService {
   activeStreams = {} as ModuleContainer;
   activeCommunities = {} as ModuleContainer;
 
+  static getModulePluginFunctions() {
+    const streamModules = ModuleService.getStreamModules();
+    const communityModules = ModuleService.getCommunityModules();
+    const controlModules = ModuleService.getControlModules();
+
+    let streamFunctions = {} as KeyedObject;
+    let communityFunctions = {} as KeyedObject;
+    let controlFunctions = {} as KeyedObject;
+    for (let s in streamModules) {
+      streamFunctions[s] = streamModules[s].getPluginFunctions();
+    }
+    for (let s in communityModules) {
+      communityFunctions[s] = communityModules[s].getPluginFunctions();
+    }
+    for (let s in controlModules) {
+      controlFunctions[s] = controlModules[s].getPluginFunctions();
+    }
+
+    return {
+      stream: streamFunctions,
+      community: communityFunctions,
+      control: controlFunctions,
+    };
+  }
+
   async registerCoreModule(name: string, coreModule: CoreModule) {
     const newModule = await import(`../${name}/module.ts`);
     this.coreModules[coreModule] = new newModule.default();

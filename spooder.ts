@@ -68,9 +68,10 @@ if (initMode) {
     new OSCService();
     new MonitorService();
     new UserService();
-    new PluginService();
     console.log('Logging into modules');
     await ModuleService.autoLoginModules();
+    new PluginService();
+
     console.log('Refreshing share users');
     ShareService.refreshShareUsers();
     console.log('Starting Public Hosting');

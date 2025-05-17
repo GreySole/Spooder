@@ -93,6 +93,20 @@ export default class Twitch implements StreamModuleInterface {
   chat = new TwitchChat();
   activeViewers = {} as KeyedObject;
 
+  getPluginFunctions = () => ({
+    getUserInfo: this.api.getUserInfo.bind(this.api),
+    getUserInfoById: this.api.getUserInfoById.bind(this.api),
+    callBroadcasterApi: this.api.callBroadcasterApi.bind(this.api),
+    callBotApi: this.api.callBotApi.bind(this.api),
+    getBroadcasterId: this.api.getBroadcasterId.bind(this.api),
+    getBotId: this.api.getBotId.bind(this.api),
+    isStreamerLive: this.api.isStreamerLive.bind(this.api),
+    getStreamInfo: this.api.getStreamInfo.bind(this.api),
+    getChannelInfo: this.api.getChannelInfo.bind(this.api),
+    broadcasterUsername: this.api.homeChannel,
+    botUsername: this.api.botUsername,
+  });
+
   getChannelInfo = this.api.getChannelInfo;
   getUserInfo = this.api.getUserInfo;
   getActiveShares = async () => {

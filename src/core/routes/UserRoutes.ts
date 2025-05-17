@@ -7,6 +7,7 @@ export function UserRoutes() {
   const router = Router();
   const publicRouter = Router();
   router.get('/data', (req: Request, res: Response) => {
+    console.log('User data requested');
     res.send(UserService.getUsers());
   });
 
@@ -84,7 +85,7 @@ export function UserRoutes() {
     }
   }
 
-  router.post('/authentication', (req: Request, res: Response) => {
+  router.post('/login', (req: Request, res: Response) => {
     let browserToken = crypto.randomBytes(48).toString('hex');
     UserService.setActiveUser('local', browserToken);
     res.cookie('access', browserToken, {
@@ -94,7 +95,7 @@ export function UserRoutes() {
     });
     res.send({ status: 'active' });
   });
-  publicRouter.post('/authentication', userLogin);
+  publicRouter.post('/login', userLogin);
 
   return {
     local: router,

@@ -32,6 +32,10 @@ export default class OBS implements ControlModuleInterface {
     this.websocket.call(obsCommand, data);
   }
 
+  getPluginFunctions = () => {
+    return {};
+  };
+
   getRouters() {
     const router = getObsRouters();
     return {

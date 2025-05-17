@@ -86,6 +86,7 @@ export function PluginRoutes() {
         host: sconfig.network.host,
         name: pluginName,
         port: sconfig.network.osc.osc_tcp_port,
+        external: false,
         settings: pluginSettings,
       };
     } else {
@@ -93,6 +94,7 @@ export function PluginRoutes() {
         host: WebService.getPublicOSCUrl(),
         name: pluginName,
         port: null,
+        external: true,
         settings: pluginSettings,
       };
     }

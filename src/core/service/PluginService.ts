@@ -15,6 +15,7 @@ interface PluginMap {
 
 export default class PluginService {
   private static instance: PluginService;
+  public static isReady: boolean = false;
 
   constructor() {
     if (PluginService.instance) {
@@ -37,7 +38,9 @@ export default class PluginService {
       console.log('Plugin settings file error', e);
     }
 
-    PluginService.refreshAllPlugins();
+    PluginService.refreshAllPlugins(() => {
+      PluginService.isReady = true;
+    });
   }
 
   private saveGlobalPluginSettings() {

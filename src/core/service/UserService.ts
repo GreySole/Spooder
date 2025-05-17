@@ -53,6 +53,7 @@ export default class UserService {
             pending: {},
             permissions: parsedUsers.trusted_users.permissions,
           } as TrustedUsers;
+          console.log('Upgraded users file', parsedUsers);
         }
         UserService.instance.users = parsedUsers as UserFile;
       }
@@ -76,8 +77,7 @@ export default class UserService {
   static getUsers() {
     const users = UserService.instance.users;
     const hasPassword = {} as KeyedObject;
-
-    for (let u in Object.values(users.trusted_users.user_names)) {
+    for (let u in users.trusted_users.user_names) {
       const userId = users.trusted_users.user_names[u];
       hasPassword[userId] = users.trusted_users_pw[userId] !== undefined;
     }
@@ -178,7 +178,7 @@ export default class UserService {
   }
 
   static checkPermission(username: string, permissionTypes: PermissionType[]) {
-    return permissionTypes.every((permissionType) =>
+    return permissionTypes.some((permissionType) =>
       UserService.instance.users.trusted_users.permissions[username].includes(permissionType),
     );
   }
@@ -188,7 +188,7 @@ export default class UserService {
   }
 
   static hasPassword(username: string) {
-    return UserService.instance.users.trusted_users_pw[username].temporary;
+    return UserService.instance.users.trusted_users_pw[username] !== undefined;
   }
 
   static isPasswordTemporary(username: string) {

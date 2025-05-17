@@ -7,6 +7,7 @@ import { eventsubs } from './TwitchConstants.ts';
 import { EventService } from 'src/core/service/EventService.ts';
 import OnEventSubReceived from './OnEventSubReceived.ts';
 import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil.ts';
+import WebSocket from 'ws';
 
 export default class TwitchEventSub {
   websocket: WebSocket | undefined = undefined;
@@ -27,7 +28,7 @@ export default class TwitchEventSub {
     };
 
     this.websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+      const data = JSON.parse(event.data.toString());
 
       if (data.metadata.message_type === 'session_welcome') {
         this.wsSessionId = data.payload.session.id;
@@ -146,7 +147,6 @@ export default class TwitchEventSub {
   };
 
   deleteEventSub = async (id: string) => {
-    await this.getModule().api.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -168,7 +168,6 @@ export default class TwitchEventSub {
   };
 
   initEventSub = async (eventType: string, broadcasterId?: string, botId?: string) => {
-    await this.getModule().api.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;

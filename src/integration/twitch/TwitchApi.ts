@@ -116,6 +116,10 @@ export default class TwitchApi {
     const oauth = this.getModule().oauth;
 
     return new Promise<string>((res, rej) => {
+      if (!channelName) {
+        rej('No channel name provided');
+        return;
+      }
       Axios({
         url: 'https://api.twitch.tv/helix/users?login=' + channelName,
         method: 'get',
@@ -128,7 +132,7 @@ export default class TwitchApi {
           res(response.data.data[0].id);
         })
         .catch(async (error: AxiosError) => {
-          twitchLog('Broadcaster auth error: ', error.message);
+          twitchLog('Broadcaster auth error: ', error);
           if (error.response?.status == 401) {
             await this.onAuthenticationFailure();
             res(this.getUserId(channelName));
@@ -142,18 +146,29 @@ export default class TwitchApi {
 
   getBroadcasterId() {
     return new Promise<string>((res, rej) => {
-      this.getUserId(this.homeChannel).then((id) => {
-        this.broadcasterUserID = id;
-        res(id);
-      });
+      console.log('getBroadcasterId');
+      this.getUserId(this.homeChannel)
+        .then((id) => {
+          this.broadcasterUserID = id;
+          res(id);
+        })
+        .catch((error) => {
+          console.log('getBroadcasterId error', error);
+          rej('No broadcaster id found');
+        });
     });
   }
 
   getBotId() {
     return new Promise<string>((res, rej) => {
-      this.getUserId(this.botUsername).then((id) => {
-        res(id);
-      });
+      this.getUserId(this.botUsername)
+        .then((id) => {
+          res(id);
+        })
+        .catch((error) => {
+          console.log('getBotId error', error);
+          rej(error);
+        });
     });
   }
 
@@ -311,7 +326,7 @@ export default class TwitchApi {
     return streamInfo?.error ? false : true;
   };
 
-  callBotAPI = async (url: string, postBody?: KeyedObject, method?: string) => {
+  callBotApi = async (url: string, postBody?: KeyedObject, method?: string) => {
     await this.validateChatbot();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
@@ -338,7 +353,7 @@ export default class TwitchApi {
     });
   };
 
-  callBroadcasterAPI = async (url: string, postBody?: KeyedObject, method?: string) => {
+  callBroadcasterApi = async (url: string, postBody?: KeyedObject, method?: string) => {
     await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;

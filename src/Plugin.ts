@@ -14,11 +14,12 @@ import UserService from './core/service/UserService.ts';
 import ConfigService from './core/service/ConfigService.ts';
 import childProcess from 'child_process';
 import chmodr from 'chmodr';
+import { sayInChat } from './core/service/EventService.ts';
 
 interface PluginSpooderModules {
-  streamModules: KeyedObject;
-  communityModules: KeyedObject;
-  controlModules: KeyedObject;
+  stream: KeyedObject;
+  community: KeyedObject;
+  control: KeyedObject;
 }
 
 interface PluginPublicInfo {
@@ -47,6 +48,10 @@ interface PluginThemeInfo {
   spooderPet: KeyedObject;
 }
 
+interface PluginChatInfo {
+  sayInChat: (message: string, platform: string, channel: string) => void;
+}
+
 interface PluginModule {
   dirname: string;
   modules: PluginSpooderModules;
@@ -55,6 +60,7 @@ interface PluginModule {
   spooderTheme: PluginThemeInfo;
   osc: PluginOscInfo;
   public: PluginPublicInfo;
+  chat: PluginChatInfo;
   registerPluginApi: (
     router: 'local' | 'public',
     method: 'get' | 'post' | 'put' | 'delete',
@@ -206,10 +212,12 @@ export default class Plugin {
 
       this.pluginModule.dirname = pluginDirName;
 
+      const functions = ModuleService.getModulePluginFunctions();
+
       this.pluginModule.modules = {
-        streamModules: ModuleService.getStreamModules(),
-        communityModules: ModuleService.getCommunityModules(),
-        controlModules: ModuleService.getControlModules(),
+        stream: functions.stream,
+        community: functions.community,
+        control: functions.control,
       } as PluginSpooderModules;
       this.pluginModule.osc = {
         sendToTCP: OSCService.sendToTCP,
@@ -220,6 +228,10 @@ export default class Plugin {
         publicHostUrl: WebService.getPublicHTTPUrl(),
         publicOscUrl: WebService.getPublicOSCUrl(),
       } as PluginPublicInfo;
+
+      this.pluginModule.chat = {
+        sayInChat: sayInChat,
+      };
 
       const spooderConfig = ConfigService.getConfig();
       this.pluginModule.spooderConfig = {
@@ -260,7 +272,11 @@ export default class Plugin {
         );
         //console.log('Settings Loaded', this.pluginModule.settings);
         if (this.pluginModule.onSettings != null) {
-          this.pluginModule.onSettings(this.pluginModule.settings ?? {});
+          try {
+            this.pluginModule.onSettings(this.pluginModule.settings ?? {});
+          } catch (e) {
+            throw new Error('Plugin onSettings failed to execute');
+          }
         }
       }
       console.log('Checking for onLoad for ' + pluginMeta.name, this.pluginModule.onLoad);

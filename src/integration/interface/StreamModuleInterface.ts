@@ -9,6 +9,7 @@ export interface StreamModuleInterface {
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;
   getActiveShares: () => Promise<KeyedObject>;
   getUserInfo: (user?: string) => Promise<KeyedObject>;
+  getPluginFunctions: () => KeyedObject;
   joinChannel: (channelname: string, joinmsg: string | undefined) => Promise<void>;
   leaveChannel: (channelname: string, leavemsg: string | undefined) => Promise<void>;
   refreshShareUserInfo(id: string): Promise<KeyedObject>;

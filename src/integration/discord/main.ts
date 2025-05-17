@@ -74,6 +74,17 @@ export default class Discord implements CommunityModuleInterface {
     });
   }
 
+  getPluginFunctions = () => {
+    return {
+      isSelf: this.isSelf.bind(this),
+      isMaster: this.isMaster.bind(this),
+      isHandler: this.isHandler.bind(this),
+      getServerByName: this.getServerByName.bind(this),
+      getChannelByName: this.getChannelByName.bind(this),
+      getMessageRange: this.getMessageRange.bind(this),
+    };
+  };
+
   async getCommands() {
     const activePlugins = PluginService.getActivePlugins();
     let discordInfo = this.config;
@@ -93,7 +104,7 @@ export default class Discord implements CommunityModuleInterface {
       }
     }
     if (this.commands.size > 0) {
-      console.log(`Started refreshing ${this.commands.size} application (/) commands.`);
+      //console.log(`Started refreshing ${this.commands.size} application (/) commands.`);
       const rest = new REST({ version: '10' }).setToken(discordInfo.token);
       const data: any = await rest.put(Routes.applicationCommands(discordInfo.clientId), {
         body: this.commands,
@@ -172,6 +183,22 @@ export default class Discord implements CommunityModuleInterface {
       }
     }
     return false;
+  }
+
+  getMessageRange(serverId: string, channelId: string, amount: number) {
+    if (!this.loggedIn) {
+      return null;
+    }
+    if (channelId == null) {
+      return null;
+    }
+    let channel = this.getGuild(serverId)?.channels.cache.get(channelId);
+    if (channel == null) {
+      return null;
+    }
+    if (channel.isTextBased()) {
+      return (channel as TextChannel).messages.fetch({ limit: amount });
+    }
   }
 
   getServerByName(servername: string) {

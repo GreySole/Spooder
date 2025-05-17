@@ -24,15 +24,15 @@ export function PublicRoutes() {
     res.send({
       botName: twitch.api.botUsername,
       homeChannel: twitch.api.homeChannel,
+      clientId: twitch.oauth['client-id'],
       theme: ConfigService.getThemes().public,
       spooderpet: ConfigService.getThemes().spooderpet,
       plugins: publicPlugins,
     });
   }
 
-  router.get('/public/data', getPublicData);
-
-  publicRouter.get('/public/data', getPublicData);
+  router.get('/data', getPublicData);
+  publicRouter.get('/data', getPublicData);
 
   return {
     local: router,
