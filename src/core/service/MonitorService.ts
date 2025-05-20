@@ -41,7 +41,7 @@ export default class MonitorService {
     udp: [] as OSCLog[],
     tcp: [] as OSCLog[],
     plugin: [] as OSCLog[],
-    liveLogEnabed: 0,
+    liveLogEnabled: 0,
   };
 
   private systemStatus = {
@@ -58,6 +58,14 @@ export default class MonitorService {
       downSpeed: 0,
     },
   };
+
+  static enableLiveLogging() {
+    MonitorService.instance.oscMessageLog.liveLogEnabled = 1;
+  }
+
+  static disableLiveLogging() {
+    MonitorService.instance.oscMessageLog.liveLogEnabled = 0;
+  }
 
   static addLog(type: MonitorDataType, direction: MonitorDirection, address: string, args: any[]) {
     const timestamp = new Date().toISOString();
@@ -91,14 +99,17 @@ export default class MonitorService {
       MonitorService.instance.oscMessageLog.plugin.shift();
     }
 
-    if (MonitorService.instance.oscMessageLog.liveLogging == 1) {
-      OSCService.sendToTCP('/spooder/monitor/log', JSON.stringify(liveLogData));
+    if (MonitorService.instance.oscMessageLog.liveLogEnabled == 1) {
+      console.log('Live Send To Monitor', type, direction, address, liveLogData);
+
+      OSCService.sendToTCP('/spooder/monitor/log', JSON.stringify(liveLogData), false);
     }
   }
 
   static sendToMonitor = (proto: string, direction: string, data: KeyedObject) => {
     let timestamp = Date.now();
-    MonitorService.instance.monitorLogs.logs.push({
+    console.log('SEND TO MONITOR', proto, direction, data);
+    MonitorService.instance.oscMessageLog[proto]?.push({
       timestamp: timestamp,
       type: 'osc',
       protocol: proto,
@@ -183,6 +194,7 @@ export default class MonitorService {
   private getNetworkUsage = async () => {
     try {
       const networkStats = await si.networkStats();
+
       let totalReceived = 0;
       let totalSent = 0;
 

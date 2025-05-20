@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2018",
+    "target": "ES2021",
     "module": "ESNext",
     "allowJs": true,
     "skipLibCheck": true,
@@ -12,6 +12,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "sourceMap": true,
     "baseUrl": "./",
     "paths": {
       "@frontend/*": [
@@ -24,7 +25,6 @@
   },
   "include": [
     "src/**/*.ts",
-    "spooder.ts"
   ], // Specify files to include in compilation
   "exclude": [
     "node_modules"

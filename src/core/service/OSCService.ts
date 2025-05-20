@@ -157,13 +157,12 @@ export default class OSCService {
   };
 
   updateOSCListeners() {
-    var osc = this.oscUDP;
-    var oscTCP = this.oscTCP;
+    const osc = this.oscUDP;
+    const oscTCP = this.oscTCP;
 
     const osctunnels = OSCService.getTunnels();
 
     for (let o in osctunnels) {
-      var oscTCP = this.oscTCP;
       if (o == 'sectionname') {
         continue;
       }
@@ -379,13 +378,12 @@ export default class OSCService {
             controlModules[c].onOSC(message);
           }
         }
-
-        if (PluginService.isReady) {
-          const activePlugins = PluginService.getActivePlugins();
-          for (const p in activePlugins) {
-            if (activePlugins[p].onOSC != null) {
-              activePlugins[p].onOSC(message);
-            }
+      }
+      if (PluginService.isReady) {
+        const activePlugins = PluginService.getActivePlugins();
+        for (const p in activePlugins) {
+          if (activePlugins[p].onOSC != null) {
+            activePlugins[p].onOSC(message);
           }
         }
       }
@@ -406,7 +404,7 @@ export default class OSCService {
         port: sconfig.network.osc.osc_tcp_port,
       }),
     });
-    var oscTCP = this.oscTCP;
+    const oscTCP = this.oscTCP;
 
     oscTCP.on('open', () => {
       oscLog('OSC TCP OPEN');
@@ -416,6 +414,19 @@ export default class OSCService {
     });
 
     oscTCP.on('*', (message: OSC.Message) => {
+      if (message.address === '/spooder/monitor/live_logging') {
+        if (message.args[0] == 1) {
+          MonitorService.enableLiveLogging();
+        } else {
+          MonitorService.disableLiveLogging();
+        }
+        return;
+      }
+
+      if (message.address.startsWith('/spooder/monitor')) {
+        return;
+      }
+
       if (!message.address.startsWith('/spooder/monitor')) {
         MonitorService.addLog(
           MonitorDataType.TCP,
@@ -426,20 +437,6 @@ export default class OSCService {
       }
 
       const address = message.address.split('/');
-
-      const controlModules = ModuleService.getControlModules();
-      for (const c in controlModules) {
-        if (controlModules[c].onOSC != null) {
-          controlModules[c].onOSC(message);
-        }
-      }
-
-      const activePlugins = PluginService.getActivePlugins();
-      for (let p in activePlugins) {
-        if (activePlugins[p].onOSC != null) {
-          activePlugins[p].onOSC(message);
-        }
-      }
 
       if (address[1] == 'spooder') {
         if (address[2] == 'plugin') {
@@ -453,6 +450,20 @@ export default class OSCService {
             );
             return;
           }
+        }
+      }
+
+      const controlModules = ModuleService.getControlModules();
+      for (const c in controlModules) {
+        if (controlModules[c].onOSC != null) {
+          controlModules[c].onOSC(message);
+        }
+      }
+
+      const activePlugins = PluginService.getActivePlugins();
+      for (let p in activePlugins) {
+        if (activePlugins[p].onOSC != null) {
+          activePlugins[p].onOSC(message);
         }
       }
 

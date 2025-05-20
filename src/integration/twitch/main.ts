@@ -153,7 +153,7 @@ export default class Twitch implements StreamModuleInterface {
     });
   }
   lastMessage = this.chat.lastMessage;
-
+  homeChannel = this.api.homeChannel;
   loggedIn = false;
 
   autoLogin(startChat = true) {

@@ -4,7 +4,6 @@ import { OBSRequestTypes } from 'obs-websocket-js';
 import getObsRouters from './ObsRouter.ts';
 import ObsWebsocket from './ObsWebsocket.ts';
 import fs from 'fs';
-import onObsOscMessage from './onObsOscMessage.ts';
 import OSC from 'osc-js';
 
 export default class OBS implements ControlModuleInterface {
@@ -69,7 +68,6 @@ export default class OBS implements ControlModuleInterface {
   }
 
   connected = this.websocket.connected;
-  statusInterval: NodeJS.Timeout | undefined = undefined;
   deckClients = [] as any[];
   streamReconnecting = false;
   streamBleeding = false;

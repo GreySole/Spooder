@@ -205,7 +205,8 @@ export class EventService {
     return chatCommands;
   }
 
-  static saveEventStorage() {
+  static saveEventStorage(newEventStorage: KeyedObject) {
+    EventService.instance.eventstorage = newEventStorage;
     fs.writeFileSync(
       userDir + '/settings/eventstorage.json',
       JSON.stringify(EventService.instance.eventstorage),
@@ -228,9 +229,7 @@ export class EventService {
 
     const activePlatforms = ModuleService.getStreamModules();
     for (let p in activePlatforms) {
-      if (activePlatforms[p].onEventFileSaved) {
-        activePlatforms[p].onEventFileSaved();
-      }
+      activePlatforms[p].onEventFileSaved();
     }
   }
 
@@ -352,12 +351,6 @@ export class EventService {
         EventService.createTimeout(eventName, null, 'event', function () {}, event.cooldown);
       }
     }
-
-    const eventData = {
-      event: events[eventName],
-      eventType: eventType,
-      message: streamMessage,
-    };
 
     for (let c in event.commands) {
       let eCommand = event.commands[c];

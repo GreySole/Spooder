@@ -5,7 +5,6 @@ import OBS from './main.ts';
 import fs from 'fs';
 import ObsControlRouter from './ObsControlRouter.ts';
 import ObsFetchRouter from './ObsFetchRouter.ts';
-import { log } from 'console';
 
 export default function getObsRouters() {
   const obsModule = ModuleService.getControlModule('obs') as OBS;

@@ -167,7 +167,7 @@ export async function runResponseScript(
   useFakeStorage = false,
 ) {
   const responseScript = String.raw`
-    async (runCommands, sayInChat, modules, saveEventStorage) => {
+    async (runCommands, sayInChat, modules, eventstorage, saveEventStorage) => {
       const event = ${JSON.stringify(message)};
       const extra = ${JSON.stringify(extra)};
       function say(txt) {
@@ -182,7 +182,7 @@ export async function runResponseScript(
         eventstorage[${JSON.stringify(eventName)}] ??= {};
         eventstorage[${JSON.stringify(eventName)}][key] = value;
         if (save == true && ${!useFakeStorage}) {
-          saveEventStorage();
+          saveEventStorage(eventstorage);
         }
       }
       function getSharedVar(eventname, key, defaultVal = 0) {
@@ -192,7 +192,7 @@ export async function runResponseScript(
         eventstorage[eventname] ??= {};
         eventstorage[eventname][key] = value;
         if (save == true && ${!useFakeStorage}) {
-          saveEventStorage();
+          saveEventStorage(eventstorage);
         }
       }
       function chooseRandom(...randArray) {
@@ -207,9 +207,6 @@ export async function runResponseScript(
       function runEvent(eName) {
         runCommands(event, eName);
       }
-        console.log("RUNNING SCRIPT");
-      ${useFakeStorage ? `let eventstorage = ${JSON.stringify(EventService.getEventStorage())};` : ''}
-      console.log("BEGIN SCRIPT");
       ${script}
     }
   `;
@@ -225,6 +222,7 @@ export async function runResponseScript(
       EventService.runCommands,
       sayInChat,
       responseHandlerFunctions,
+      EventService.getEventStorage(),
       EventService.saveEventStorage,
     );
     return { status: 'ok', response };

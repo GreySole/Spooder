@@ -1,17 +1,16 @@
-import { spooderLog } from './src/core/Logging.ts';
 import fs from 'fs-extra';
 import path from 'path';
-import ConfigService from './src/core/service/ConfigService.ts';
-import { EventService } from './src/core/service/EventService.ts';
-import { ModerationService } from './src/core/service/ModerationService.ts';
-import ModuleService from './src/core/service/ModuleService.ts';
-import PluginService from './src/core/service/PluginService.ts';
-import ShareService from './src/core/service/ShareService.ts';
-import { userDir, KeyedObject } from './src/Types.ts';
-import { WebService } from './src/core/service/WebService.ts';
-import OSCService from './src/core/service/OSCService.ts';
-import UserService from './src/core/service/UserService.ts';
-import MonitorService from './src/core/service/MonitorService.ts';
+import ConfigService from './core/service/ConfigService';
+import { EventService } from './core/service/EventService';
+import { ModerationService } from './core/service/ModerationService';
+import ModuleService from './core/service/ModuleService';
+import MonitorService from './core/service/MonitorService';
+import OSCService from './core/service/OSCService';
+import PluginService from './core/service/PluginService';
+import ShareService from './core/service/ShareService';
+import UserService from './core/service/UserService';
+import { WebService } from './core/service/WebService';
+import { userDir, KeyedObject } from './Types';
 
 const logDir = path.join(userDir, 'log');
 

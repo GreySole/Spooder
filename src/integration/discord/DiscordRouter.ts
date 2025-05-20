@@ -31,7 +31,7 @@ export default function getDiscordRouters() {
       res.send({ error: 'nologin' });
       return;
     }
-    let guilds = discordModule.getGuilds();
+    const guilds = discordModule.api.getGuilds();
     res.send(guilds);
   });
 

@@ -94,7 +94,17 @@ export default class TwitchEventSub {
 
     const shareSubs = [] as string[];
 
+    const usedSubs = [] as string[];
+
     for (let s in subs.data) {
+      if (subs.data[s].status == 'enabled') {
+        usedSubs.push(subs.data[s].type);
+        twitchLog(
+          'Skipping delete ' + subs.data[s].type,
+          subs.data[s].condition.broadcaster_user_id,
+        );
+        continue;
+      }
       twitchLog('Deleting ' + subs.data[s].type, subs.data[s].condition.broadcaster_user_id);
       if (
         (subs.data[s].type == 'stream.online' || subs.data[s].type == 'stream.offline') &&
@@ -114,6 +124,14 @@ export default class TwitchEventSub {
       let subtype = events[e].triggers.twitch.type;
 
       if (subtype == 'redeem') {
+        if (
+          usedSubs.includes('channel.channel_points_custom_reward_redemption.add') &&
+          usedSubs.includes('channel.channel_points_custom_reward_redemption.update')
+        ) {
+          twitchLog('Redeem already set up');
+          redeemSet = true;
+          continue;
+        }
         if (redeemSet == false) {
           twitchLog('Setting up redeems');
           await this.initEventSub(
@@ -129,6 +147,10 @@ export default class TwitchEventSub {
           redeemSet = true;
         }
       } else {
+        if (usedSubs.includes(subtype)) {
+          twitchLog('Already set up ' + subtype);
+          continue;
+        }
         twitchLog('Refreshing ' + subtype);
         if (subtype == 'channel.raid') {
           await this.initEventSub(subtype + '-send', broadcasterId, botId);

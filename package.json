@@ -5,8 +5,8 @@
   "main": "spooder.ts",
   "type": "module",
   "scripts": {
-    "start": "tsx spooder.ts",
-    "dev": "node spooder.ts -d",
+    "start": "TS_NODE_PROJECT=./tsconfig.json tsx src/spooder.ts",
+    "dev": "node src/spooder.ts -d",
     "init": "tsx spooder.ts -i",
     "safe": "node spooder.ts -e",
     "start-noautologin": "node spooder.ts -a",
@@ -20,7 +20,6 @@
     "@vercel/ncc": "^0.38.3",
     "adm-zip": "^0.5.9",
     "axios": "^1.2.1",
-    "body-parser": "^1.20.0",
     "buffer": "^6.0.3",
     "chmodr": "^1.2.0",
     "cookie-parser": "^1.4.6",
@@ -52,6 +51,7 @@
     "@types/express": "^4.17.21",
     "@types/fs-extra": "^11.0.4",
     "@types/multer": "^1.4.12",
+    "@types/node": "^22.15.18",
     "@types/tmi.js": "^1.8.6"
   }
 }

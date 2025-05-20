@@ -18,4 +18,5 @@ export interface StreamModuleInterface {
   getResponseHandlers: () => KeyedObject;
   shareUsers: KeyedObject;
   lastMessage: KeyedObject;
+  homeChannel: string;
 }

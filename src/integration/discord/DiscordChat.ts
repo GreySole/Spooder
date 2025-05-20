@@ -1,20 +1,26 @@
-import { ChannelType, Events, Message } from 'discord.js';
+import { ChannelType, Client, Events, Message, TextChannel } from 'discord.js';
 import ModuleService from 'src/core/service/ModuleService.ts';
-import { userDir } from 'src/Types.ts';
+import { KeyedObject, userDir } from 'src/Types.ts';
 import Discord, { discordLog } from './main.ts';
 import fs from 'fs';
+import { client } from 'tmi.js';
 
 export default class DiscordChat {
-  constructor() {
-    const discordModule = this.getModule();
-    const client = discordModule.client;
-    client?.on(Events.InteractionCreate, async (interaction) => {
+  private discordModule = ModuleService.getCommunityModule('discord') as Discord;
+  private client: Client | undefined;
+  private voice = this.discordModule.voice;
+  private api = this.discordModule.api;
+  constructor() {}
+
+  init() {
+    this.client = this.discordModule.client;
+    this.client?.on(Events.InteractionCreate, async (interaction) => {
       //discordLog("DISCORD INTERACTION", interaction);
       if (!interaction.isChatInputCommand()) {
         return;
       }
 
-      let command = discordModule.commands.get(interaction.commandName);
+      let command = this.discordModule.commands.get(interaction.commandName);
 
       if (!command) {
         console.error('Not a valid command');
@@ -22,7 +28,7 @@ export default class DiscordChat {
       }
 
       try {
-        discordModule.callPlugins('interaction', interaction);
+        this.api.callPlugins('interaction', interaction);
       } catch (error) {
         console.error(error);
         await interaction.reply({
@@ -31,18 +37,18 @@ export default class DiscordChat {
         });
       }
     });
-    client?.on(Events.MessageCreate, async (message: Message) => {
-      if (message.author.id == client.user?.id) {
+    this.client?.on(Events.MessageCreate, async (message: Message) => {
+      if (message.author.id == this.client?.user?.id) {
         return;
       }
-      discordModule.lastMessage = {
+      this.discordModule.lastMessage = {
         author: {
           username: message.author.username,
           id: message.author.id,
-          guild: message.guildId != null ? discordModule.getGuild(message.guildId)?.name : 'DM',
+          guild: message.guildId != null ? this.api.getGuild(message.guildId)?.name : 'DM',
           channel:
             message.guildId != null
-              ? discordModule.getChannel(message.channelId, message.guildId)?.name
+              ? this.api.getChannel(message.channelId, message.guildId)?.name
               : 'DM',
         },
         content: message.content,
@@ -51,52 +57,125 @@ export default class DiscordChat {
       if (message.guildId == null) {
         discordLog('Discord PM', message.author.username, message.content, message.attachments);
         if (
-          message.mentions.users.first()?.id != discordModule.client?.user?.id &&
-          message.mentions.roles.first()?.tags?.botId != discordModule.client?.user?.id
+          message.mentions.users.first()?.id != this.discordModule.client?.user?.id &&
+          message.mentions.roles.first()?.tags?.botId != this.discordModule.client?.user?.id
         ) {
           message.content = 'DM ' + message.content;
         }
         this.processTagCommand(message);
-        discordModule.callPlugins('direct-message', message);
+        this.api.callPlugins('direct-message', message);
         return;
       } else {
         discordLog(
           'Discord',
-          discordModule.getGuild(message.guildId)?.name,
-          discordModule.getChannel(message.channelId, message.guildId)?.name,
+          this.api.getGuild(message.guildId)?.name,
+          this.api.getChannel(message.channelId, message.guildId)?.name,
           message.author.username,
           message.content,
         );
 
-        if (message.content.startsWith('<@' + discordModule.client?.user?.id + '>')) {
+        if (message.content.startsWith('<@' + this.client?.user?.id + '>')) {
           this.processTagCommand(message);
-          discordModule.callPlugins('mentioned-message', message);
+          this.api.callPlugins('mentioned-message', message);
           return;
         }
 
         if (message.content.toLowerCase() == '!join') {
           if (message.channel.type == ChannelType.GuildVoice) {
-            discordModule.voice?.joinVoiceChannel(message.guildId, message.channelId);
+            this.voice?.joinVoiceChannel(message.guildId, message.channelId);
             return;
           }
         }
 
         if (message.content.toLowerCase() == '!leave') {
-          discordModule.voice?.leaveVoiceChannel();
+          this.voice?.leaveVoiceChannel();
           return;
         }
       }
 
-      discordModule.callPlugins('message', message);
+      this.api.callPlugins('message', message);
     });
   }
 
-  getModule = () => {
-    return ModuleService.getCommunityModule('discord') as Discord;
-  };
+  sendToChannel(server: string, channel: string, message: KeyedObject) {
+    const client = this.client;
+    const targetServer = client?.guilds.cache.get(server);
+    const targetChannel = targetServer?.channels.cache.get(channel);
+    if (targetChannel?.isTextBased) {
+      (targetChannel as TextChannel).send(message);
+    }
+  }
+
+  makeUserMentionString(id: string) {
+    return '<@' + id + '> ';
+  }
+
+  chopMessage(message: string) {
+    let returnArray = [];
+    if (message.length >= 2000) {
+      let limit = 2000;
+      let totalMessages = Math.ceil(message.length / limit);
+
+      for (let stringpos = 0; stringpos < message.length; stringpos += limit) {
+        if (stringpos + limit > message.length) {
+          returnArray.push(
+            '[' +
+              totalMessages +
+              '/' +
+              totalMessages +
+              '] ' +
+              message.substring(stringpos, message.length),
+          );
+        } else {
+          returnArray.push(
+            '[' +
+              (Math.round((stringpos + limit) / limit) +
+                '/' +
+                totalMessages +
+                '] ' +
+                message.substring(stringpos, stringpos + limit)),
+          );
+        }
+      }
+    } else {
+      returnArray.push(message);
+    }
+    return returnArray;
+  }
+
+  sendDM(userId: string, message: string) {
+    if (!this.discordModule.loggedIn) {
+      return null;
+    }
+    let msgs = this.chopMessage(message);
+    return new Promise((res, rej) => {
+      this.api
+        .findUser(userId)
+        .then((user) => {
+          for (let m in msgs) {
+            user.send(msgs[m]);
+          }
+          res('OK');
+        })
+        .catch((e) => {
+          rej(e);
+        });
+    });
+  }
+
+  sendInteraction(userId: string, message: KeyedObject): Promise<Message> {
+    return new Promise((res, rej) => {
+      this.api
+        .findUser(userId)
+        .then((user) => {
+          res(user.send(message));
+        })
+        .catch((e) => rej(e));
+    });
+  }
 
   async processTagCommand(message: Message) {
-    const discordModule = this.getModule();
+    const discordModule = this.discordModule;
     let command = message.content.toLowerCase().split(' ');
     if (command.length >= 2) {
       if (command[1] == 'trust') {
@@ -122,7 +201,7 @@ export default class DiscordChat {
             "My master has entrusted you to handle me. That means you can use my moderation commands in any server I'm in!",
           );
         } else {
-          let masterUser = await discordModule.findUser(discordModule.config.master);
+          let masterUser = await this.api.findUser(discordModule.config.master);
           message.reply('Only my master ' + masterUser!.username + ' can assign trusted handlers');
         }
       } else if (command[1] == 'tell') {
@@ -174,7 +253,7 @@ export default class DiscordChat {
               }*/
         }
       } else if (command[1] == 'leave' && command[2] == 'this') {
-        if (discordModule.isMaster(message.author.id)) {
+        if (this.api.isMaster(message.author.id)) {
           message.react('👍');
           message.guild?.leave();
         }

@@ -17,7 +17,7 @@ export default function ObsControlRouter() {
     console.log('OBS Control Error', reason);
   }
 
-  router.get('/get_obs_status', (req, res) => {
+  router.get('/get_output_status', (req, res) => {
     obsWebsocket
       .call('GetStats')
       .then((data) => obsSuccess(data, res))

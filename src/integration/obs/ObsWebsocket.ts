@@ -101,12 +101,12 @@ export default class ObsWebsocket {
       const firstStreamModule = ModuleService.getStreamModule('twitch');
 
       let channelInfo = await firstStreamModule.getChannelInfo();
-      //console.log(channelInfo);
+      console.log(channelInfo);
       if (channelInfo == null) {
         console.log("COULDN'T GET CHANNEL INFO");
         return;
       }
-      let title = channelInfo[0].title;
+      let title = channelInfo.title;
       let splitTitle = title;
       if (title.includes('|')) {
         splitTitle = title.split('|')[0];
