@@ -21,6 +21,7 @@ import getDiscordRouters from './DiscordRouter.ts';
 import DiscordVoice from './DiscordVoice.ts';
 import DiscordChat from './DiscordChat.ts';
 import DiscordApi from './DiscordApi.ts';
+import DiscordButtons from './DiscordButtons.ts';
 
 export function discordLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgCyan'), ...content, logEffects('Reset'));
@@ -56,6 +57,7 @@ export default class Discord implements CommunityModuleInterface {
   voice!: DiscordVoice;
   api!: DiscordApi;
   chat!: DiscordChat;
+  buttons = DiscordButtons();
   guilds = null;
   loggedIn = false;
   commands = new Collection();
@@ -89,6 +91,8 @@ export default class Discord implements CommunityModuleInterface {
       getChannelByName: this.api.getChannelByName.bind(this),
       getMessageRange: this.api.getMessageRange.bind(this),
       getRoles: this.api.getRoles.bind(this),
+      getUser: this.api.getUser.bind(this),
+      findUser: this.api.findUser.bind(this),
     };
   };
 

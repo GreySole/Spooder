@@ -13,12 +13,13 @@ import OSCService from './OSCService.ts';
 import fs from 'fs';
 import ShareService from './ShareService.ts';
 import EventDiscordCommand from './event/EventDiscordCommand.ts';
+import { buildMockStreamMessage } from '../util/ResponseUtil.ts';
 
 export function sayInChat(message: string, platform?: string, channel?: string) {
   const activeStreams = ModuleService.getStreamModules();
-  if (platform != null) {
-    if (activeStreams[platform] != null) {
-      if (channel != null) {
+  if (platform) {
+    if (activeStreams[platform]) {
+      if (channel) {
         activeStreams[platform].sayInChat(message, channel);
       } else {
         activeStreams[platform].sayInChat(message, activeStreams[platform].homeChannel);
@@ -28,6 +29,7 @@ export function sayInChat(message: string, platform?: string, channel?: string) 
     }
   } else {
     for (let p in activeStreams) {
+      console.log('Saying in chat for platform', p, activeStreams[p].homeChannel);
       activeStreams[p].sayInChat(message, activeStreams[p].homeChannel);
     }
   }
@@ -90,6 +92,51 @@ export class EventService {
   modCommands = {} as KeyedObject;
   events = {} as KeyedObject;
   eventGroups = ['Default'];
+  recurringMessages = {} as KeyedObject;
+
+  static startRecurringMessage(eventName: string, key: string, commandData: KeyedObject) {
+    console.log('Starting recurring message for', eventName, key, commandData);
+
+    EventService.instance.recurringMessages[key] = {
+      data: commandData,
+      count: 0,
+      interval: setInterval(
+        async () => {
+          console.log('Running recurring message for', eventName, key);
+          if (!EventService.instance.recurringMessages[key]) {
+            clearInterval(EventService.instance.recurringMessages[key].interval);
+            return;
+          }
+          const streamMessage = buildMockStreamMessage(eventName);
+          streamMessage.platform = '';
+          streamMessage.channel = '';
+          const thisCommand = await EventResponseCommand(
+            {
+              etype: 'response',
+              message: commandData.message,
+            },
+            eventName,
+            streamMessage,
+            {
+              count: EventService.instance.recurringMessages[key].count,
+            },
+          );
+
+          thisCommand();
+
+          EventService.instance.recurringMessages[key].count++;
+        },
+        commandData.interval * 1000 * 60,
+      ),
+    };
+  }
+
+  static stopRecurringMessage(key: string) {
+    if (EventService.instance.recurringMessages[key] != null) {
+      clearInterval(EventService.instance.recurringMessages[key].interval);
+      delete EventService.instance.recurringMessages[key];
+    }
+  }
 
   static getModCommands() {
     return EventService.instance.modCommands;
@@ -286,6 +333,8 @@ export class EventService {
     const activeEvents = EventService.getActiveEvents();
 
     let event = events[eventName] ?? modCommands[eventName];
+
+    streamMessage.triggeredEventData = event;
 
     if (isChat) {
       if (activeEvents[eventName] != null) {

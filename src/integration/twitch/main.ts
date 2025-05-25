@@ -62,16 +62,12 @@ export default class Twitch implements StreamModuleInterface {
   onSharesChanged() {
     const shares = ShareService.getShares();
     this.shareUsers = {};
-    console.log('ON SHARES CHANGED');
     for (const s in shares) {
       if (!shares[s].streamPlatforms.twitch) {
         continue;
       }
-      console.log('ON SHARES CHANGED', shares[s].streamPlatforms.twitch.username, s);
       this.shareUsers[shares[s].streamPlatforms.twitch.username] = s;
     }
-
-    console.log('TWITCH SHARE USERS', this.shareUsers);
   }
 
   getRouters() {
@@ -152,8 +148,13 @@ export default class Twitch implements StreamModuleInterface {
         });
     });
   }
-  lastMessage = this.chat.lastMessage;
-  homeChannel = this.api.homeChannel;
+
+  get lastMessage() {
+    return this.chat.lastMessage;
+  }
+  get homeChannel() {
+    return this.api.homeChannel;
+  }
   loggedIn = false;
 
   autoLogin(startChat = true) {
@@ -196,13 +197,15 @@ export default class Twitch implements StreamModuleInterface {
       }
 
       this.chat.runChat();
-      this.eventsub.refreshEventSubs();
+      this.eventsub.initialize();
       this.loggedIn = true;
       res('success');
     });
   }
 
-  sayInChat = this.chat.sayInChat;
+  get sayInChat() {
+    return this.chat.sayInChat.bind(this.chat);
+  }
 
   getStreamOnlineEvent() {
     const events = EventService.getEvents();
@@ -216,45 +219,4 @@ export default class Twitch implements StreamModuleInterface {
   async onEventFileSaved() {
     this.eventsub.refreshEventSubs();
   }
-
-  startReoccuringMessage() {
-    if (this.loggedIn == false) {
-      return;
-    }
-    let onlineEvent = this.getStreamOnlineEvent();
-    if (onlineEvent == null) {
-      twitchLog('No stream.online event for reoccuring mesage found.');
-      return;
-    }
-    if (onlineEvent.special.reoccuringmessage.message != '') {
-      let reoccuringInterval = async () => {
-        try {
-          let responseFunct = eval(
-            '() => {let count = ' +
-              JSON.stringify(this.reoccuringMessageCount) +
-              '; ' +
-              onlineEvent.special.reoccuringmessage.message.replace(/\n/g, '') +
-              '}',
-          );
-          let response = await responseFunct();
-          this.chat.sayInChat(response);
-          this.reoccuringMessageCount++;
-        } catch (e) {
-          this.chat.sayInChat(
-            'The reoccuring message failed to send :( Check my logs to see what went wrong!',
-          );
-          clearInterval(this.streamChatInterval);
-        }
-      };
-      let reoccurTime = onlineEvent.special.reoccuringmessage.interval;
-      if (reoccurTime == null) {
-        reoccurTime = 15;
-      }
-
-      this.streamChatInterval = setInterval(reoccuringInterval.bind(this), reoccurTime * 60 * 1000);
-    }
-  }
-
-  streamChatInterval: NodeJS.Timeout | undefined = undefined;
-  reoccuringMessageCount = Math.round(Math.random() * 10);
 }

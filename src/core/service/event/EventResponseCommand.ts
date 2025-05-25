@@ -10,6 +10,13 @@ export default function EventResponseCommand(
 ) {
   const eventstorage = EventService.getEventStorage();
   return async () => {
+    if (eCommand.etype === 'recurring') {
+      EventService.startRecurringMessage(eventName, eCommand.interval_key, eCommand);
+      return;
+    } else if (eCommand.etype === 'clear_recurring') {
+      EventService.stopRecurringMessage(eCommand.interval_key);
+      return;
+    }
     try {
       if (eventstorage[eventName] == null) {
         eventstorage[eventName] = {};

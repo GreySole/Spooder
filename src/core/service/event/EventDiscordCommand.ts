@@ -28,8 +28,16 @@ export default function EventDiscordCommand(
           false,
         );
 
-        sayInChat(response.response, streamMessage.platform, streamMessage.channel);
-        discord.sendToChannel(eCommand.guild, eCommand.channel, response);
+        const components = [];
+
+        if (eCommand.use_link_button) {
+          const link = eCommand.link_url;
+          const label = eCommand.link_label || 'Button';
+          const linkButton = discord.buttons.makeLinkButton(label, link);
+          components.push(linkButton);
+        }
+
+        discord.chat.sendToChannel(eCommand.guild, eCommand.channel, response.response, components);
       } catch (e) {
         spooderLog('Failed to run response script. Check the event settings to verify it.', e);
       }

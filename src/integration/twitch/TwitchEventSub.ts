@@ -8,15 +8,17 @@ import { EventService } from 'src/core/service/EventService.ts';
 import OnEventSubReceived from './OnEventSubReceived.ts';
 import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil.ts';
 import WebSocket from 'ws';
+import { logToFile } from 'src/core/Logging.ts';
 
 export default class TwitchEventSub {
   websocket: WebSocket | undefined = undefined;
   wsSessionId: string | undefined = undefined;
   wsKeepAliveInterval: NodeJS.Timeout | undefined = undefined;
 
-  constructor() {
-    this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+  constructor() {}
 
+  initialize() {
+    this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
     this.setupWebSocketHandlers();
   }
 
@@ -32,6 +34,7 @@ export default class TwitchEventSub {
 
       if (data.metadata.message_type === 'session_welcome') {
         this.wsSessionId = data.payload.session.id;
+        twitchLog('Eventsub session id:', this.wsSessionId);
       } else if (data.metadata.message_type === 'session_keepalive') {
         // Do nothing
       } else if (data.metadata.message_type === 'session_reconnect') {
@@ -44,13 +47,27 @@ export default class TwitchEventSub {
       }
     };
 
+    this.websocket.on('ping', () => {
+      this.websocket?.pong(); // Respond to ping with pong
+    });
+
     this.websocket.onerror = (error) => {
       twitchLog('Eventsub error:', error);
+      logToFile('twitch-eventsub', 'Eventsub error: ' + error.message, 100);
     };
 
     this.websocket.onclose = (event) => {
+      logToFile(
+        'twitch-eventsub',
+        'Eventsub connection closed: ' + event.code + ' ' + event.reason,
+        100,
+      );
       twitchLog('Eventsub connection closed:', event.code, event.reason);
+      this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+      this.setupWebSocketHandlers();
     };
+
+    this.refreshEventSubs();
   }
 
   getModule = () => {

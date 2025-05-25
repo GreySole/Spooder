@@ -11,11 +11,13 @@ export default function EventPluginCommand(
   const activePlugins = PluginService.getActivePlugins();
   return () => {
     let commandDuration = parseFloat(eCommand.duration);
-    if (activePlugins[eCommand.pluginname] != null) {
-      if (typeof activePlugins[eCommand.pluginname].onEvent == 'undefined') {
-        spooderLog(activePlugins[eCommand.pluginname], 'onEvent() NOT FOUND');
-        return;
-      }
+
+    console.log('EventPluginCommand', eCommand, eventName);
+
+    if (eCommand.event) {
+      streamMessage.pluginEventData = eCommand.event.values;
+      activePlugins[eCommand.pluginname].onEvent(eCommand.event.name, streamMessage);
+      return;
     }
 
     if (activePlugins[eCommand.pluginname]?.onEvent != null) {

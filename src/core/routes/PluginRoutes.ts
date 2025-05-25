@@ -307,7 +307,7 @@ export function PluginRoutes() {
           fs.rmSync(tempFile);
         }
 
-        OSCService.sendToTCP('/spooder/install/progress', {
+        OSCService.sendToTCP('/spooder/plugin/install/progress', {
           pluginName: pluginDirName,
           status: 'progress',
           message: 'Extracting...',
@@ -342,8 +342,8 @@ export function PluginRoutes() {
     res.send({ status: 'ok' });
   });
 
-  router.get('/export_plugin/*', async (req: Request, res: Response) => {
-    const pluginName = req.params['0'];
+  router.get('/export_plugin', async (req: Request, res: Response) => {
+    const pluginName = req.query.pluginname as string;
     console.log(pluginName);
 
     const tempDir = path.join(userDir, 'tmp');
@@ -632,8 +632,8 @@ export function PluginRoutes() {
     res.send({ status: 'ok' });
   });
 
-  router.post('/save_plugin', async (req: Request, res: Response) => {
-    const newSettings = req.body.settings;
+  router.post('/save_plugin_settings', async (req: Request, res: Response) => {
+    const newSettings = req.body.new_settings;
     const pluginName = req.body.pluginName;
     const saveStatus = PluginService.savePluginSettings(pluginName, newSettings);
     if (saveStatus) {

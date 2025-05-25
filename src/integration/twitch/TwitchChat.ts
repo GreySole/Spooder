@@ -1,16 +1,10 @@
-import fs from 'fs';
 import tmi from 'tmi.js';
 import Twitch, { twitchLog } from './main.ts';
-import ConfigService from '../../core/service/ConfigService.ts';
 import { EventService } from '../../core/service/EventService.ts';
-import { ModerationService } from '../../core/service/ModerationService.ts';
 import ModuleService from '../../core/service/ModuleService.ts';
 import PluginService from '../../core/service/PluginService.ts';
 import ShareService from '../../core/service/ShareService.ts';
 import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types.ts';
-import UserService from '../../core/service/UserService.ts';
-import OSCService from '../../core/service/OSCService.ts';
-import { checkResponseTrigger } from 'src/core/util/ResponseUtil.ts';
 import { processStreamMessage } from 'src/core/util/ChatUtil.ts';
 
 function stringifyArray(a: string[]) {
@@ -28,8 +22,8 @@ export default class TwitchChat {
 
   twitchjsify = (channel: string, tags: KeyedObject, txt: string): StreamMessage => {
     const botUsername = this.getModule().api.botUsername;
-    let emotes = tags.emotes;
-    let newEmotes = [];
+    const emotes = tags.emotes;
+    const newEmotes = [];
     for (let e in emotes) {
       for (let ei in emotes[e]) {
         newEmotes.push({
@@ -43,7 +37,9 @@ export default class TwitchChat {
       tags.badges = {};
     }
 
-    let message = {
+    tags.emotes = newEmotes;
+
+    const message = {
       channel: channel.replace('#', ''),
       respond: ((responseTxt: string) => {
         this.sayInChat(responseTxt, channel.replace('#', ''));
@@ -53,10 +49,10 @@ export default class TwitchChat {
       displayName: tags['display-name'],
       tags: tags,
       message: txt,
+      messageType: 'twitch-chat',
       userId: tags['user-id'],
       platform: 'twitch',
       emotes: newEmotes,
-      event: undefined,
       isFirstMessage: tags['first-msg'] == true,
       isReturningChatter: tags['returning-chatter'] == true,
       isBroadcaster: tags.badges?.broadcaster == true,

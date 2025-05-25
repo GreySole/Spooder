@@ -14,6 +14,7 @@ export interface StreamMessage {
   platform: string;
   channel: string;
   message: string;
+  messageType: string;
   emotes: any[];
   tags: KeyedObject;
   isBroadcaster: boolean;
@@ -22,6 +23,9 @@ export interface StreamMessage {
   isVIP: boolean;
   isFirstMessage: boolean;
   isReturningChatter: boolean;
+  triggeredEventData?: KeyedObject;
+  platformEventData?: KeyedObject;
+  pluginEventData?: KeyedObject;
 }
 
 export interface ShareObject {

@@ -1,4 +1,12 @@
-import { ChannelType, Client, Events, Message, TextChannel } from 'discord.js';
+import {
+  ActionRowBuilder,
+  AnyComponentBuilder,
+  ChannelType,
+  Client,
+  Events,
+  Message,
+  TextChannel,
+} from 'discord.js';
 import ModuleService from 'src/core/service/ModuleService.ts';
 import { KeyedObject, userDir } from 'src/Types.ts';
 import Discord, { discordLog } from './main.ts';
@@ -97,12 +105,14 @@ export default class DiscordChat {
     });
   }
 
-  sendToChannel(server: string, channel: string, message: KeyedObject) {
+  sendToChannel(server: string, channel: string, message: string, components?: any[]) {
     const client = this.client;
     const targetServer = client?.guilds.cache.get(server);
     const targetChannel = targetServer?.channels.cache.get(channel);
     if (targetChannel?.isTextBased) {
-      (targetChannel as TextChannel).send(message);
+      (targetChannel as TextChannel).send({ content: message, components: components });
+    } else {
+      discordLog('Tried to send message to a non-text channel', targetChannel?.name);
     }
   }
 

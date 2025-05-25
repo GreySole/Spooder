@@ -127,6 +127,7 @@ export function buildMockStreamMessage(message: string): StreamMessage {
     platform: 'twitch',
     channel: '#testchannel',
     message: message,
+    messageType: 'twitch-chat',
     emotes: [],
     tags: {
       badgeInfo: 'subscriber/1',
@@ -205,7 +206,7 @@ export async function runResponseScript(
         return text.replace(/[\`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g, '');
       }
       function runEvent(eName) {
-        runCommands(event, eName);
+        runCommands(event, eName, event.messageType);
       }
       ${script}
     }

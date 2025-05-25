@@ -5,6 +5,7 @@ import ModuleService from '../service/ModuleService.ts';
 import PluginService from '../service/PluginService.ts';
 import ShareService from '../service/ShareService.ts';
 import { webLog } from '../Logging.ts';
+import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
 
 export function ShareRoutes() {
   const router = express.Router();
@@ -18,7 +19,7 @@ export function ShareRoutes() {
     const shares = ShareService.getShares();
 
     for (let e in events) {
-      if (events[e].triggers.chat.enabled) {
+      if (triggerExistsAndEnabled(events[e].triggers, 'chat')) {
         chatCommands[e] = events[e].triggers.chat.command;
       }
     }

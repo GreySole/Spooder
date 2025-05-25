@@ -139,8 +139,9 @@ export class WebService {
 
     const sconfig = ConfigService.getConfig();
 
-    fs.existsSync(path.join(userDir, 'tmp', 'multer')) ||
+    if (!fs.existsSync(path.join(userDir, 'tmp', 'multer'))) {
       fs.mkdirSync(path.join(userDir, 'tmp', 'multer'), { recursive: true });
+    }
 
     if (initMode == true) {
       const tempStorage = multer.diskStorage({

@@ -15,6 +15,7 @@ import ConfigService from './core/service/ConfigService.ts';
 import childProcess from 'child_process';
 import chmodr from 'chmodr';
 import { sayInChat } from './core/service/EventService.ts';
+import { pluginLog } from './core/Logging.ts';
 
 interface PluginSpooderModules {
   stream: KeyedObject;
@@ -275,13 +276,17 @@ export default class Plugin {
           try {
             this.pluginModule.onSettings(this.pluginModule.settings ?? {});
           } catch (e) {
-            throw new Error('Plugin onSettings failed to execute');
+            pluginLog(this.dirname, 'onSettings failed:', e instanceof Error ? e.message : e);
           }
         }
       }
       console.log('Checking for onLoad for ' + pluginMeta.name, this.pluginModule.onLoad);
       if (this.pluginModule.onLoad != null) {
-        this.pluginModule.onLoad();
+        try {
+          this.pluginModule.onLoad();
+        } catch (e) {
+          pluginLog(this.dirname, 'onLoad failed:', e instanceof Error ? e.message : e);
+        }
       }
     } catch (e: any) {
       const pluginMeta = JSON.parse(
@@ -364,19 +369,35 @@ export default class Plugin {
   }
 
   onChat(message: StreamMessage) {
-    this.pluginModule?.onChat?.(message);
+    try {
+      this.pluginModule?.onChat?.(message);
+    } catch (e) {
+      pluginLog(this.dirname, this.dirname + ' onChat failed:', e);
+    }
   }
 
   onCommunityChat(type: string, data: any) {
-    this.pluginModule?.onCommunityChat?.(type, data);
+    try {
+      this.pluginModule?.onCommunityChat?.(type, data);
+    } catch (e) {
+      pluginLog(this.dirname, this.dirname + ' onCommunityChat failed:', e);
+    }
   }
 
   onOSC(message: OSC.Message) {
-    this.pluginModule?.onOSC?.(message);
+    try {
+      this.pluginModule?.onOSC?.(message);
+    } catch (e) {
+      pluginLog(this.dirname, this.dirname + ' onOSC failed:', e);
+    }
   }
 
   onEvent(event: string, data: KeyedObject) {
-    this.pluginModule?.onEvent?.(event, data);
+    try {
+      this.pluginModule?.onEvent?.(event, data);
+    } catch (e) {
+      pluginLog(this.dirname, this.dirname + ' onEvent failed:', e);
+    }
   }
 
   getExtra(key: string) {

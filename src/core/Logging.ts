@@ -67,3 +67,18 @@ export function oscLog(...content: any[]) {
 export function spooderLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgYellow'), ...content, logEffects('Reset'));
 }
+
+export function pluginLog(pluginName: string, ...content: any[]) {
+  console.log(
+    logEffects('Bright'),
+    logEffects('FgBlue'),
+    `[${pluginName}]`,
+    ...content,
+    logEffects('Reset'),
+  );
+  logToFile(
+    `${pluginName}.log`,
+    `[${new Date().toISOString()}] [${pluginName}] ${content.join(' ')}`,
+    1000,
+  );
+}
