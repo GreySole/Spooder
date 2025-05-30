@@ -69,6 +69,7 @@ interface PluginModule {
     funct: (req: Request, res: Response) => void,
   ) => void;
   getActiveViewer: (req: Request) => KeyedObject | undefined;
+  getAssetPath: (assetPath: string) => string;
   settings?: KeyedObject;
   onSettings?: (settings: KeyedObject) => void;
   onLoad?: () => void;
@@ -232,6 +233,10 @@ export default class Plugin {
 
       this.pluginModule.chat = {
         sayInChat: sayInChat,
+      };
+
+      this.pluginModule.getAssetPath = (assetPath: string) => {
+        return path.resolve(userDir, 'web', 'assets', this.dirname, assetPath);
       };
 
       const spooderConfig = ConfigService.getConfig();

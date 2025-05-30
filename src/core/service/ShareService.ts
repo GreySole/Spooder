@@ -8,6 +8,7 @@ import OSCService from './OSCService.ts';
 import { StreamModuleInterface } from 'src/integration/interface/StreamModuleInterface.ts';
 import { spooderLog, webLog } from '../Logging.ts';
 import { WebService } from './WebService.ts';
+import crypto from 'crypto';
 
 interface ShareUser {
   name: string;
@@ -17,6 +18,7 @@ interface ShareUser {
   commands: string[];
   streamPlatforms: KeyedObject;
   notificationPlatforms: KeyedObject;
+  shareKey: string;
 }
 
 interface ShareUserList {
@@ -213,7 +215,9 @@ export default class ShareService {
       try {
         for (let p in sharePlatforms) {
           if (streamModules[p] != null) {
-            streamModules[p].leaveChannel(sharePlatforms[p].username, message);
+            // The leave function for tmi.js can error because of "No response from Twitch" despite the channel being left successfully.
+            // We'll need an empty catch so it doesn't kill Spooder.
+            streamModules[p].leaveChannel(sharePlatforms[p].username, message).catch((e) => {});
           }
         }
       } catch (e) {
@@ -231,5 +235,38 @@ export default class ShareService {
   static saveShares(newShares: KeyedObject) {
     fs.writeFileSync(userDir + '/settings/shares.json', JSON.stringify(newShares), 'utf-8');
     ShareService.instance.shares = newShares;
+  }
+
+  static generateShareKey(shareId: string, temporary: boolean): string {
+    // Generate a random key using crypto
+    const randomKey = crypto.randomBytes(16).toString('hex');
+
+    // Save the key to the shares object for the given shareId
+    if (!ShareService.instance.shares[shareId] && !temporary) {
+      throw new Error(`Share ID ${shareId} does not exist.`);
+    }
+
+    if (!temporary) {
+      ShareService.instance.shares[shareId].shareKey = randomKey;
+      ShareService.instance.saveShares();
+    }
+
+    // Return the generated key
+    return randomKey;
+  }
+
+  static validateShareKey(key: string, directory: string) {
+    const shares = ShareService.getShares();
+    for (const shareId in shares) {
+      const share = shares[shareId];
+      if (share.shareKey === key) {
+        if (share.plugins.includes(directory)) {
+          return 'ok';
+        } else {
+          return 'not_shared';
+        }
+      }
+    }
+    return 'invalid_key';
   }
 }

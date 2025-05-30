@@ -22,6 +22,8 @@ export default class OBS implements ControlModuleInterface {
 
   websocket = new ObsWebsocket();
 
+  onPluginsLoaded() {}
+
   onOSC(message: OSC.Message) {
     this.websocket.onOSC(message);
   }

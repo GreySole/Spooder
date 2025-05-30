@@ -42,7 +42,7 @@ export default class ModuleService {
         ModuleService.registerIntegrationModule('obs', PlatformType.control),
       ])
         .then(() => onAllModulesLoaded())
-        .catch((e) => console.log('Module load error', e.message));
+        .catch((e) => console.log('Module load error', e));
     }
   }
 
@@ -108,6 +108,22 @@ export default class ModuleService {
     const streamModules = ModuleService.getStreamModules();
     for (let s in streamModules) {
       streamModules[s].onExternalNetworkChanged();
+    }
+  }
+
+  static onPluginsLoaded() {
+    const streamModules = ModuleService.getStreamModules();
+    for (let s in streamModules) {
+      streamModules[s].onPluginsLoaded();
+    }
+    const communityModules = ModuleService.getCommunityModules();
+    for (let s in communityModules) {
+      communityModules[s].onPluginsLoaded();
+    }
+
+    const controlModules = ModuleService.getControlModules();
+    for (let s in controlModules) {
+      controlModules[s].onPluginsLoaded();
     }
   }
 

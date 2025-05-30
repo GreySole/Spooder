@@ -59,6 +59,8 @@ export default class Twitch implements StreamModuleInterface {
 
   shareUsers = {} as KeyedObject;
 
+  onPluginsLoaded() {}
+
   onSharesChanged() {
     const shares = ShareService.getShares();
     this.shareUsers = {};

@@ -8,6 +8,7 @@ import { webLog } from '../Logging.ts';
 import childProcess from 'child_process';
 import Plugin from 'src/Plugin.ts';
 import { createRequire } from 'module';
+import ModuleService from './ModuleService.ts';
 
 interface PluginMap {
   [key: string]: Plugin;
@@ -38,9 +39,7 @@ export default class PluginService {
       console.log('Plugin settings file error', e);
     }
 
-    PluginService.refreshAllPlugins(() => {
-      PluginService.isReady = true;
-    });
+    PluginService.refreshAllPlugins();
   }
 
   private saveGlobalPluginSettings() {
@@ -67,11 +66,13 @@ export default class PluginService {
   private activePlugins = {} as PluginMap;
 
   static getActivePlugins() {
+    if (!PluginService.instance) {
+      return {};
+    }
     return PluginService.instance.activePlugins;
   }
 
   static setEnablePlugin(pluginName: string, isEnabled: boolean) {
-    console.log('ENABLING PLUGIN', pluginName);
     if (PluginService.instance.settings[pluginName]) {
       PluginService.instance.settings[pluginName].enabled = isEnabled;
     } else {
@@ -89,7 +90,6 @@ export default class PluginService {
   }
 
   static setDevMode(pluginName: string, isEnabled: boolean) {
-    console.log('ENABLING PLUGIN', pluginName);
     if (PluginService.instance.settings[pluginName]) {
       PluginService.instance.settings[pluginName].dev_mode = isEnabled;
     } else {
@@ -120,7 +120,7 @@ export default class PluginService {
     delete PluginService.instance.activePlugins[pluginName];
   }
 
-  static refreshAllPlugins(onPluginsLoaded?: () => void) {
+  static refreshAllPlugins() {
     try {
       PluginService.stopAllPlugins();
       const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
@@ -134,9 +134,7 @@ export default class PluginService {
         }
       }
 
-      if (onPluginsLoaded != null) {
-        onPluginsLoaded();
-      }
+      ModuleService.onPluginsLoaded();
     } catch (err) {
       console.error('Error during refreshAllPlugins:', err);
     }

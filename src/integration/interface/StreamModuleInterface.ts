@@ -14,6 +14,7 @@ export interface StreamModuleInterface {
   leaveChannel: (channelname: string, leavemsg: string | undefined) => Promise<void>;
   refreshShareUserInfo(id: string): Promise<KeyedObject>;
   onExternalNetworkChanged: () => void;
+  onPluginsLoaded: () => void;
   onSharesChanged: () => void;
   getResponseHandlers: () => KeyedObject;
   shareUsers: KeyedObject;

@@ -53,7 +53,6 @@ export default class UserService {
             pending: {},
             permissions: parsedUsers.trusted_users.permissions,
           } as TrustedUsers;
-          console.log('Upgraded users file', parsedUsers);
         }
         UserService.instance.users = parsedUsers as UserFile;
       }

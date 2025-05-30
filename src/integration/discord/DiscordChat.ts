@@ -31,7 +31,7 @@ export default class DiscordChat {
       let command = this.discordModule.commands.get(interaction.commandName);
 
       if (!command) {
-        console.error('Not a valid command');
+        console.error('Not a valid command', interaction.commandName, this.discordModule.commands);
         return;
       }
 

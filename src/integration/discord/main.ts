@@ -10,6 +10,8 @@ import {
   Message,
   User,
   TextChannel,
+  ApplicationCommandOptionType,
+  ChannelType,
 } from 'discord.js';
 import { CommunityModuleInterface } from '../interface/CommunityModuleInterface.ts';
 import { logEffects } from '../../core/Logging.ts';
@@ -84,19 +86,50 @@ export default class Discord implements CommunityModuleInterface {
 
   getPluginFunctions = () => {
     return {
-      isSelf: this.api.isSelf.bind(this),
-      isMaster: this.api.isMaster.bind(this),
-      isHandler: this.api.isHandler.bind(this),
-      getServerByName: this.api.getServerByName.bind(this),
-      getChannelByName: this.api.getChannelByName.bind(this),
-      getMessageRange: this.api.getMessageRange.bind(this),
-      getRoles: this.api.getRoles.bind(this),
-      getUser: this.api.getUser.bind(this),
-      findUser: this.api.findUser.bind(this),
+      isSelf: this.api.isSelf.bind(this.api),
+      isMaster: this.api.isMaster.bind(this.api),
+      isHandler: this.api.isHandler.bind(this.api),
+      getServerByName: this.api.getServerByName.bind(this.api),
+      getChannelByName: this.api.getChannelByName.bind(this.api),
+      getMessageRange: this.api.getMessageRange.bind(this.api),
+      getRoles: this.api.getRoles.bind(this.api),
+      getUser: this.api.getUser.bind(this.api),
+      findUser: this.api.findUser.bind(this.api),
     };
   };
 
-  async getCommands() {
+  convertSlashCommandOptionType(type: string) {
+    ChannelType.GuildText;
+    ChannelType.GuildVoice;
+    switch (type) {
+      case 'string':
+        return ApplicationCommandOptionType.String;
+      case 'integer':
+        return ApplicationCommandOptionType.Integer;
+      case 'number':
+        return ApplicationCommandOptionType.Number;
+      case 'boolean':
+        return ApplicationCommandOptionType.Boolean;
+      case 'user':
+        return ApplicationCommandOptionType.User;
+      case 'attachment':
+        return ApplicationCommandOptionType.Attachment;
+      case 'channel':
+        return ApplicationCommandOptionType.Channel;
+      case 'role':
+        return ApplicationCommandOptionType.Role;
+      case 'mentionable':
+        return ApplicationCommandOptionType.Mentionable;
+      case 'sub_command':
+        return ApplicationCommandOptionType.Subcommand;
+      case 'sub_command_group':
+        return ApplicationCommandOptionType.SubcommandGroup;
+      default:
+        return ApplicationCommandOptionType.String; // Default to STRING
+    }
+  }
+
+  async onPluginsLoaded() {
     const activePlugins = PluginService.getActivePlugins();
     let discordInfo = this.config;
     if (discordInfo.commands) {
@@ -108,8 +141,17 @@ export default class Discord implements CommunityModuleInterface {
     }
     for (let p in activePlugins) {
       const slashCommands = activePlugins[p].getExtra('dSlashCommands');
-      if (slashCommands != null) {
+      if (slashCommands) {
         for (let d in slashCommands) {
+          console.log('ADDING SLASH COMMAND', slashCommands[d]);
+          for (let o in slashCommands[d].options) {
+            if (!isNaN(slashCommands[d].options[o].type)) {
+              continue;
+            }
+            slashCommands[d].options[o].type = this.convertSlashCommandOptionType(
+              slashCommands[d].options[o].type,
+            );
+          }
           this.commands.set(slashCommands[d].name, slashCommands[d]);
         }
       }
@@ -120,7 +162,7 @@ export default class Discord implements CommunityModuleInterface {
       const data: any = await rest.put(Routes.applicationCommands(discordInfo.clientId), {
         body: this.commands,
       });
-
+      console.log(this.commands);
       discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
     }
   }

@@ -69,3 +69,9 @@ export enum PermissionType {
   admin = 'a',
   mod = 'm',
 }
+
+export interface SpooderOSCMessageOptions {
+  type: 'main' | 'plugin';
+  pluginName?: string;
+  interfaceName?: string;
+}

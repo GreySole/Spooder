@@ -15,6 +15,27 @@ import {
   verifyResponseScript,
 } from '../util/ResponseUtil.ts';
 import { isLocal, WebService } from '../service/WebService.ts';
+import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
+
+export function validateUser(req: Request, res: Response) {
+  const accessCookie = req.cookies['access'];
+  if (UserService.getActiveUserFromCookie(accessCookie) == 'local') {
+    return true;
+  }
+  if (!UserService.isActive(accessCookie)) {
+    res.redirect('/login?reason=Not logged in');
+    return false;
+  } else if (
+    !UserService.checkPermission(UserService.getActiveUserFromCookie(accessCookie), [
+      PermissionType.admin,
+      PermissionType.mod,
+    ])
+  ) {
+    res.redirect('/login?reason=Lacking permissions');
+    return false;
+  }
+  return true;
+}
 
 export function ModerationRoutes() {
   const storage = multer.memoryStorage();
@@ -55,7 +76,7 @@ export function ModerationRoutes() {
 
     let chatCommands = {} as KeyedObject;
     for (let e in events) {
-      if (events[e].triggers.chat.enabled) {
+      if (triggerExistsAndEnabled(events[e].triggers, 'chat')) {
         chatCommands[e] = {
           name: events[e].name,
           group: events[e].group,
@@ -243,26 +264,6 @@ export function ModerationRoutes() {
 
   router.post('/stop_all_events', modStopAll);
   publicRouter.post('/stop_all_events', modStopAll);
-
-  function validateUser(req: Request, res: Response) {
-    const accessCookie = req.cookies['access'];
-    if (UserService.getActiveUserFromCookie(accessCookie) == 'local') {
-      return true;
-    }
-    if (!UserService.isActive(accessCookie)) {
-      res.redirect('/login?reason=Not logged in');
-      return false;
-    } else if (
-      !UserService.checkPermission(UserService.getActiveUserFromCookie(accessCookie), [
-        PermissionType.admin,
-        PermissionType.mod,
-      ])
-    ) {
-      res.redirect('/login?reason=Lacking permissions');
-      return false;
-    }
-    return true;
-  }
 
   router.post('/save_theme', modSaveTheme);
   publicRouter.post('/save_theme', modSaveTheme);

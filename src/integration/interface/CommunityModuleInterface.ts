@@ -6,6 +6,7 @@ export interface CommunityModuleInterface {
   autoLogin: () => void;
   sendDM: (userId: string, message: string) => void;
   getPluginFunctions: () => KeyedObject;
+  onPluginsLoaded: () => void;
   getResponseHandlers: () => KeyedObject;
   lastMessage: KeyedObject;
   onExternalNetworkChanged: () => void;
