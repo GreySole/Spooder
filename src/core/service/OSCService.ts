@@ -9,6 +9,8 @@ import ModuleService from './ModuleService.ts';
 import MonitorService, { MonitorDataType, MonitorDirection } from './MonitorService.ts';
 import { checkResponseTrigger } from '../util/ResponseUtil.ts';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
+import http from 'http';
+import { WebService } from './WebService.ts';
 
 export default class OSCService {
   private static instance: OSCService;
@@ -298,11 +300,11 @@ export default class OSCService {
               .condition_groups_off as OSCConditionGroup[];
 
             if (!conditionsOn) {
-              return;
+              continue;
             }
 
             if (message.args.length < conditionsOn?.length) {
-              return;
+              continue;
             }
 
             function runConditions(args: any[], conditionGroups: OSCConditionGroup[]) {
@@ -373,20 +375,17 @@ export default class OSCService {
             }*/
           }
         }
-
-        const controlModules = ModuleService.getControlModules();
-        for (const c in controlModules) {
-          if (controlModules[c].onOSC != null) {
-            controlModules[c].onOSC(message);
-          }
+      }
+      const controlModules = ModuleService.getControlModules();
+      for (const c in controlModules) {
+        if (controlModules[c].onOSC != null) {
+          controlModules[c].onOSC(message);
         }
       }
-      if (PluginService.isReady) {
-        const activePlugins = PluginService.getActivePlugins();
-        for (const p in activePlugins) {
-          if (activePlugins[p].onOSC != null) {
-            activePlugins[p].onOSC(message);
-          }
+      const activePlugins = PluginService.getActivePlugins();
+      for (const p in activePlugins) {
+        if (activePlugins[p].onOSC != null) {
+          activePlugins[p].onOSC(message);
         }
       }
     });
@@ -399,6 +398,8 @@ export default class OSCService {
       oscLog('OSC Error: ', e);
     });
     osc.open();
+
+    const server = WebService.getServer();
 
     this.oscTCP = new OSC({
       plugin: new OSC.WebsocketServerPlugin({
