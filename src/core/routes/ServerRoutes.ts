@@ -19,7 +19,7 @@ export function ServerRoutes() {
 
     res.send({
       host: sconfig.network.host,
-      port: sconfig.network.osc.osc_tcp_port,
+      port: sconfig.network.host_port,
       udp_servers: OSCService.getUdpServers(),
       plugins: Object.keys(activePlugins),
       themes: themes,

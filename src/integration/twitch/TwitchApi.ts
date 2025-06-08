@@ -18,15 +18,11 @@ export default class TwitchApi {
   };
 
   validateBroadcaster = async (): Promise<KeyedObject> => {
-    const oauth = this.getModule().oauth;
-    if (oauth.broadcaster_token == '' || oauth.broadcaster_token == null) {
-      twitchLog(
-        "No broadcaster auth saved. Authorizing on the Web UI saves your auth tokens for chat. If that's your broadcasting account, then go to the EventSub tab and click 'Save Current Oauth as Broadcaster'. You can have both pairs of tokens be the same. If you want a separate account for chat. Log in to twitch.tv as your bot account and authorize on the Web UI.",
-      );
-      return {};
-    }
-
     return new Promise((res, rej) => {
+      const oauth = this.getModule().oauth;
+      if (oauth.broadcaster_token == '' || oauth.broadcaster_token == null) {
+        return { status: 'nologin', error: 'No broadcaster token saved. Please authorize.' };
+      }
       Axios({
         url: 'https://id.twitch.tv/oauth2/validate',
         method: 'get',

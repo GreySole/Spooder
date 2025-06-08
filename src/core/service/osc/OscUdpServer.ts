@@ -1,5 +1,4 @@
-import osc from 'osc-js';
-import OSC from 'osc-js';
+import OSC from '@greysole/osc-js';
 import { oscLog } from 'src/core/Logging';
 import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil';
 import { checkResponseTrigger } from 'src/core/util/ResponseUtil';
@@ -8,7 +7,7 @@ import ConfigService from '../ConfigService';
 import { EventService } from '../EventService';
 import ModuleService from '../ModuleService';
 import MonitorService, { MonitorDataType, MonitorDirection } from '../MonitorService';
-import OSCService from '../OSCServiceNew';
+import OSCService from '../OSCService';
 import PluginService from '../PluginService';
 
 export default class OscUdpServer {
@@ -185,7 +184,12 @@ export default class OscUdpServer {
         }
         switch (osctunnels[o]['handlerTo']) {
           case 'tcp':
-            OSCService.sendToTCP(address, message.args);
+            OSCService.sendToTCP(
+              address,
+              message.args,
+              { type: 'plugin', pluginName: osctunnels[o]['clientTo'] },
+              true,
+            );
             break;
           case 'udp':
             const udpServers = ConfigService.getConfig().network.osc.udp_servers;

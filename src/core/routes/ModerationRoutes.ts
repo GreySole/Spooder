@@ -17,13 +17,15 @@ import {
 import { isLocal, WebService } from '../service/WebService.ts';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
 
-export function validateUser(req: Request, res: Response) {
+export function validateUser(req: Request, res?: Response) {
   const accessCookie = req.cookies['access'];
   if (UserService.getActiveUserFromCookie(accessCookie) == 'local') {
     return true;
   }
   if (!UserService.isActive(accessCookie)) {
-    res.redirect('/login?reason=Not logged in');
+    if (res) {
+      res.redirect('/login?reason=Not logged in');
+    }
     return false;
   } else if (
     !UserService.checkPermission(UserService.getActiveUserFromCookie(accessCookie), [
@@ -31,7 +33,10 @@ export function validateUser(req: Request, res: Response) {
       PermissionType.mod,
     ])
   ) {
-    res.redirect('/login?reason=Lacking permissions');
+    if (res) {
+      res.redirect('/login?reason=Lacking permissions');
+    }
+
     return false;
   }
   return true;

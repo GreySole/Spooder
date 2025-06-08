@@ -1,4 +1,4 @@
-import OSC from 'osc-js';
+import OSC from '@greysole/osc-js';
 import http from 'http';
 import { oscLog } from 'src/core/Logging';
 import ConfigService from '../ConfigService';
@@ -7,16 +7,34 @@ import MonitorService, { MonitorDataType, MonitorDirection } from '../MonitorSer
 import PluginService from '../PluginService';
 import WebSocket, { WebSocketServer } from 'ws';
 
-import OSCService from '../OSCServiceNew';
-import { CustomWebSocketPlugin } from './OscWebSocketPlugin';
+import OSCService from '../OSCService';
 import { KeyedObject, SpooderOSCMessageOptions } from 'src/Types';
+import { isLocal, WebService } from '../WebService';
+import { validateUser } from 'src/core/routes/ModerationRoutes';
 
 export default class OscTcpServer {
   public oscTcp: OSC;
 
   constructor() {
+    const server = WebService.getServer();
     this.oscTcp = new OSC({
-      plugin: new CustomWebSocketPlugin(),
+      plugin: new OSC.WebsocketServerPlugin({
+        server: server,
+        path: '/osc',
+        verifyClient: (info: any, done: any) => {
+          const req = info.req;
+          console.log('OSC TCP Connection from: ', info.req.headers);
+          if (isLocal(req)) {
+            done(true);
+          } else {
+            if (validateUser(req, info.res)) {
+              done(true);
+            } else {
+              done(false, 403, 'Forbidden');
+            }
+          }
+        },
+      }),
     });
 
     const oscTCP = this.oscTcp;
@@ -63,12 +81,7 @@ export default class OscTcpServer {
     oscTCP.open();
   }
 
-  public sendToTCP = (
-    address: string,
-    oscValue: any,
-    options: SpooderOSCMessageOptions,
-    log?: boolean,
-  ) => {
+  public sendToTCP = (address: string, oscValue: any, log?: boolean) => {
     if (log == null) {
       log = true;
     }
@@ -82,7 +95,7 @@ export default class OscTcpServer {
       newMessage = new OSC.Message(address, ...oscValue);
     }
 
-    this.oscTcp.send(newMessage, options);
+    this.oscTcp.send(newMessage);
 
     if (log == true) {
       MonitorService.addLog(MonitorDataType.TCP, MonitorDirection.Send, address, oscValue);

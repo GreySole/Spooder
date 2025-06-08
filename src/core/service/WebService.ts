@@ -20,14 +20,19 @@ import { ControlModuleInterface } from 'src/integration/interface/ControlModuleI
 import { ServerRoutes } from '../routes/ServerRoutes.ts';
 import Ngrok from './webui/Ngrok.ts';
 import MotherwolfTunnel from './webui/Motherwolf.ts';
-import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
+import { ModerationRoutes, validateUser } from '../routes/ModerationRoutes.ts';
 import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
 import multer from 'multer';
 import net from 'net';
+import http from 'http';
 
 export function isLocal(req: Request) {
   if (req.headers['x-forwarded-for'] === undefined) {
-    const remoteAddress = req.hostname;
+    const remoteAddress = req.hostname || req.headers.host;
+    if (!remoteAddress) {
+      console.log('Remote address is undefined', req);
+      return false;
+    }
     const isLocal =
       remoteAddress.startsWith('localhost') ||
       remoteAddress.startsWith('192.168.') ||
@@ -88,8 +93,9 @@ export class WebService {
     WebService.instance.startServer(ConfigService.getFlags().initMode);
   }
 
-  router: Router | undefined = undefined;
-  publicRouter: Router | undefined = undefined;
+  private server: http.Server | undefined = undefined;
+  private router: Router | undefined = undefined;
+  private publicRouter: Router | undefined = undefined;
 
   private ngrok: Ngrok = new Ngrok();
   private motherwolf: MotherwolfTunnel = new MotherwolfTunnel();
@@ -231,7 +237,9 @@ export class WebService {
       res.status(404).send('<h1>Page not found on the server</h1>');
     });
 
-    app.listen(expressPort);
+    this.server = http.createServer(app);
+
+    this.server.listen(expressPort);
 
     const nets = WebService.getNetworkInterfaces();
     let suggestedNet = 'localhost';
@@ -246,6 +254,13 @@ export class WebService {
       'Spooder Web UI is running at',
       'http://localhost:' + expressPort + ' and http://' + suggestedNet + ':' + expressPort,
     );
+  }
+
+  public static getServer() {
+    if (WebService.instance.server == undefined) {
+      throw new Error('WebService server is not initialized');
+    }
+    return WebService.instance.server;
   }
 
   static getNetworkInterfaces() {
