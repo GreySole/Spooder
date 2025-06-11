@@ -20,15 +20,20 @@ import { ControlModuleInterface } from 'src/integration/interface/ControlModuleI
 import { ServerRoutes } from '../routes/ServerRoutes.ts';
 import Ngrok from './webui/Ngrok.ts';
 import MotherwolfTunnel from './webui/Motherwolf.ts';
-import { ModerationRoutes } from '../routes/ModerationRoutes.ts';
+import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes.ts';
 import { ThemeRoutes } from '../routes/ThemeRoutes.ts';
 import multer from 'multer';
 import net from 'net';
 import http from 'http';
+import ShareService from './ShareService.ts';
 
 export function isLocal(req: Request) {
   if (req.headers['x-forwarded-for'] === undefined) {
-    const remoteAddress = req.hostname;
+    const remoteAddress = req.hostname || req.headers.host;
+    if (!remoteAddress) {
+      console.log('Remote address is undefined', req);
+      return false;
+    }
     const isLocal =
       remoteAddress.startsWith('localhost') ||
       remoteAddress.startsWith('192.168.') ||
@@ -159,6 +164,10 @@ export class WebService {
       router.use('/restore_plugins', fileUpload.single('file'));
     } else {
       expressPort = await findAvailablePort(sconfig.network.host_port);
+
+      router.use(json({ limit: '100mb' }));
+      router.use(cookieParser());
+
       router.use('/', express.static(frontendDir + '/main/build'));
       router.use('/mod', express.static(frontendDir + '/mod/build'));
       router.use('/public', express.static(frontendDir + '/public/build'));
@@ -169,21 +178,42 @@ export class WebService {
       router.use('/assets', express.static(userDir + '/web/assets'));
       router.use('/icons', express.static(userDir + '/web/icons'));
 
-      router.use(json({ limit: '100mb' }));
-      router.use(cookieParser());
+      publicRouter.use(json());
+      publicRouter.use(cookieParser());
 
       publicRouter.use('/', express.static(frontendDir + '/public/build'));
       publicRouter.use('/login', express.static(frontendDir + '/login/build'));
-      publicRouter.use('/mod', express.static(frontendDir + '/mod/build'));
+      publicRouter.use('/mod', validateModAccess, express.static(frontendDir + '/mod/build'));
 
-      publicRouter.use('/overlay', express.static(userDir + '/web/overlay'));
-      publicRouter.use('/utility', express.static(userDir + '/web/utility'));
+      function validatePageAccess(req: Request, res: Response, next: NextFunction) {
+        if (req.cookies?.access) {
+          if (validateUser(req)) {
+            next();
+            return;
+          } else {
+            res.status(403).send('<h1>Access denied: Unauthorized</h1>');
+            return;
+          }
+        }
+
+        if (req.query.key || req.cookies?.share_key) {
+          const isShareKeyValid = ShareService.validateShareKey(req, res);
+          if (isShareKeyValid !== 'ok') {
+            res.status(403).send(`<h1>Access denied: ${isShareKeyValid}</h1>`);
+            return;
+          }
+          next();
+          return;
+        }
+
+        res.status(403).send('<h1>Access denied: Unauthorized</h1>');
+      }
+
+      publicRouter.use('/overlay', validatePageAccess, express.static(userDir + '/web/overlay'));
+      publicRouter.use('/utility', validatePageAccess, express.static(userDir + '/web/utility'));
       publicRouter.use('/plugin', express.static(userDir + '/web/public'));
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));
       publicRouter.use('/icons', express.static(userDir + '/web/icons'));
-
-      publicRouter.use(json());
-      publicRouter.use(cookieParser());
 
       const systemRoutes = ServerRoutes();
       router.use('/server', systemRoutes.local);
@@ -253,7 +283,10 @@ export class WebService {
   }
 
   public static getServer() {
-    return this.instance.server;
+    if (WebService.instance.server == undefined) {
+      throw new Error('WebService server is not initialized');
+    }
+    return WebService.instance.server;
   }
 
   static getNetworkInterfaces() {

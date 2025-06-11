@@ -26,7 +26,7 @@ export default function getTwitchRouters() {
   async function authorizeTwitch(req: Request, res: Response, isBroadcaster?: boolean) {
     twitchLog('Got code');
     let code = req.query.code;
-    var twitchParams =
+    const twitchParams =
       '?client_id=' +
       oauth['client-id'] +
       '&client_secret=' +
@@ -150,6 +150,10 @@ export default function getTwitchRouters() {
   });
 
   router.get('/get_linked_accounts', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
     const twitchBotUser = await twitchModule.api.getUserInfo(twitchModule.api.botUsername);
     const twitchBroadcasterUser = await twitchModule.api.getUserInfo(twitchModule.api.homeChannel);
 
@@ -157,6 +161,10 @@ export default function getTwitchRouters() {
   });
 
   router.get('/get_eventsubs', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
     const currentSubs = await twitchModule.eventsub.getEventSubs();
     res.send(currentSubs);
   });
@@ -368,14 +376,14 @@ export default function getTwitchRouters() {
           return;
         }
         if (discord.loggedIn == true && discord.config.sharenotif == true) {
-          discord.findUser(discord.config.master).then((user) => {
-            let watchButton = discord.makeLinkButton(
+          discord.api.findUser(discord.config.master).then((user) => {
+            let watchButton = discord.buttons.makeLinkButton(
               'Watch',
               'https://twitch.tv/' + event.broadcaster_user_login,
             );
             user.send({
               content: event.broadcaster_user_name + " is live. I'm going in!",
-              components: [watchButton],
+              components: [watchButton.toJSON()],
             });
           });
         }
@@ -396,45 +404,6 @@ export default function getTwitchRouters() {
         event.raidType = 'send';
         event.username = event.to_broadcaster_user_login;
         event.displayName = event.to_broadcaster_user_name;
-      }
-    }
-
-    if (type == 'stream.online') {
-      twitchModule.startReoccuringMessage();
-      let onlineEvent = twitchModule.getStreamOnlineEvent();
-      const discord = ModuleService.getCommunityModule('discord') as Discord;
-      if (!discord) {
-        return;
-      }
-      if (onlineEvent != null) {
-        if (onlineEvent.special?.discord?.enabled == true) {
-          if (discord.loggedIn == true) {
-            let channelInfo: any = await twitchModule.api.getChannelInfo(
-              twitchModule.api.broadcasterUserID,
-            );
-            let onlineMessage =
-              '@everyone ' +
-              channelInfo[0].broadcaster_name +
-              ' is live: ' +
-              channelInfo[0].title +
-              '!';
-            let watchButton = discord.makeLinkButton(
-              'Watch',
-              'https://twitch.tv/' + twitchModule.api.homeChannel,
-            );
-            discord.sendToChannel(
-              onlineEvent.special.discord.guild,
-              onlineEvent.special.discord.channel,
-              { content: onlineMessage, components: [watchButton] },
-            );
-          }
-        }
-      }
-    }
-
-    if (type == 'stream.offline') {
-      if (twitchModule.streamChatInterval != null) {
-        clearInterval(twitchModule.streamChatInterval);
       }
     }
 

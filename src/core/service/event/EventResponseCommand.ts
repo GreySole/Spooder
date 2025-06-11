@@ -8,7 +8,6 @@ export default function EventResponseCommand(
   streamMessage: any,
   extra: any,
 ) {
-  const eventstorage = EventService.getEventStorage();
   return async () => {
     if (eCommand.etype === 'recurring') {
       EventService.startRecurringMessage(eventName, eCommand.interval_key, eCommand);
@@ -18,9 +17,6 @@ export default function EventResponseCommand(
       return;
     }
     try {
-      if (eventstorage[eventName] == null) {
-        eventstorage[eventName] = {};
-      }
       const response = await runResponseScript(
         eventName,
         streamMessage,
@@ -35,7 +31,10 @@ export default function EventResponseCommand(
 
       sayInChat(response.response, streamMessage.platform, streamMessage.channel);
     } catch (e) {
-      spooderLog('Failed to run response script. Check the event settings to verify it.', e);
+      spooderLog(
+        `Failed to run response script for ${eventName}. Check the event settings to verify it.`,
+        e,
+      );
     }
   };
 }

@@ -5,7 +5,7 @@
   "main": "spooder.ts",
   "type": "module",
   "scripts": {
-    "start": "TS_NODE_PROJECT=./tsconfig.json tsx src/spooder.ts",
+    "start": "tsx src/spooder.ts",
     "dev": "node src/spooder.ts -d",
     "init": "tsx spooder.ts -i",
     "safe": "node spooder.ts -e",
@@ -16,6 +16,7 @@
   "license": "GPL-3.0",
   "dependencies": {
     "@discordjs/voice": "^0.15.0",
+    "@greysole/osc-js": "^2.4.5",
     "@ngrok/ngrok": "^1.5.1",
     "@vercel/ncc": "^0.38.3",
     "adm-zip": "^0.5.9",
@@ -32,7 +33,6 @@
     "googleapis": "^118.0.0",
     "multer": "^1.4.5-lts.1",
     "obs-websocket-js": "^5.0.0",
-    "osc-js": "^2.4.1",
     "prettier": "^3.3.2",
     "prettier-eslint": "^16.3.0",
     "spooder": "file:",

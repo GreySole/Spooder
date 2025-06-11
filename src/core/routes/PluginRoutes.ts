@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { json, Request, Response } from 'express';
 import AdmZip from 'adm-zip';
 import chmodr from 'chmodr';
 import path from 'path';
@@ -65,15 +65,26 @@ export function PluginRoutes() {
 
   async function pluginGet(req: Request, res: Response) {
     const pluginName = req.query.plugin as string;
+    const shareKey = req.query.key as string;
     let pluginSettings = null;
 
     try {
-      const thisPlugin = fs.readFileSync(
-        path.join(userDir, 'plugins', pluginName, 'settings.json'),
-        {
-          encoding: 'utf8',
-        },
-      );
+      let settingsPath = path.join(userDir, 'plugins', pluginName, 'settings.json');
+      if (shareKey) {
+        const shareSettingsPath = path.join(
+          userDir,
+          'plugins',
+          pluginName,
+          '_share',
+          'settings.json',
+        );
+        if (fs.existsSync(shareSettingsPath)) {
+          settingsPath = shareSettingsPath;
+        }
+      }
+      const thisPlugin = fs.readFileSync(settingsPath, {
+        encoding: 'utf8',
+      });
       pluginSettings = JSON.parse(thisPlugin);
     } catch (e) {
       webLog(pluginName + ' has no settings');
@@ -85,13 +96,13 @@ export function PluginRoutes() {
       oscInfo = {
         host: sconfig.network.host,
         name: pluginName,
-        port: sconfig.network.osc.osc_tcp_port,
+        port: sconfig.network.host_port,
         external: false,
         settings: pluginSettings,
       };
     } else {
       oscInfo = {
-        host: WebService.getPublicOSCUrl(),
+        host: WebService.getPublicHTTPUrl(),
         name: pluginName,
         port: null,
         external: true,
@@ -112,11 +123,11 @@ export function PluginRoutes() {
       const thisPlugin = activePlugins[a];
 
       pluginPacks[a] = {
-        name: thisPlugin.name == null ? a : thisPlugin.name,
-        version: thisPlugin.version == null ? 'Unknown Version' : thisPlugin.version,
-        author: thisPlugin.author == null ? 'Unknown Author' : thisPlugin.author,
-        description: thisPlugin.description == null ? '' : thisPlugin.description,
-        dependencies: thisPlugin.dependencies == null ? {} : thisPlugin.dependencies,
+        name: thisPlugin.name ? thisPlugin.name : a,
+        version: thisPlugin.version ? thisPlugin.version : 'Unknown Version',
+        author: thisPlugin.author ? thisPlugin.author : 'Unknown Author',
+        description: thisPlugin.description ? thisPlugin.description : '',
+        dependencies: thisPlugin.dependencies ? thisPlugin.dependencies : {},
         status: thisPlugin.status,
         assetBrowserPath: '/',
         assetPath: webJoin('assets', a),
@@ -649,6 +660,24 @@ export function PluginRoutes() {
     PluginService.refreshAllPlugins();
   });
 
+  publicRouter.post('/save_share_plugin_settings', async (req: Request, res: Response) => {
+    const shareKey = req.body.key as string;
+    const newSettings = req.body.new_settings;
+    const pluginName = req.body.pluginName;
+    const saveStatus = PluginService.saveSharePluginSettings(shareKey, pluginName, newSettings);
+    if (saveStatus) {
+      res.send({ status: 'ok' });
+      webLog('Shared ' + pluginName + ' Settings Saved!');
+    } else {
+      res.send({
+        status: 'error',
+        error: 'Failed to save settings. Check app console for details.',
+      });
+    }
+
+    PluginService.refreshAllPlugins();
+  });
+
   router.get('/get_plugin/*', async (req: Request, res: Response) => {
     let plugin = {};
     let a = req.params['0'];
@@ -672,7 +701,6 @@ export function PluginRoutes() {
   });
 
   router.get('/api/*', (req: Request, res: Response) => {
-    console.log(pluginApi, req.params[0]);
     if (pluginApi.local.get[`${req.params[0]}`]) {
       pluginApi.local.get[`${req.params[0]}`](req, res);
     }
@@ -695,7 +723,7 @@ export function PluginRoutes() {
 
   publicRouter.post('/api/*', (req: Request, res: Response) => {
     if (pluginApi.public.post[`${req.params[0]}`]) {
-      pluginApi.public.post[`${req.params[0]}`](res, res);
+      pluginApi.public.post[`${req.params[0]}`](req, res);
     }
     res.status(200).end();
   });

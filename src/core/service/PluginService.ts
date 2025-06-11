@@ -9,6 +9,7 @@ import childProcess from 'child_process';
 import Plugin from 'src/Plugin.ts';
 import { createRequire } from 'module';
 import ModuleService from './ModuleService.ts';
+import ShareService from './ShareService.ts';
 
 interface PluginMap {
   [key: string]: Plugin;
@@ -55,6 +56,33 @@ export default class PluginService {
         path.join(userDir, 'plugins', pluginName, 'settings.json'),
         JSON.stringify(settings),
       );
+      return true;
+    } catch (e) {
+      console.error('Error saving plugin settings', e);
+      return false;
+    }
+  }
+
+  static saveSharePluginSettings(shareKey: string, pluginName: string, settings: KeyedObject) {
+    const share = ShareService.getShareByKey(shareKey)?.share;
+    if (!share) {
+      console.error('Share not found for key:', shareKey);
+      return false;
+    }
+
+    let filesToSave = {} as KeyedObject;
+
+    for (let s in share.streamPlatforms) {
+      filesToSave[s] = share.streamPlatforms[s].userId + '.json';
+    }
+
+    try {
+      for (let fts in filesToSave) {
+        fs.writeFileSync(
+          path.join(userDir, 'plugins', pluginName, '_share', fts, `${filesToSave[fts]}.json`),
+          JSON.stringify(settings),
+        );
+      }
       return true;
     } catch (e) {
       console.error('Error saving plugin settings', e);

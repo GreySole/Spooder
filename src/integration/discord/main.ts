@@ -30,7 +30,19 @@ export function discordLog(...content: any[]) {
 }
 
 export default class Discord implements CommunityModuleInterface {
+  client: Client<boolean> | undefined;
+
+  voice!: DiscordVoice;
+  api!: DiscordApi;
+  chat!: DiscordChat;
+  buttons = DiscordButtons();
+  guilds = null;
+  loggedIn = false;
+  commands = new Collection();
+  lastMessage = {} as KeyedObject;
+
   constructor() {}
+
   getRouters = getDiscordRouters;
 
   onExternalNetworkChanged() {}
@@ -54,19 +66,9 @@ export default class Discord implements CommunityModuleInterface {
         sharenotif: false,
         crashreport: false,
       };
-  client: Client<boolean> | undefined;
 
-  voice!: DiscordVoice;
-  api!: DiscordApi;
-  chat!: DiscordChat;
-  buttons = DiscordButtons();
-  guilds = null;
-  loggedIn = false;
-  commands = new Collection();
-  lastMessage = {} as KeyedObject;
-
-  sendDM = this.chat?.sendDM.bind(this.chat);
-  sendToChannel = this.chat?.sendToChannel.bind(this.chat);
+  sendDM = (userId: string, message: string) => {};
+  sendToChannel = (server: string, channel: string, message: string, components?: any[]) => {};
 
   autoLogin() {
     return new Promise(async (res, rej) => {
@@ -84,6 +86,41 @@ export default class Discord implements CommunityModuleInterface {
     });
   }
 
+  startClient(token: string) {
+    return new Promise((res, rej) => {
+      this.client = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.DirectMessages,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.GuildIntegrations,
+          GatewayIntentBits.MessageContent,
+          GatewayIntentBits.GuildVoiceStates,
+          GatewayIntentBits.GuildModeration,
+        ],
+        partials: [Partials.Channel],
+      });
+
+      let client = this.client;
+      client.once(Events.ClientReady, (c) => {
+        this.loggedIn = true;
+        discordLog('Discord Ready! Logged in as ' + c.user.tag, c.user);
+
+        res('success');
+      });
+
+      this.api = new DiscordApi();
+      this.voice = new DiscordVoice();
+      this.chat = new DiscordChat();
+
+      client.login(token).then(() => {
+        this.chat.init();
+        this.sendDM = this.chat.sendDM.bind(this.chat);
+        this.sendToChannel = this.chat.sendToChannel.bind(this.chat);
+      });
+    });
+  }
+
   getPluginFunctions = () => {
     return {
       isSelf: this.api.isSelf.bind(this.api),
@@ -95,6 +132,7 @@ export default class Discord implements CommunityModuleInterface {
       getRoles: this.api.getRoles.bind(this.api),
       getUser: this.api.getUser.bind(this.api),
       findUser: this.api.findUser.bind(this.api),
+      sendDM: this.chat.sendDM.bind(this.chat),
     };
   };
 
@@ -165,38 +203,5 @@ export default class Discord implements CommunityModuleInterface {
       console.log(this.commands);
       discordLog(`Successfully reloaded ${data.length} application (/) commands.`);
     }
-  }
-
-  startClient(token: string) {
-    return new Promise((res, rej) => {
-      this.client = new Client({
-        intents: [
-          GatewayIntentBits.Guilds,
-          GatewayIntentBits.DirectMessages,
-          GatewayIntentBits.GuildMessages,
-          GatewayIntentBits.GuildIntegrations,
-          GatewayIntentBits.MessageContent,
-          GatewayIntentBits.GuildVoiceStates,
-          GatewayIntentBits.GuildModeration,
-        ],
-        partials: [Partials.Channel],
-      });
-
-      let client = this.client;
-      client.once(Events.ClientReady, (c) => {
-        this.loggedIn = true;
-        discordLog('Discord Ready! Logged in as ' + c.user.tag, c.user);
-
-        res('success');
-      });
-
-      this.api = new DiscordApi();
-      this.voice = new DiscordVoice();
-      this.chat = new DiscordChat();
-
-      client.login(token).then(() => {
-        this.chat.init();
-      });
-    });
   }
 }

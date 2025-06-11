@@ -16,6 +16,7 @@ export interface StreamMessage {
   message: string;
   messageType: string;
   emotes: any[];
+  respond: (message: string) => void;
   tags: KeyedObject;
   isBroadcaster: boolean;
   isMod: boolean;
