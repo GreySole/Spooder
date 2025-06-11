@@ -31,6 +31,30 @@ export function ShareRoutes() {
     res.send(shares);
   });
 
+  router.get('/plugin_keys', async (req: Request, res: Response) => {
+    const pluginKeys = ShareService.getShares().pluginKeys;
+    res.send(pluginKeys);
+  });
+
+  router.post('/delete_plugin_key', async (req: Request, res: Response) => {
+    const pluginKey = req.body.plugin_key as string;
+    const pluginKeys = ShareService.getShares().pluginKeys;
+    res.send(pluginKeys);
+  });
+
+  router.get('/get_share_for_browse', (req, res) => {
+    const shareKey = req.query.key as string;
+    if (!shareKey) {
+      return res.status(400).send({ error: 'Share key is required' });
+    }
+    const share = ShareService.getShareByKey(shareKey);
+    const streamModules = ModuleService.getStreamModules();
+    if (!share) {
+      return res.status(404).send({ error: 'Share not found' });
+    }
+    res.send(share);
+  });
+
   router.get('/active_shares', async (req: Request, res: Response) => {
     const activeShares = await ShareService.getActiveShares();
     console.log('ACTIVE SHARES', activeShares);

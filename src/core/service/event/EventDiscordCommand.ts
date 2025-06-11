@@ -11,15 +11,9 @@ export default function EventDiscordCommand(
   extra: any,
 ) {
   const discord = ModuleService.getCommunityModule('discord') as Discord;
-
-  const eventstorage = EventService.getEventStorage();
   return async () => {
     if (eCommand.function === 'message') {
       try {
-        if (eventstorage[eventName] == null) {
-          eventstorage[eventName] = {};
-        }
-
         const response = await runResponseScript(
           eventName,
           streamMessage,
@@ -39,7 +33,10 @@ export default function EventDiscordCommand(
 
         discord.chat.sendToChannel(eCommand.guild, eCommand.channel, response.response, components);
       } catch (e) {
-        spooderLog('Failed to run response script. Check the event settings to verify it.', e);
+        spooderLog(
+          `Failed to run response script for ${eventName}. Check the event settings to verify it.`,
+          e,
+        );
       }
     }
   };

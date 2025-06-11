@@ -12,15 +12,23 @@ import { KeyedObject, userDir } from 'src/Types.ts';
 import Discord, { discordLog } from './main.ts';
 import fs from 'fs';
 import { client } from 'tmi.js';
+import DiscordVoice from './DiscordVoice.ts';
+import DiscordApi from './DiscordApi.ts';
 
 export default class DiscordChat {
-  private discordModule = ModuleService.getCommunityModule('discord') as Discord;
+  private discordModule: Discord;
   private client: Client | undefined;
-  private voice = this.discordModule.voice;
-  private api = this.discordModule.api;
-  constructor() {}
+  private voice: DiscordVoice;
+  private api: DiscordApi;
+
+  constructor() {
+    this.discordModule = ModuleService.getCommunityModule('discord') as Discord;
+    this.voice = this.discordModule.voice;
+    this.api = this.discordModule.api;
+  }
 
   init() {
+    console.log('DiscordChat init');
     this.client = this.discordModule.client;
     this.client?.on(Events.InteractionCreate, async (interaction) => {
       //discordLog("DISCORD INTERACTION", interaction);
@@ -206,7 +214,7 @@ export default class DiscordChat {
             'utf-8',
           );
           message.react('👍');
-          discordModule.sendDM(
+          this.sendDM(
             trustUser.id,
             "My master has entrusted you to handle me. That means you can use my moderation commands in any server I'm in!",
           );

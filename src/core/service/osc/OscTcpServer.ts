@@ -23,11 +23,10 @@ export default class OscTcpServer {
         path: '/osc',
         verifyClient: (info: any, done: any) => {
           const req = info.req;
-          console.log('OSC TCP Connection from: ', info.req.headers);
           if (isLocal(req)) {
             done(true);
           } else {
-            if (validateUser(req, info.res)) {
+            if (validateUser(req) === 'ok') {
               done(true);
             } else {
               done(false, 403, 'Forbidden');

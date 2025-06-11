@@ -9,6 +9,7 @@ import { StreamModuleInterface } from 'src/integration/interface/StreamModuleInt
 import { spooderLog, webLog } from '../Logging.ts';
 import { WebService } from './WebService.ts';
 import crypto from 'crypto';
+import { Request, Response } from 'express';
 
 interface ShareUser {
   name: string;
@@ -44,7 +45,36 @@ export default class ShareService {
           encoding: 'utf8',
         });
 
-        const loadedShares = JSON.parse(shareFile);
+        const loadedShareFile = JSON.parse(shareFile);
+
+        let loadedShares = {} as KeyedObject;
+
+        if (loadedShareFile.plugin_keys) {
+          ShareService.instance.pluginKeys = loadedShareFile.plugin_keys as KeyedObject;
+          loadedShares = loadedShareFile.shares as KeyedObject;
+        } else {
+          loadedShares = loadedShareFile as KeyedObject;
+        }
+
+        if (Array.isArray(loadedShares[Object.keys(loadedShares)[0]].commands)) {
+          for (const l in loadedShares) {
+            if (Array.isArray(loadedShares[l].commands)) {
+              let newCommands = {} as KeyedObject;
+              loadedShares[l].commands.forEach((command: string) => {
+                newCommands[command] = true;
+              });
+              loadedShares[l].commands = newCommands;
+            }
+
+            if (Array.isArray(loadedShares[l].plugins)) {
+              let newPlugins = {} as KeyedObject;
+              loadedShares[l].plugins.forEach((plugin: string) => {
+                newPlugins[plugin] = true;
+              });
+              loadedShares[l].plugins = newPlugins;
+            }
+          }
+        }
 
         // Convert old share format to new format
         if (!loadedShares[Object.keys(loadedShares)[0]].streamPlatforms) {
@@ -83,7 +113,6 @@ export default class ShareService {
             } as ShareUser;
           }
         }
-
         ShareService.instance.shares = loadedShares as ShareUserList;
       }
     } catch (e: any) {
@@ -120,17 +149,34 @@ export default class ShareService {
   }
 
   shares: KeyedObject = {};
+  pluginKeys: KeyedObject = {};
   activeShares: any[] = [];
 
   private saveShares() {
     fs.writeFileSync(
       userDir + '/settings/shares.json',
-      JSON.stringify(ShareService.instance.shares),
+      JSON.stringify({
+        shares: this.shares,
+        plugin_keys: this.pluginKeys,
+      }),
     );
   }
 
   static getShares(): ShareUserList {
     return ShareService.instance.shares;
+  }
+
+  static getPluginKeys() {
+    return ShareService.instance.pluginKeys;
+  }
+
+  static deletePluginKey(pluginName: string) {
+    if (ShareService.instance.pluginKeys[pluginName]) {
+      delete ShareService.instance.pluginKeys[pluginName];
+      ShareService.instance.saveShares();
+    } else {
+      console.log('Plugin key not found:', pluginName);
+    }
   }
 
   static async getActiveShares() {
@@ -255,12 +301,69 @@ export default class ShareService {
     return randomKey;
   }
 
-  static validateShareKey(key: string, directory: string) {
+  static getPluginShareKey(pluginName: string) {
+    if (!ShareService.instance.pluginKeys[pluginName]) {
+      const randomKey = crypto.randomBytes(16).toString('hex');
+      ShareService.instance.pluginKeys[pluginName] = randomKey;
+      ShareService.instance.saveShares();
+    }
+
+    return ShareService.instance.pluginKeys[pluginName];
+  }
+
+  static getShareByKey(key: string) {
+    const shares = ShareService.getShares();
+    for (const shareId in shares) {
+      const share = shares[shareId];
+      if (share.shareKey === key) {
+        return {
+          shareId: shareId,
+          share: share,
+        };
+      }
+    }
+  }
+
+  static validateShareKey(req: Request, res: Response) {
+    const key = (req.query.key || req.cookies?.share_key) as string;
+
+    const pathSegments = req.path.split('/');
+    const directory = pathSegments[1];
+
+    console.log(req.path, pathSegments, directory);
+
+    if (!key) {
+      return 'invalid_key';
+    }
+
+    if (!directory) {
+      return 'invalid_directory';
+    }
+    const pluginKeys = ShareService.instance.pluginKeys;
+    if (pluginKeys[directory] && pluginKeys[directory] === key) {
+      if (!req.cookies?.share_key) {
+        console.log('Writing share key to cookie');
+        res.cookie('share_key', key, {
+          maxAge: 86400 * 1000,
+          httpOnly: true,
+          secure: false,
+        });
+      }
+      return 'ok';
+    }
     const shares = ShareService.getShares();
     for (const shareId in shares) {
       const share = shares[shareId];
       if (share.shareKey === key) {
         if (share.plugins.includes(directory)) {
+          if (!req.cookies?.share_key) {
+            console.log('Writing share key to cookie');
+            res.cookie('share_key', key, {
+              maxAge: 86400 * 1000,
+              httpOnly: true,
+              secure: false,
+            });
+          }
           return 'ok';
         } else {
           return 'not_shared';

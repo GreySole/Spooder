@@ -92,7 +92,7 @@ export default class MotherwolfTunnel {
     this.isReady = false;
     this.socket = new WebSocket(`wss://${this.subdomain}.spooder.me?token=${this.token}`);
     this.oscReceiver = new WebSocket(`wss://${this.subdomain}.spooder.me/osc?token=${this.token}`);
-    this.oscSender = new WebSocket(`ws://localhost:${this.osc_tcp_port}/osc`);
+    this.oscSender = new WebSocket(`ws://localhost:${this.host_port}/osc`);
     webLog('Connecting to Motherwolf Tunnels...', this.subdomain, this.token);
 
     const checkIfReady = () => {

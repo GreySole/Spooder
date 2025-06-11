@@ -53,12 +53,14 @@ export default class TwitchEventSub {
 
     this.websocket.onerror = (error) => {
       twitchLog('Eventsub error:', error);
-      logToFile('twitch-eventsub', 'Eventsub error: ' + error.message, 100);
+      logToFile('twitch-eventsub-error', 'Eventsub error: ' + error.message, 100);
+      this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+      this.setupWebSocketHandlers();
     };
 
     this.websocket.onclose = (event) => {
       logToFile(
-        'twitch-eventsub',
+        'twitch-eventsub-close',
         'Eventsub connection closed: ' + event.code + ' ' + event.reason,
         100,
       );

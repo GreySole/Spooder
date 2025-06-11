@@ -16,6 +16,8 @@ import childProcess from 'child_process';
 import chmodr from 'chmodr';
 import { sayInChat } from './core/service/EventService.ts';
 import { pluginLog } from './core/Logging.ts';
+import ShareService from './core/service/ShareService.ts';
+import { webJoin } from './core/util/PathUtil.ts';
 
 interface PluginSpooderModules {
   stream: KeyedObject;
@@ -70,6 +72,9 @@ interface PluginModule {
   ) => void;
   getActiveViewer: (req: Request) => KeyedObject | undefined;
   getAssetPath: (assetPath: string) => string;
+  getLocalFilePath: (filePath: string) => string;
+  getOverlayUrl: () => string;
+  getUtilityUrl: () => string;
   settings?: KeyedObject;
   onSettings?: (settings: KeyedObject) => void;
   onLoad?: () => void;
@@ -237,6 +242,34 @@ export default class Plugin {
 
       this.pluginModule.getAssetPath = (assetPath: string) => {
         return path.resolve(userDir, 'web', 'assets', this.dirname, assetPath);
+      };
+
+      this.pluginModule.getLocalFilePath = (filePath: string) => {
+        return path.resolve(userDir, 'plugins', this.dirname, filePath);
+      };
+
+      this.pluginModule.getOverlayUrl = () => {
+        if (this.hasOverlay) {
+          const shareKey = ShareService.getPluginShareKey(this.dirname);
+          const publicHTTPUrl = WebService.getPublicHTTPUrl();
+          if (!publicHTTPUrl) {
+            return '';
+          }
+          return webJoin(publicHTTPUrl, 'overlay', this.dirname) + `?key=${shareKey}`;
+        }
+        return '';
+      };
+
+      this.pluginModule.getUtilityUrl = () => {
+        if (this.hasUtility) {
+          const shareKey = ShareService.getPluginShareKey(this.dirname);
+          const publicHTTPUrl = WebService.getPublicHTTPUrl();
+          if (!publicHTTPUrl) {
+            return '';
+          }
+          return webJoin(publicHTTPUrl, 'utility', this.dirname) + `?key=${shareKey}`;
+        }
+        return '';
       };
 
       const spooderConfig = ConfigService.getConfig();

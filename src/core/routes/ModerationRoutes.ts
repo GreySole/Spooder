@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import { PermissionType, KeyedObject, userDir } from 'src/Types.ts';
 import ConfigService from '../service/ConfigService.ts';
 import { EventService, sayInChat } from '../service/EventService.ts';
@@ -17,29 +17,35 @@ import {
 import { isLocal, WebService } from '../service/WebService.ts';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
 
-export function validateUser(req: Request, res?: Response) {
-  const accessCookie = req.cookies['access'];
+export function validateModAccess(req: Request, res: Response, next: NextFunction) {
+  const isValid = validateUser(req);
+
+  if (isValid === 'ok') {
+    next();
+  } else {
+    res.redirect('/login?reason=' + isValid);
+  }
+}
+
+export function validateUser(req: Request) {
+  const accessCookie = req.cookies?.['access'];
+  if (!accessCookie) {
+    return 'No access cookie';
+  }
   if (UserService.getActiveUserFromCookie(accessCookie) == 'local') {
     return true;
   }
   if (!UserService.isActive(accessCookie)) {
-    if (res) {
-      res.redirect('/login?reason=Not logged in');
-    }
-    return false;
+    return 'Not logged in';
   } else if (
     !UserService.checkPermission(UserService.getActiveUserFromCookie(accessCookie), [
       PermissionType.admin,
       PermissionType.mod,
     ])
   ) {
-    if (res) {
-      res.redirect('/login?reason=Lacking permissions');
-    }
-
-    return false;
+    return 'Lacking permissions';
   }
-  return true;
+  return 'ok';
 }
 
 export function ModerationRoutes() {
@@ -58,7 +64,8 @@ export function ModerationRoutes() {
     const accessCookie = req.cookies['access'];
     let moduser = null;
     if (!isLocalHost) {
-      if (!validateUser(req, res)) {
+      if (validateUser(req) !== 'ok') {
+        res.send({ status: 'unauthorized' });
         return;
       }
       moduser = UserService.getActiveUserFromCookie(accessCookie);
@@ -142,7 +149,8 @@ export function ModerationRoutes() {
     const isLocked = req.body.isOn === true;
     const target = req.body.eventName;
 
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const accessCookie = req.cookies['access'];
@@ -162,7 +170,8 @@ export function ModerationRoutes() {
     const pluginName = req.body.pluginName;
     const subLockName = req.body.subLockName;
 
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const accessCookie = req.cookies['access'];
@@ -184,7 +193,8 @@ export function ModerationRoutes() {
   publicRouter.post('/lock/plugin', modPluginLock);
 
   function modLockdown(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const isLocked = req.body.isOn === true;
@@ -201,7 +211,8 @@ export function ModerationRoutes() {
   publicRouter.post('/set_lockdown', modLockdown);
 
   function modBlacklist(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const accessCookie = req.cookies['access'];
@@ -220,7 +231,8 @@ export function ModerationRoutes() {
 
   function modSpamGuard(req: Request, res: Response) {
     const isSpamGuarded = req.body.spamguard == true;
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     ModerationService.setSpamGuard(isSpamGuarded);
@@ -234,7 +246,8 @@ export function ModerationRoutes() {
   function modSaveTheme(req: Request, res: Response) {
     console.log(req.body);
 
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const hue = req.body.hue;
@@ -252,7 +265,8 @@ export function ModerationRoutes() {
   }
 
   function modStopAll(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const accessCookie = req.cookies['access'];
@@ -325,7 +339,8 @@ export function ModerationRoutes() {
   publicRouter.post('/verify_response_script', verifyResponseScriptPOST);
 
   function getModCommands(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const commands = EventService.getModCommands();
@@ -336,7 +351,8 @@ export function ModerationRoutes() {
   publicRouter.get('/get_mod_commands', getModCommands);
 
   function addModCommand(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const command = req.body.command;
@@ -357,7 +373,8 @@ export function ModerationRoutes() {
   publicRouter.post('/add_mod_command', addModCommand);
 
   function updateModCommand(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const commandId = req.body.commandId;
@@ -387,7 +404,8 @@ export function ModerationRoutes() {
   publicRouter.post('/update_mod_command', updateModCommand);
 
   function removeModCommand(req: Request, res: Response) {
-    if (!validateUser(req, res)) {
+    if (validateUser(req) !== 'ok') {
+      res.send({ status: 'unauthorized' });
       return;
     }
     const commandId = req.body.commandId;

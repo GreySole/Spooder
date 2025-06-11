@@ -128,6 +128,7 @@ export function buildMockStreamMessage(message: string): StreamMessage {
     channel: '#testchannel',
     message: message,
     messageType: 'twitch-chat',
+    respond: (txt: string) => {},
     emotes: [],
     tags: {
       badgeInfo: 'subscriber/1',
@@ -168,7 +169,7 @@ export async function runResponseScript(
   useFakeStorage = false,
 ) {
   const responseScript = String.raw`
-    async (runCommands, sayInChat, modules, eventstorage, saveEventStorage) => {
+    async (runCommands, sayInChat, modules, _eventStorage, _saveEventStorage) => {
       const event = ${JSON.stringify(message)};
       const extra = ${JSON.stringify(extra)};
       function say(txt) {
@@ -177,23 +178,23 @@ export async function runResponseScript(
       const toUser = ${JSON.stringify(message.message.split(' ')[1])};
       const command = ${JSON.stringify(message.message.toLowerCase().split(' '))};
       function getVar(key, defaultVal = 0) {
-        return eventstorage[${JSON.stringify(eventName)}]?.[key] ?? defaultVal;
+        return _eventStorage[${JSON.stringify(eventName)}]?.[key] ?? defaultVal;
       }
       function setVar(key, value, save = true) {
-        eventstorage[${JSON.stringify(eventName)}] ??= {};
-        eventstorage[${JSON.stringify(eventName)}][key] = value;
+        _eventStorage[${JSON.stringify(eventName)}] ??= {};
+        _eventStorage[${JSON.stringify(eventName)}][key] = value;
         if (save == true && ${!useFakeStorage}) {
-          saveEventStorage(eventstorage);
+          _saveEventStorage(_eventStorage);
         }
       }
       function getSharedVar(eventname, key, defaultVal = 0) {
-        return eventstorage[eventname]?.[key] ?? defaultVal;
+        return _eventStorage[eventname]?.[key] ?? defaultVal;
       }
       function setSharedVar(eventname, key, value, save = true) {
-        eventstorage[eventname] ??= {};
-        eventstorage[eventname][key] = value;
+        _eventStorage[eventname] ??= {};
+        _eventStorage[eventname][key] = value;
         if (save == true && ${!useFakeStorage}) {
-          saveEventStorage(eventstorage);
+          _saveEventStorage(_eventStorage);
         }
       }
       function chooseRandom(...randArray) {
