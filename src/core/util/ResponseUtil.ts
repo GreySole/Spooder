@@ -209,6 +209,7 @@ export async function runResponseScript(
       function runEvent(eName) {
         runCommands(event, eName, event.messageType);
       }
+        console.log("Within script", event.username);
       ${script}
     }
   `;

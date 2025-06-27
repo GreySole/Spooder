@@ -15,11 +15,12 @@ interface ShareUser {
   name: string;
   joinMessage: string;
   leaveMessage: string;
-  plugins: string[];
-  commands: string[];
+  plugins: { [pluginName: string]: boolean };
+  commands: { [commandName: string]: boolean };
   streamPlatforms: KeyedObject;
   notificationPlatforms: KeyedObject;
-  shareKey: string;
+  autoShare?: boolean;
+  shareKey?: string;
 }
 
 interface ShareUserList {
@@ -148,7 +149,7 @@ export default class ShareService {
     ShareService.instance.saveShares();
   }
 
-  shares: KeyedObject = {};
+  shares: ShareUserList = {};
   pluginKeys: KeyedObject = {};
   activeShares: any[] = [];
 
@@ -160,6 +161,43 @@ export default class ShareService {
         plugin_keys: this.pluginKeys,
       }),
     );
+  }
+
+  static saveShares(newShares: KeyedObject) {
+    ShareService.instance.shares = newShares;
+    ShareService.instance.saveShares();
+  }
+
+  static saveSharedCommands(shareId: string, commands: KeyedObject) {
+    if (ShareService.instance.shares[shareId]) {
+      ShareService.instance.shares[shareId].commands = commands;
+      ShareService.instance.saveShares();
+    } else {
+      console.log('Share ID not found:', shareId);
+    }
+  }
+
+  static saveSharedPlugins(shareId: string, plugins: KeyedObject) {
+    if (ShareService.instance.shares[shareId]) {
+      ShareService.instance.shares[shareId].plugins = plugins;
+      ShareService.instance.saveShares();
+    } else {
+      console.log('Share ID not found:', shareId);
+    }
+  }
+
+  static hasCommandEnabled(shareId: string, command: string) {
+    if (ShareService.instance.shares[shareId] && ShareService.instance.shares[shareId].commands) {
+      return ShareService.instance.shares[shareId].commands[command] === true;
+    }
+    return false;
+  }
+
+  static hasPluginEnabled(shareId: string, pluginName: string) {
+    if (ShareService.instance.shares[shareId] && ShareService.instance.shares[shareId].plugins) {
+      return ShareService.instance.shares[shareId].plugins[pluginName] === true;
+    }
+    return false;
   }
 
   static getShares(): ShareUserList {
@@ -233,11 +271,11 @@ export default class ShareService {
               let sharedPlugins = userShare.plugins;
               let sharedPluginMessage = [];
               for (let p in sharedPlugins) {
-                if (activePlugins[sharedPlugins[p]].hasOverlay) {
+                if (activePlugins[p].hasOverlay) {
                   sharedPluginMessage.push(
-                    activePlugins[sharedPlugins[p]].name +
+                    activePlugins[p].name +
                       ': ' +
-                      path.join(externalHttpUrl, 'overlay', sharedPlugins[p]) +
+                      path.join(externalHttpUrl, 'overlay', p) +
                       '?channel=' +
                       shareUser,
                   );
@@ -278,9 +316,15 @@ export default class ShareService {
     }
   }
 
-  static saveShares(newShares: KeyedObject) {
-    fs.writeFileSync(userDir + '/settings/shares.json', JSON.stringify(newShares), 'utf-8');
-    ShareService.instance.shares = newShares;
+  static setAutoShare(shareId: string, isEnabled: boolean) {
+    if (ShareService.instance.shares[shareId]) {
+      ShareService.instance.shares[shareId].autoShare = isEnabled;
+      ShareService.instance.saveShares();
+      ModuleService.onSharesChanged();
+      console.log(`Auto share for ${shareId} set to ${isEnabled}`);
+    } else {
+      console.log('Share ID not found:', shareId);
+    }
   }
 
   static generateShareKey(shareId: string, temporary: boolean): string {
@@ -301,6 +345,17 @@ export default class ShareService {
     return randomKey;
   }
 
+  static deleteShareKey(shareId: string) {
+    if (ShareService.instance.shares[shareId]) {
+      if (ShareService.instance.shares[shareId].shareKey) {
+        delete ShareService.instance.shares[shareId].shareKey;
+        ShareService.instance.saveShares();
+      }
+    } else {
+      console.log('Share ID not found:', shareId);
+    }
+  }
+
   static getPluginShareKey(pluginName: string) {
     if (!ShareService.instance.pluginKeys[pluginName]) {
       const randomKey = crypto.randomBytes(16).toString('hex');
@@ -313,6 +368,9 @@ export default class ShareService {
 
   static getShareByKey(key: string) {
     const shares = ShareService.getShares();
+    if (!key) {
+      return null;
+    }
     for (const shareId in shares) {
       const share = shares[shareId];
       if (share.shareKey === key) {
@@ -355,7 +413,7 @@ export default class ShareService {
     for (const shareId in shares) {
       const share = shares[shareId];
       if (share.shareKey === key) {
-        if (share.plugins.includes(directory)) {
+        if (Object.keys(share.plugins).includes(directory)) {
           if (!req.cookies?.share_key) {
             console.log('Writing share key to cookie');
             res.cookie('share_key', key, {

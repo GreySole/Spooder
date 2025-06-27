@@ -323,7 +323,7 @@ export default class Plugin {
         try {
           this.pluginModule.onLoad();
         } catch (e) {
-          pluginLog(this.dirname, 'onLoad failed:', e instanceof Error ? e.message : e);
+          pluginLog(this.dirname, 'onLoad failed:', e);
         }
       }
     } catch (e: any) {

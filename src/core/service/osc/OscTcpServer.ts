@@ -73,6 +73,25 @@ export default class OscTcpServer {
     oscTCP.on('open', () => {
       oscLog('OSC TCP OPEN');
     });
+    const controlModules = ModuleService.getControlModules();
+    oscTCP.on('*', (message: OSC.Message) => {
+      oscLog('OSC TCP Message: ', message);
+      MonitorService.addLog(
+        MonitorDataType.TCP,
+        MonitorDirection.Receive,
+        message.address,
+        message.args,
+      );
+      for (const module of Object.values(controlModules)) {
+        if (module.onOSC) {
+          module.onOSC(message);
+        }
+      }
+      //Must respond success or else they'll keep sending.
+      if (message.address.endsWith('/connect')) {
+        this.sendToTCP(`${message.address}/success`, 1, false);
+      }
+    });
     oscTCP.on('error', (e: any) => {
       oscLog('OSC Error: ', e);
     });

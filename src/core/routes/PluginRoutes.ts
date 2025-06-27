@@ -11,6 +11,7 @@ import PluginService from '../service/PluginService.ts';
 import multer from 'multer';
 import { isLocal, WebService } from '../service/WebService.ts';
 import { webJoin } from '../util/PathUtil.ts';
+import ShareService from '../service/ShareService.ts';
 
 const pluginApi = {
   local: {
@@ -71,12 +72,13 @@ export function PluginRoutes() {
     try {
       let settingsPath = path.join(userDir, 'plugins', pluginName, 'settings.json');
       if (shareKey) {
+        const share = ShareService.getShareByKey(shareKey);
         const shareSettingsPath = path.join(
           userDir,
           'plugins',
           pluginName,
           '_share',
-          'settings.json',
+          `${share?.shareId}.json`,
         );
         if (fs.existsSync(shareSettingsPath)) {
           settingsPath = shareSettingsPath;
@@ -145,12 +147,8 @@ export function PluginRoutes() {
   router.get('/get_plugin_settings', async (req: Request, res: Response) => {
     const pluginName = req.query.plugin as string;
     try {
-      const settings = path.join(userDir, 'plugins', pluginName, 'settings.json');
-      const thisPluginForm =
-        fs.existsSync(settings) == true
-          ? JSON.parse(fs.readFileSync(settings, { encoding: 'utf8' }))
-          : {};
-      res.send(thisPluginForm);
+      const settings = PluginService.getPluginSettings(pluginName);
+      res.send(settings);
     } catch (e) {
       res.send({ status: 'error', message: e });
     }
@@ -159,12 +157,8 @@ export function PluginRoutes() {
   router.get('/get_plugin_settings_form', async (req: Request, res: Response) => {
     const pluginName = req.query.plugin as string;
     try {
-      const settingsForm = path.join(userDir, 'plugins', pluginName, 'settings-form.json');
-      const thisPluginForm =
-        fs.existsSync(settingsForm) == true
-          ? JSON.parse(fs.readFileSync(settingsForm, { encoding: 'utf8' }))
-          : null;
-      res.send(thisPluginForm);
+      const form = PluginService.getPluginSettingsForm(pluginName);
+      res.send(form);
     } catch (e) {
       res.send({ status: 'error', message: e });
     }
@@ -657,25 +651,7 @@ export function PluginRoutes() {
       });
     }
 
-    PluginService.refreshAllPlugins();
-  });
-
-  publicRouter.post('/save_share_plugin_settings', async (req: Request, res: Response) => {
-    const shareKey = req.body.key as string;
-    const newSettings = req.body.new_settings;
-    const pluginName = req.body.pluginName;
-    const saveStatus = PluginService.saveSharePluginSettings(shareKey, pluginName, newSettings);
-    if (saveStatus) {
-      res.send({ status: 'ok' });
-      webLog('Shared ' + pluginName + ' Settings Saved!');
-    } else {
-      res.send({
-        status: 'error',
-        error: 'Failed to save settings. Check app console for details.',
-      });
-    }
-
-    PluginService.refreshAllPlugins();
+    PluginService.refreshPlugin(pluginName);
   });
 
   router.get('/get_plugin/*', async (req: Request, res: Response) => {
@@ -704,28 +680,24 @@ export function PluginRoutes() {
     if (pluginApi.local.get[`${req.params[0]}`]) {
       pluginApi.local.get[`${req.params[0]}`](req, res);
     }
-    res.status(200).end();
   });
 
   router.post('/api/*', (req: Request, res: Response) => {
     if (pluginApi.local.post[`${req.params[0]}`]) {
       pluginApi.local.post[`${req.params[0]}`](req, res);
     }
-    res.status(200).end();
   });
 
   publicRouter.get('/api/*', (req: Request, res: Response) => {
     if (pluginApi.public.get[`${req.params[0]}`]) {
       pluginApi.public.get[`${req.params[0]}`](req, res);
     }
-    res.status(200).end();
   });
 
   publicRouter.post('/api/*', (req: Request, res: Response) => {
     if (pluginApi.public.post[`${req.params[0]}`]) {
       pluginApi.public.post[`${req.params[0]}`](req, res);
     }
-    res.status(200).end();
   });
 
   return {

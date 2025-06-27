@@ -3,7 +3,7 @@ import ModuleService from 'src/core/service/ModuleService.ts';
 import OSCService from 'src/core/service/OSCService.ts';
 import { KeyedObject } from 'src/Types.ts';
 import OBS from './main.ts';
-import OSC from 'osc-js';
+import OSC from '@greysole/osc-js';
 import onObsOscMessage from './onObsOscMessage.ts';
 
 export default class ObsWebsocket {

@@ -39,10 +39,12 @@ export default class TwitchChat {
 
     tags.emotes = newEmotes;
 
+    const channelName = channel.replace('#', '');
+
     const message = {
-      channel: channel.replace('#', ''),
+      channel: channelName,
       respond: ((responseTxt: string) => {
-        this.sayInChat(responseTxt, channel.replace('#', ''));
+        this.sayInChat(responseTxt, channelName);
       }).bind(this),
       username: tags.username,
       botUsername: botUsername,
@@ -72,9 +74,16 @@ export default class TwitchChat {
   ) => {
     const activePlugins = PluginService.getActivePlugins();
     const homeChannel = this.getModule().api.homeChannel;
-    const shares = ShareService.getShares();
+    const channelName = channel.replace('#', '');
+
+    let shareId = undefined;
+
+    if (channelName !== this.getModule().api.homeChannel) {
+      shareId = this.getModule().shareUsers[channelName];
+    }
+
     let message = {
-      channel: channel.replace('#', ''),
+      channel: channelName,
       platform: 'twitch',
       username: username,
       deletedMessage: deletedMessage,
@@ -83,8 +92,8 @@ export default class TwitchChat {
 
     for (let p in activePlugins) {
       try {
-        if (message.channel != homeChannel) {
-          if (shares[message.channel]?.plugins.includes(p)) {
+        if (channelName != homeChannel) {
+          if (ShareService.hasPluginEnabled(shareId, p)) {
             if (activePlugins[p].onEvent != null) {
               activePlugins[p].onEvent('messagedeleted', message);
             }
@@ -106,7 +115,9 @@ export default class TwitchChat {
 
     let shareId = undefined;
 
-    if (streamMessage.channel != this.getModule().api.homeChannel) {
+    const channelName = streamMessage.channel.replace('#', '');
+
+    if (channelName !== this.getModule().api.homeChannel) {
       shareId = this.getModule().shareUsers[streamMessage.channel];
     }
 

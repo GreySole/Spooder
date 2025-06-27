@@ -50,6 +50,62 @@ export default class PluginService {
     );
   }
 
+  static getPluginSettings(pluginName: string): KeyedObject {
+    const settings = path.join(userDir, 'plugins', pluginName, 'settings.json');
+    const thisPluginForm =
+      fs.existsSync(settings) == true
+        ? JSON.parse(fs.readFileSync(settings, { encoding: 'utf8' }))
+        : {};
+    return thisPluginForm;
+  }
+
+  static getPluginSettingsForm(pluginName: string): KeyedObject {
+    const settingsForm = path.join(userDir, 'plugins', pluginName, 'settings-form.json');
+    const thisPluginForm =
+      fs.existsSync(settingsForm) == true
+        ? JSON.parse(fs.readFileSync(settingsForm, { encoding: 'utf8' }))
+        : null;
+    return thisPluginForm;
+  }
+
+  static getSharePluginSettings(shareKey: string, pluginName: string): KeyedObject {
+    const shareUser = ShareService.getShareByKey(shareKey);
+    if (!shareUser) {
+      console.error('Share not found for key:', shareKey);
+      return {};
+    }
+
+    const settings = path.join(
+      userDir,
+      'plugins',
+      pluginName,
+      '_share',
+      `${shareUser.shareId}.json`,
+    );
+    const thisPluginForm = fs.existsSync(settings)
+      ? JSON.parse(fs.readFileSync(settings, { encoding: 'utf8' }))
+      : {};
+    return thisPluginForm;
+  }
+
+  static getSharePluginSettingsForm(shareKey: string, pluginName: string): KeyedObject {
+    const shareUser = ShareService.getShareByKey(shareKey);
+    if (!shareUser) {
+      console.error('Share not found for key:', shareKey);
+      return {};
+    }
+
+    const settingsForm = PluginService.getPluginSettingsForm(pluginName);
+    const shareSettingsForm = {} as KeyedObject;
+    for (let s in settingsForm) {
+      if (settingsForm[s].exclude_share) {
+        continue;
+      }
+      shareSettingsForm[s] = settingsForm[s];
+    }
+    return shareSettingsForm;
+  }
+
   static savePluginSettings(pluginName: string, settings: KeyedObject) {
     try {
       fs.writeFileSync(
@@ -64,25 +120,21 @@ export default class PluginService {
   }
 
   static saveSharePluginSettings(shareKey: string, pluginName: string, settings: KeyedObject) {
-    const share = ShareService.getShareByKey(shareKey)?.share;
-    if (!share) {
+    const shareUser = ShareService.getShareByKey(shareKey);
+    if (!shareUser) {
       console.error('Share not found for key:', shareKey);
       return false;
     }
 
-    let filesToSave = {} as KeyedObject;
-
-    for (let s in share.streamPlatforms) {
-      filesToSave[s] = share.streamPlatforms[s].userId + '.json';
+    if (!fs.existsSync(path.join(userDir, 'plugins', pluginName, '_share'))) {
+      fs.mkdirSync(path.join(userDir, 'plugins', pluginName, '_share'), { recursive: true });
     }
 
     try {
-      for (let fts in filesToSave) {
-        fs.writeFileSync(
-          path.join(userDir, 'plugins', pluginName, '_share', fts, `${filesToSave[fts]}.json`),
-          JSON.stringify(settings),
-        );
-      }
+      fs.writeFileSync(
+        path.join(userDir, 'plugins', pluginName, '_share', `${shareUser.shareId}.json`),
+        JSON.stringify(settings),
+      );
       return true;
     } catch (e) {
       console.error('Error saving plugin settings', e);

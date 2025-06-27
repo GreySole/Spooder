@@ -50,6 +50,7 @@ export default class OscUdpServer {
                 channel: 'udp',
                 message: message.args[0],
                 messageType: 'osc',
+                respond: () => {},
                 emotes: [],
                 tags: {},
                 isBroadcaster: false,
@@ -129,6 +130,7 @@ export default class OscUdpServer {
                 channel: 'udp',
                 message: message.args[0],
                 messageType: 'osc',
+                respond: () => {},
                 emotes: [],
                 tags: {},
                 isBroadcaster: false,
@@ -184,12 +186,7 @@ export default class OscUdpServer {
         }
         switch (osctunnels[o]['handlerTo']) {
           case 'tcp':
-            OSCService.sendToTCP(
-              address,
-              message.args,
-              { type: 'plugin', pluginName: osctunnels[o]['clientTo'] },
-              true,
-            );
+            OSCService.sendToTCP(address, message.args, true);
             break;
           case 'udp':
             const udpServers = ConfigService.getConfig().network.osc.udp_servers;

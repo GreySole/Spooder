@@ -184,6 +184,7 @@ export class WebService {
       publicRouter.use('/', express.static(frontendDir + '/public/build'));
       publicRouter.use('/login', express.static(frontendDir + '/login/build'));
       publicRouter.use('/mod', validateModAccess, express.static(frontendDir + '/mod/build'));
+      publicRouter.use('/share', express.static(frontendDir + '/share/build'));
 
       function validatePageAccess(req: Request, res: Response, next: NextFunction) {
         if (req.cookies?.access) {
@@ -245,6 +246,7 @@ export class WebService {
 
       const shareRoutes = ShareRoutes();
       router.use('/shares', shareRoutes.local);
+      publicRouter.use('/shares', shareRoutes.public);
 
       const publicRoutes = PublicRoutes();
       router.use('/public', publicRoutes.local);

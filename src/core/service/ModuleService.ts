@@ -111,6 +111,13 @@ export default class ModuleService {
     }
   }
 
+  static onSharesChanged() {
+    const streamModules = ModuleService.getStreamModules();
+    for (let s in streamModules) {
+      streamModules[s].onSharesChanged();
+    }
+  }
+
   static onPluginsLoaded() {
     const streamModules = ModuleService.getStreamModules();
     for (let s in streamModules) {

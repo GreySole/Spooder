@@ -20,6 +20,7 @@ export function convertToStreamMessage(
   channel: string,
   message: string,
   messageType: string,
+  respond: (response: string) => void,
   emotes: any[],
   tags: KeyedObject,
   isBroadcaster: boolean,
@@ -37,6 +38,7 @@ export function convertToStreamMessage(
     channel: channel ?? '',
     message: message ?? '',
     messageType: messageType ?? 'chat',
+    respond: (response: string) => {},
     emotes: emotes ?? [],
     tags: tags ?? {},
     isBroadcaster: isBroadcaster ?? false,
@@ -288,7 +290,7 @@ export function processStreamMessage(streamMessage: StreamMessage, shareId?: str
     }
 
     if (shareId) {
-      if (shares[shareId]?.commands.includes(e) == false) {
+      if (!ShareService.hasCommandEnabled(shareId, e)) {
         continue;
       }
     }
@@ -329,7 +331,7 @@ export function processStreamMessage(streamMessage: StreamMessage, shareId?: str
     if (modlocks.plugins[p] != 1) {
       try {
         if (shareId) {
-          if (shares[shareId]?.plugins.includes(p)) {
+          if (ShareService.hasPluginEnabled(shareId, p)) {
             if (activePlugins[p].onChat != null) {
               activePlugins[p].onChat(streamMessage);
             }

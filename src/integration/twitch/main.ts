@@ -70,6 +70,46 @@ export default class Twitch implements StreamModuleInterface {
       }
       this.shareUsers[shares[s].streamPlatforms.twitch.username] = s;
     }
+
+    this.eventsub.getEventSubs().then(async (eventSubs) => {
+      if (!eventSubs) {
+        return;
+      }
+      for (let u in this.shareUsers) {
+        const shareId = this.shareUsers[u];
+        if (shares[shareId].autoShare) {
+          const twitchId = shares[shareId].streamPlatforms.twitch.userId;
+          let userAutoShareSet = [] as string[];
+          for (let e in eventSubs) {
+            if (eventSubs[e].type != 'stream.online' && eventSubs[e].type != 'stream.offline') {
+              continue;
+            }
+            const eventSub = eventSubs[e];
+            if (
+              eventSub.condition.broadcaster_user_id == twitchId &&
+              eventSub.status === 'enabled'
+            ) {
+              userAutoShareSet.push(eventSub.type);
+              continue;
+            } else if (
+              eventSub.condition.broadcaster_user_id == twitchId &&
+              eventSub.status !== 'enabled'
+            ) {
+              await this.eventsub.deleteEventSub(eventSub.id);
+              continue;
+            }
+          }
+
+          if (!userAutoShareSet.includes('stream.online')) {
+            await this.eventsub.initEventSub('stream.online', twitchId);
+          }
+
+          if (!userAutoShareSet.includes('stream.offline')) {
+            await this.eventsub.initEventSub('stream.offline', twitchId);
+          }
+        }
+      }
+    });
   }
 
   getRouters() {

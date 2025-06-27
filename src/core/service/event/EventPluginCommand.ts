@@ -1,7 +1,8 @@
 import { spooderLog } from 'src/core/Logging.ts';
 import { EventService } from '../EventService.ts';
 import PluginService from '../PluginService.ts';
-import { StreamMessage } from 'src/Types.ts';
+import { KeyedObject, StreamMessage } from 'src/Types.ts';
+import { runResponseScript } from 'src/core/util/ResponseUtil.ts';
 
 export default function EventPluginCommand(
   eCommand: any,
@@ -9,13 +10,53 @@ export default function EventPluginCommand(
   streamMessage: StreamMessage,
 ) {
   const activePlugins = PluginService.getActivePlugins();
-  return () => {
+  return async () => {
     let commandDuration = parseFloat(eCommand.duration);
 
     console.log('EventPluginCommand', eCommand, eventName);
 
     if (eCommand.event) {
-      streamMessage.pluginEventData = eCommand.event.values;
+      streamMessage.pluginEventData = structuredClone(eCommand.event.values);
+      const eventValues = streamMessage.pluginEventData;
+
+      if (!streamMessage.pluginEventData) {
+        streamMessage.pluginEventData = {};
+      }
+
+      if (Object.keys(eventValues ?? {}).some((key) => key.startsWith('_'))) {
+        for (const key in eventValues) {
+          if (key.startsWith('_')) {
+            const preProcessFlags = eventValues[key];
+            const realValueName = key.substring(1);
+            if (preProcessFlags.use_response_processor) {
+              const responseScript = eventValues[realValueName];
+              console.log(
+                `Preprocessing plugin response script for ${eCommand.pluginname} for ${streamMessage.username}`,
+              );
+              const response = await runResponseScript(
+                eventName,
+                streamMessage,
+                [],
+                responseScript,
+              );
+              if (response.status === 'ok') {
+                streamMessage.pluginEventData[realValueName] = response.response;
+              } else {
+                spooderLog(
+                  `Error preprocessing plugin response script for ${eCommand.pluginname} in ${eCommand.event.name} for ${eventName}: ${response.response}`,
+                );
+              }
+            }
+          }
+        }
+      }
+
+      console.log(
+        'Triggering plugin event',
+        eCommand.pluginname,
+        eCommand.event.name,
+        streamMessage.pluginEventData,
+      );
       activePlugins[eCommand.pluginname].onEvent(eCommand.event.name, streamMessage);
       return;
     }
