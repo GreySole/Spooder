@@ -42,7 +42,9 @@ export default class ModuleService {
         ModuleService.registerIntegrationModule('obs', PlatformType.control),
       ])
         .then(() => onAllModulesLoaded())
-        .catch((e) => console.log('Module load error', e));
+        .catch((e) => {
+          console.log('Module load error', e);
+        });
     }
   }
 
@@ -187,7 +189,10 @@ export default class ModuleService {
         WebService.registerModuleApi(ModuleService.instance.activeControls[name]);
       }
       res(undefined);
-    }).catch((e) => console.log('Module load error', e.message));
+    }).catch((e) => {
+      console.log('Module load error', e.message);
+      return e;
+    });
   }
 
   static async autoLoginModules() {
