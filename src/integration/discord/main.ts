@@ -71,17 +71,19 @@ export default class Discord implements CommunityModuleInterface {
   sendToChannel = (server: string, channel: string, message: string, components?: any[]) => {};
 
   autoLogin() {
-    return new Promise(async (res, rej) => {
+    return new Promise<boolean>(async (res, rej) => {
       let discordInfo = this.config;
 
       if (discordInfo.token != '' && discordInfo.token != null) {
         discordLog('STARTING DISCORD CLIENT');
         await this.startClient(discordInfo.token).catch((e) => {
-          rej(e);
+          console.error('Discord login failed:', e);
+          res(false);
         });
-        res('success');
+        res(true);
       } else {
         discordLog('No Discord token. You can set this in the Config tab.');
+        res(false);
       }
     });
   }
@@ -122,6 +124,9 @@ export default class Discord implements CommunityModuleInterface {
   }
 
   getPluginFunctions = () => {
+    if (this.loggedIn === false) {
+      return {};
+    }
     return {
       isSelf: this.api.isSelf.bind(this.api),
       isMaster: this.api.isMaster.bind(this.api),

@@ -69,6 +69,7 @@ if (initMode) {
     new UserService();
     console.log('Logging into modules');
     await ModuleService.autoLoginModules();
+    console.log('Initializing plugins');
     new PluginService();
 
     console.log('Refreshing share users');
