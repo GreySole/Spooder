@@ -56,64 +56,66 @@ export default class ShareService {
         } else {
           loadedShares = loadedShareFile as KeyedObject;
         }
+        if (Object.keys(loadedShares).length > 0) {
+          if (Array.isArray(loadedShares[Object.keys(loadedShares)[0]].commands)) {
+            for (const l in loadedShares) {
+              if (Array.isArray(loadedShares[l].commands)) {
+                let newCommands = {} as KeyedObject;
+                loadedShares[l].commands.forEach((command: string) => {
+                  newCommands[command] = true;
+                });
+                loadedShares[l].commands = newCommands;
+              }
 
-        if (Array.isArray(loadedShares[Object.keys(loadedShares)[0]].commands)) {
-          for (const l in loadedShares) {
-            if (Array.isArray(loadedShares[l].commands)) {
-              let newCommands = {} as KeyedObject;
-              loadedShares[l].commands.forEach((command: string) => {
-                newCommands[command] = true;
-              });
-              loadedShares[l].commands = newCommands;
+              if (Array.isArray(loadedShares[l].plugins)) {
+                let newPlugins = {} as KeyedObject;
+                loadedShares[l].plugins.forEach((plugin: string) => {
+                  newPlugins[plugin] = true;
+                });
+                loadedShares[l].plugins = newPlugins;
+              }
             }
+          }
 
-            if (Array.isArray(loadedShares[l].plugins)) {
-              let newPlugins = {} as KeyedObject;
-              loadedShares[l].plugins.forEach((plugin: string) => {
-                newPlugins[plugin] = true;
-              });
-              loadedShares[l].plugins = newPlugins;
+          // Convert old share format to new format
+          if (!loadedShares[Object.keys(loadedShares)[0]].streamPlatforms) {
+            spooderLog('Upgrading shares file');
+            for (const l in loadedShares) {
+              const newStreamPlatforms = loadedShares[l].twitchid
+                ? {
+                    twitch: {
+                      username: l,
+                      userId: loadedShares[l].twitchid,
+                      displayName: loadedShares[l].displayName,
+                      profilePic: loadedShares[l].profilepic,
+                    },
+                  }
+                : {};
+
+              const newNotificationPlatforms = loadedShares[l].discordId
+                ? {
+                    discord: {
+                      userId: loadedShares[l].discordId,
+                      userName: loadedShares[l].discordName,
+                      displayName: loadedShares[l].discordName,
+                      profilePic: '',
+                    },
+                  }
+                : {};
+
+              loadedShares[l] = {
+                name: loadedShares[l].displayName,
+                joinMessage: loadedShares[l].joinMessage,
+                leaveMessage: loadedShares[l].leaveMessage,
+                plugins: loadedShares[l].plugins,
+                commands: loadedShares[l].commands,
+                streamPlatforms: newStreamPlatforms,
+                notificationPlatforms: newNotificationPlatforms,
+              } as ShareUser;
             }
           }
         }
 
-        // Convert old share format to new format
-        if (!loadedShares[Object.keys(loadedShares)[0]].streamPlatforms) {
-          spooderLog('Upgrading shares file');
-          for (const l in loadedShares) {
-            const newStreamPlatforms = loadedShares[l].twitchid
-              ? {
-                  twitch: {
-                    username: l,
-                    userId: loadedShares[l].twitchid,
-                    displayName: loadedShares[l].displayName,
-                    profilePic: loadedShares[l].profilepic,
-                  },
-                }
-              : {};
-
-            const newNotificationPlatforms = loadedShares[l].discordId
-              ? {
-                  discord: {
-                    userId: loadedShares[l].discordId,
-                    userName: loadedShares[l].discordName,
-                    displayName: loadedShares[l].discordName,
-                    profilePic: '',
-                  },
-                }
-              : {};
-
-            loadedShares[l] = {
-              name: loadedShares[l].displayName,
-              joinMessage: loadedShares[l].joinMessage,
-              leaveMessage: loadedShares[l].leaveMessage,
-              plugins: loadedShares[l].plugins,
-              commands: loadedShares[l].commands,
-              streamPlatforms: newStreamPlatforms,
-              notificationPlatforms: newNotificationPlatforms,
-            } as ShareUser;
-          }
-        }
         ShareService.instance.shares = loadedShares as ShareUserList;
       }
     } catch (e: any) {

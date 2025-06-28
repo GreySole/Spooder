@@ -3,7 +3,7 @@ import { KeyedObject } from '../../Types.ts';
 
 export interface StreamModuleInterface {
   getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
-  autoLogin: () => void;
+  autoLogin: () => Promise<boolean>;
   sayInChat: (message: string, channel: string) => void;
   onEventFileSaved: () => void;
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;

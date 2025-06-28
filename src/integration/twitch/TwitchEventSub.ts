@@ -30,6 +30,10 @@ export default class TwitchEventSub {
     };
 
     this.websocket.onmessage = (event) => {
+      if (!event.data) {
+        twitchLog('Eventsub received empty message', event);
+        return;
+      }
       const data = JSON.parse(event.data.toString());
 
       if (data.metadata.message_type === 'session_welcome') {

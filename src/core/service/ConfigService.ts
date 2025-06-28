@@ -97,38 +97,21 @@ export default class ConfigService {
   private themes = {
     webui: {},
     modui: {},
-    spooderpet: {
-      parts: {
-        bigeyeleft: 'o',
-        bigeyeright: 'o',
-        littleeyeleft: 'º',
-        littleeyeright: 'º',
-        fangleft: ' ',
-        fangright: ' ',
-        mouth: 'ω',
-        bodyleft: '(',
-        bodyright: ')',
-        shortlegleft: '/\\',
-        longlegleft: '/╲',
-        shortlegright: '/\\',
-        longlegright: '╱\\',
-      },
-      colors: {
-        bigeyeleft: '#FFFFFF',
-        bigeyeright: '#FFFFFF',
-        littleeyeleft: '#FFFFFF',
-        littleeyeright: '#FFFFFF',
-        fangleft: '#FFFFFF',
-        fangright: '#FFFFFF',
-        mouth: '#FFFFFF',
-        bodyleft: '#FFFFFF',
-        bodyright: '#FFFFFF',
-        shortlegleft: '#FFFFFF',
-        shortlegright: '#FFFFFF',
-        longlegleft: '#FFFFFF',
-        longlegright: '#FFFFFF',
-      },
-    },
+    spooderpet: [
+      { partString: '/\\', partColor: '#FFFFFF' },
+      { partString: '/╲', partColor: '#FFFFFF' },
+      { partString: '(', partColor: '#FFFFFF' },
+      { partString: ' ', partColor: '#FFFFFF' },
+      { partString: 'º', partColor: '#FFFFFF' },
+      { partString: 'o', partColor: '#FFFFFF' },
+      { partString: 'ω', partColor: '#FFFFFF' },
+      { partString: 'o', partColor: '#FFFFFF' },
+      { partString: 'º', partColor: '#FFFFFF' },
+      { partString: ' ', partColor: '#FFFFFF' },
+      { partString: ')', partColor: '#FFFFFF' },
+      { partString: '╱\\', partColor: '#FFFFFF' },
+      { partString: '/\\', partColor: '#FFFFFF' },
+    ],
   } as KeyedObject;
 
   static getConfig(): ConfigFile {
@@ -225,18 +208,30 @@ export default class ConfigService {
       if (!themesObj.spooderpet) {
         themesObj.spooderpet = ConfigService.instance.themes.spooderpet;
       }
-      if (themesObj.spooderpet.parts == null) {
+      if (themesObj.spooderpet.parts == null && !Array.isArray(themesObj.spooderpet)) {
         spooderLog('Upgrading themes file to new format');
-        const parts = {} as KeyedObject;
+        const parts = [] as KeyedObject[];
         for (let t in themesObj.spooderpet) {
           if (t === 'colors') {
             continue;
           }
-          parts[t] = JSON.parse(JSON.stringify(themesObj.spooderpet[t]));
-          delete themesObj.spooderpet[t];
+          parts.push({
+            partString: JSON.parse(JSON.stringify(themesObj.spooderpet[t])),
+            partColor: JSON.parse(JSON.stringify(themesObj.spooderpet['colors'][t])),
+          });
         }
 
         themesObj.spooderpet.parts = parts;
+      } else if (!Array.isArray(themesObj.spooderpet)) {
+        spooderLog('Upgrading themes file to new format');
+        const parts = [] as KeyedObject[];
+        for (let t in themesObj.spooderpet.parts) {
+          parts.push({
+            partString: JSON.parse(JSON.stringify(themesObj.spooderpet.parts[t])),
+            partColor: JSON.parse(JSON.stringify(themesObj.spooderpet.colors[t])),
+          });
+        }
+        themesObj.spooderpet = parts;
       }
       ConfigService.instance.themes = themesObj;
     } catch (e) {
