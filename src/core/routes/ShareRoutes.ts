@@ -213,9 +213,27 @@ export function ShareRoutes() {
   router.get('/get_shared_plugins', getSharedPlugins);
   publicRouter.get('/get_shared_plugins', getSharedPlugins);
 
+  function saveSharedSettings(req: Request, res: Response) {
+    const shareKey = req.body.key as string;
+    const name = req.body.name as string;
+    const joinMessage = req.body.joinMessage as string;
+    const leaveMessage = req.body.leaveMessage as string;
+
+    if (!shareKey) {
+      return res.status(400).send({ error: 'Share key and commands are required' });
+    }
+
+    ShareService.saveShareSettings(shareKey, name, joinMessage, leaveMessage);
+
+    res.send({ status: 'ok' });
+  }
+
+  router.post('/save_share_settings', saveSharedSettings);
+  publicRouter.post('/save_share_settings', saveSharedSettings);
+
   function saveSharedCommands(req: Request, res: Response) {
     const shareKey = req.body.key as string;
-    const commands = req.body.commands as KeyedObject;
+    const commands = req.body.new_commands as KeyedObject;
 
     if (!shareKey || !commands) {
       return res.status(400).send({ error: 'Share key and commands are required' });
@@ -231,16 +249,17 @@ export function ShareRoutes() {
 
   function saveSharedPlugins(req: Request, res: Response) {
     const shareKey = req.body.key as string;
-    const plugins = req.body.plugins as KeyedObject;
-    if (!shareKey || !plugins) {
+    const pluginName = req.body.pluginName as string;
+    const enabled = req.body.enable as boolean;
+    if (!shareKey || !pluginName) {
       return res.status(400).send({ error: 'Share key and plugins are required' });
     }
-    ShareService.saveSharedPlugins(shareKey, plugins);
+    ShareService.toggleSharedPlugin(shareKey, pluginName, enabled);
     res.send({ status: 'ok' });
   }
 
-  router.post('/save_shared_plugins', saveSharedPlugins);
-  publicRouter.post('/save_shared_plugins', saveSharedPlugins);
+  router.post('/toggle_shared_plugin', saveSharedPlugins);
+  publicRouter.post('/toggle_shared_plugin', saveSharedPlugins);
 
   function getSharePluginSettings(req: Request, res: Response) {
     const shareKey = req.body.key as string;

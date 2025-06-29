@@ -262,22 +262,27 @@ export default class PluginService {
     const assetsDir = path.join(userDir, 'web', 'assets', pluginDirName);
     const iconDir = path.join(userDir, 'web', 'icons', pluginDirName + '.png');
 
-    if (!fs.existsSync(tempDir + '/command')) {
+    const tempPluginDir = fs.existsSync(tempDir + '/plugin') ? 'plugin' : 'command';
+
+    if (!fs.existsSync(tempDir + `/${tempPluginDir}`)) {
       return {
         status: false,
-        message: 'No command folder',
+        message: 'No plugin folder in temp directory',
       };
     } else {
       if (options.createInfo != null) {
-        if (fs.existsSync(tempDir + '/command/package.json')) {
+        if (fs.existsSync(tempDir + `/${tempPluginDir}/package.json`)) {
           try {
             let thisPackage = JSON.parse(
-              fs.readFileSync(tempDir + '/command/package.json', { encoding: 'utf-8' }),
+              fs.readFileSync(tempDir + `/${tempPluginDir}/package.json`, { encoding: 'utf-8' }),
             );
             thisPackage.name = options.createInfo.name;
             thisPackage.author = options.createInfo.author;
             thisPackage.description = options.createInfo.description;
-            fs.writeFileSync(tempDir + '/command/package.json', JSON.stringify(thisPackage));
+            fs.writeFileSync(
+              tempDir + `/${tempPluginDir}/package.json`,
+              JSON.stringify(thisPackage),
+            );
           } catch (e) {
             webLog(
               "Something went wrong with applying create info to the plugin's package.json",
@@ -287,14 +292,14 @@ export default class PluginService {
         }
       }
 
-      if (fs.existsSync(path.join(tempDir + '/command', 'node_modules'))) {
-        fs.rmSync(path.join(tempDir + '/command', 'node_modules'), { recursive: true });
+      if (fs.existsSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'))) {
+        fs.rmSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'), { recursive: true });
       }
 
       if (fs.existsSync(pluginDir)) {
-        mergeDirectories(tempDir + '/command', pluginDir);
+        mergeDirectories(tempDir + `/${tempPluginDir}`, pluginDir);
       } else {
-        await fs.move(tempDir + '/command', pluginDir, { overwrite: true });
+        await fs.move(tempDir + `/${tempPluginDir}`, pluginDir, { overwrite: true });
       }
 
       chmodr(pluginDir, 0o777, (err) => {

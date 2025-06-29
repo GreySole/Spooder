@@ -69,6 +69,7 @@ export function PluginRoutes() {
     const shareKey = req.query.key as string;
     let pluginSettings = null;
 
+    let shareInfo = null;
     try {
       let settingsPath = path.join(userDir, 'plugins', pluginName, 'settings.json');
       if (shareKey) {
@@ -83,6 +84,7 @@ export function PluginRoutes() {
         if (fs.existsSync(shareSettingsPath)) {
           settingsPath = shareSettingsPath;
         }
+        shareInfo = share?.share;
       }
       const thisPlugin = fs.readFileSync(settingsPath, {
         encoding: 'utf8',
@@ -101,6 +103,7 @@ export function PluginRoutes() {
         port: sconfig.network.host_port,
         external: false,
         settings: pluginSettings,
+        shareInfo,
       };
     } else {
       oscInfo = {
@@ -109,6 +112,7 @@ export function PluginRoutes() {
         port: null,
         external: true,
         settings: pluginSettings,
+        shareInfo,
       };
     }
 
@@ -349,6 +353,8 @@ export function PluginRoutes() {
 
   router.get('/export_plugin', async (req: Request, res: Response) => {
     const pluginName = req.query.pluginname as string;
+    const includeAssets = req.query.include_assets === 'true';
+    const includeSource = req.query.include_source === 'true';
     console.log(pluginName);
 
     const tempDir = path.join(userDir, 'tmp');
@@ -362,14 +368,27 @@ export function PluginRoutes() {
     const utilityDir = path.join(userDir, 'web', 'utility', pluginName);
     const settingsDir = path.join(userDir, 'web', 'settings', pluginName);
     const publicDir = path.join(userDir, 'web', 'public', pluginName);
+    const assetsDir = path.join(userDir, 'web', 'assets', pluginName);
     const iconFile = path.join(userDir, 'web', 'icons', pluginName + '.png');
 
     const zip = new AdmZip();
 
     if (fs.existsSync(pluginDir)) {
-      zip.addLocalFolder(pluginDir, '/command', (filename) => {
-        return !filename.includes('node_modules') && !filename.includes('settings.json');
-      });
+      if (includeSource) {
+        zip.addLocalFolder(pluginDir, '/plugin', (filename) => {
+          return !filename.includes('node_modules') && !filename.includes('settings.json');
+        });
+      } else {
+        if (!fs.existsSync(path.join(pluginDir, 'build'))) {
+          webLog('No build directory found for plugin: ' + pluginName);
+          res.status(400).send({ status: 'error', message: 'No build directory found' });
+          return;
+        }
+        const buildDir = path.join(pluginDir, 'build');
+        zip.addLocalFolder(buildDir, '/plugin', (filename) => {
+          return !filename.includes('node_modules') && !filename.includes('settings.json');
+        });
+      }
     }
 
     if (fs.existsSync(overlayDir)) {
@@ -386,6 +405,10 @@ export function PluginRoutes() {
 
     if (fs.existsSync(publicDir)) {
       zip.addLocalFolder(publicDir, '/public');
+    }
+
+    if (includeAssets && fs.existsSync(assetsDir)) {
+      zip.addLocalFolder(assetsDir, '/assets');
     }
 
     if (fs.existsSync(iconFile)) {

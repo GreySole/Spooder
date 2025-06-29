@@ -170,7 +170,35 @@ export default class ShareService {
     ShareService.instance.saveShares();
   }
 
-  static saveSharedCommands(shareId: string, commands: KeyedObject) {
+  static saveShareSettings(
+    shareKey: string,
+    name: string,
+    joinMessage: string,
+    leaveMessage: string,
+  ) {
+    const userShare = ShareService.getShareByKey(shareKey);
+    if (!userShare) {
+      console.log('Share key not found:', shareKey);
+      return;
+    }
+    const shareId = userShare.shareId;
+    if (ShareService.instance.shares[shareId]) {
+      ShareService.instance.shares[shareId].name = name;
+      ShareService.instance.shares[shareId].joinMessage = joinMessage;
+      ShareService.instance.shares[shareId].leaveMessage = leaveMessage;
+      ShareService.instance.saveShares();
+    } else {
+      console.log('Share ID not found:', shareId);
+    }
+  }
+
+  static saveSharedCommands(shareKey: string, commands: KeyedObject) {
+    const userShare = ShareService.getShareByKey(shareKey);
+    if (!userShare) {
+      console.log('Share key not found:', shareKey);
+      return;
+    }
+    const shareId = userShare.shareId;
     if (ShareService.instance.shares[shareId]) {
       ShareService.instance.shares[shareId].commands = commands;
       ShareService.instance.saveShares();
@@ -179,9 +207,16 @@ export default class ShareService {
     }
   }
 
-  static saveSharedPlugins(shareId: string, plugins: KeyedObject) {
+  static toggleSharedPlugin(shareKey: string, pluginName: string, enabled: boolean) {
+    const userShare = ShareService.getShareByKey(shareKey);
+    if (!userShare) {
+      console.log('Share key not found:', shareKey);
+      return;
+    }
+    const shareId = userShare.shareId;
     if (ShareService.instance.shares[shareId]) {
-      ShareService.instance.shares[shareId].plugins = plugins;
+      console.log(`Toggling plugin ${pluginName} for share ${shareId} to ${enabled}`);
+      ShareService.instance.shares[shareId].plugins[pluginName] = enabled;
       ShareService.instance.saveShares();
     } else {
       console.log('Share ID not found:', shareId);

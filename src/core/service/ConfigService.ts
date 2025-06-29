@@ -208,16 +208,28 @@ export default class ConfigService {
       if (!themesObj.spooderpet) {
         themesObj.spooderpet = ConfigService.instance.themes.spooderpet;
       }
+      const legacyKeys = [
+        'longlegleft',
+        'shortlegleft',
+        'bodyleft',
+        'littleeyeleft',
+        'bigeyeleft',
+        'fangleft',
+        'mouth',
+        'fangright',
+        'bigeyeright',
+        'littleeyeright',
+        'bodyright',
+        'shortlegright',
+        'longlegright',
+      ];
       if (themesObj.spooderpet.parts == null && !Array.isArray(themesObj.spooderpet)) {
         spooderLog('Upgrading themes file to new format');
         const parts = [] as KeyedObject[];
-        for (let t in themesObj.spooderpet) {
-          if (t === 'colors') {
-            continue;
-          }
+        for (let l of legacyKeys) {
           parts.push({
-            partString: JSON.parse(JSON.stringify(themesObj.spooderpet[t])),
-            partColor: JSON.parse(JSON.stringify(themesObj.spooderpet['colors'][t])),
+            partString: JSON.parse(JSON.stringify(themesObj.spooderpet[l])),
+            partColor: JSON.parse(JSON.stringify(themesObj.spooderpet['colors'][l])),
           });
         }
 
@@ -225,10 +237,10 @@ export default class ConfigService {
       } else if (!Array.isArray(themesObj.spooderpet)) {
         spooderLog('Upgrading themes file to new format');
         const parts = [] as KeyedObject[];
-        for (let t in themesObj.spooderpet.parts) {
+        for (let l of legacyKeys) {
           parts.push({
-            partString: JSON.parse(JSON.stringify(themesObj.spooderpet.parts[t])),
-            partColor: JSON.parse(JSON.stringify(themesObj.spooderpet.colors[t])),
+            partString: JSON.parse(JSON.stringify(themesObj.spooderpet.parts[l])),
+            partColor: JSON.parse(JSON.stringify(themesObj.spooderpet.colors[l])),
           });
         }
         themesObj.spooderpet = parts;

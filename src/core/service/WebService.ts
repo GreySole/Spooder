@@ -26,6 +26,7 @@ import multer from 'multer';
 import net from 'net';
 import http from 'http';
 import ShareService from './ShareService.ts';
+import ModuleRoutes from '../routes/ModuleRoutes.ts';
 
 export function isLocal(req: Request) {
   if (req.headers['x-forwarded-for'] === undefined) {
@@ -224,6 +225,9 @@ export class WebService {
 
       const configRoutes = ConfigRoutes();
       router.use('/config', configRoutes.local);
+
+      const moduleRoutes = ModuleRoutes();
+      router.use('/module', moduleRoutes.local);
 
       const eventRoutes = EventRoutes();
       router.use('/events', eventRoutes.local);

@@ -120,7 +120,10 @@ export default class TwitchEventSub {
     const usedSubs = [] as string[];
 
     for (let s in subs.data) {
-      if (subs.data[s].status == 'enabled') {
+      if (
+        subs.data[s].status === 'enabled' &&
+        this.wsSessionId === subs.data[s].transport.session_id
+      ) {
         usedSubs.push(subs.data[s].type);
         twitchLog(
           'Skipping delete ' + subs.data[s].type,
