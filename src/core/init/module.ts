@@ -5,9 +5,10 @@ import ConfigService from '../service/ConfigService.ts';
 import { WebService } from '../service/WebService.ts';
 import AdmZip from 'adm-zip';
 import path from 'path';
-import { webLog } from '../Logging.ts';
+import { spooderLog, webLog } from '../Logging.ts';
 import fs from 'fs-extra';
 import multer from 'multer';
+import { isIPCConnected, sendToApp } from '../util/AppUtil.ts';
 
 interface NetworkInterface {
   name: string;
@@ -61,6 +62,16 @@ export default class Initializer {
     });
     const restoreUpload = multer({ storage: tempStorage });
     webUI.router?.use('/prepare_restore_settings', restoreUpload.single('file'));
+
+    webUI.router?.get('/finish_init', (req, res) => {
+      const ipcConnected = isIPCConnected();
+      res.send({ status: 'ok', ipcConnected: ipcConnected });
+      if (ipcConnected) {
+        sendToApp({ action: 'restart' });
+      } else {
+        spooderLog('Spooder is headless, manual restart required.');
+      }
+    });
 
     webUI.router?.post('/save_config', async (req: Request, res: Response) => {
       const newSettings = req.body;

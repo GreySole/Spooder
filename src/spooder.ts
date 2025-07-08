@@ -11,12 +11,21 @@ import ShareService from './core/service/ShareService';
 import UserService from './core/service/UserService';
 import { WebService } from './core/service/WebService';
 import { userDir, KeyedObject } from './Types';
+import { connectToIPC, sendToApp } from './core/util/AppUtil';
 
 const logDir = path.join(userDir, 'log');
 
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
+
+process.stdin.on('data', (data) => {
+  const input = data.toString().trim();
+  if (input.startsWith('SPOODER_IPC_PIPE=')) {
+    const pipeName = input.split('=')[1];
+    connectToIPC(pipeName);
+  }
+});
 
 const errorLogPath = path.join(logDir, 'error.json');
 let errorLog = {
@@ -31,21 +40,12 @@ if (fs.existsSync(errorLogPath)) {
   } catch (e) {}
 }
 
-function sendToApp(type: string, message: string, args?: any[]) {
-  try {
-    if (process.send !== undefined) {
-      process.send({ type: type, message: message, args: args });
-    }
-  } catch (e) {}
-}
-
 process.on('uncaughtException', function (err) {
   errorLog.log = {
     time: Date.now(),
     stack: err.stack,
   };
   console.error(err);
-  sendToApp('crash', err.message);
   errorLog.crashed = true;
   fs.writeFileSync(errorLogPath, JSON.stringify(errorLog));
   process.exit(1);
@@ -76,5 +76,6 @@ if (initMode) {
     ShareService.refreshShareUsers();
     console.log('Starting Public Hosting');
     WebService.startPublicHosting();
+    sendToApp({ type: 'info', message: 'Public Hosting started' });
   });
 }

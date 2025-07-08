@@ -96,7 +96,7 @@ export class WebService {
   }
 
   private server: http.Server | undefined = undefined;
-  private router: Router | undefined = undefined;
+  public router: Router | undefined = undefined;
   private publicRouter: Router | undefined = undefined;
 
   private ngrok: Ngrok = new Ngrok();
