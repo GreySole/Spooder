@@ -56,6 +56,14 @@ export function logToFile(filename: string, message: string, maxlines: number) {
   fs.writeFileSync(filePath, logFile);
 }
 
+export function getCrashFile() {
+  if (fs.existsSync(path.join(userDir, 'log', 'error.json'))) {
+    return JSON.parse(
+      fs.readFileSync(path.join(userDir, 'log', 'error.json'), { encoding: 'utf-8' }),
+    );
+  }
+}
+
 export function webLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgBlue'), ...content, logEffects('Reset'));
 }

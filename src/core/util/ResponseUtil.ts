@@ -53,7 +53,7 @@ export function checkResponseTrigger(eventData: KeyedObject, message: StreamMess
   }
   let command = '';
   if (message.platform == 'osc') {
-    command = eventData.triggers.osc.value.toLowerCase();
+    command = eventData.triggers.osc.search?.command.toLowerCase();
   } else {
     command = eventData.triggers.chat.command.toLowerCase();
   }
@@ -164,7 +164,7 @@ export function buildMockStreamMessage(message: string): StreamMessage {
 export async function runResponseScript(
   eventName: string,
   message: StreamMessage,
-  extra: string[],
+  extra: any,
   script: string,
   useFakeStorage = false,
 ) {
@@ -206,10 +206,9 @@ export async function runResponseScript(
       function sanitize(text) {
         return text.replace(/[\`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g, '');
       }
-      function runEvent(eName) {
-        runCommands(event, eName, event.messageType);
+      function runEvent(eName, extra) {
+        runCommands(event, eName, event.messageType, extra);
       }
-        console.log("Within script", event.username);
       ${script}
     }
   `;

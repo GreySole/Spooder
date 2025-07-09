@@ -17,15 +17,11 @@ import { buildMockStreamMessage } from '../util/ResponseUtil.ts';
 
 export function sayInChat(message: string, platform?: string, channel?: string) {
   const activeStreams = ModuleService.getStreamModules();
-  if (platform) {
-    if (activeStreams[platform]) {
-      if (channel) {
-        activeStreams[platform].sayInChat(message, channel);
-      } else {
-        activeStreams[platform].sayInChat(message, activeStreams[platform].homeChannel);
-      }
+  if (platform && activeStreams[platform]) {
+    if (channel) {
+      activeStreams[platform].sayInChat(message, channel);
     } else {
-      throw new Error(`Platform unavailable: ${platform}`);
+      activeStreams[platform].sayInChat(message, activeStreams[platform].homeChannel);
     }
   } else {
     for (let p in activeStreams) {
@@ -294,6 +290,14 @@ export class EventService {
     return timeAmount + ' ' + timeTerm;
   }
 
+  static eventIsRunning(eventName: string) {
+    const activeEvents = EventService.getActiveEvents();
+    if (activeEvents[eventName] != null) {
+      return true;
+    }
+    return false;
+  }
+
   static stopEvent(cEvent: string) {
     const activeEvents = EventService.getActiveEvents();
     if (activeEvents[cEvent] !== undefined) {
@@ -315,12 +319,9 @@ export class EventService {
     eventType: string,
     extra: KeyedObject = {},
   ) => {
-    console.log('runCommands', streamMessage, eventName, eventType, extra);
     const sconfig = ConfigService.getConfig();
     let isChat = eventType.includes('chat');
     let isOSC = eventType.includes('osc');
-
-    console.log(isChat, isOSC);
 
     if (isOSC) {
       streamMessage.username = sconfig.bot.bot_name;
@@ -416,7 +417,7 @@ export class EventService {
 
           break;
         case 'plugin':
-          thisCommand = EventPluginCommand(eCommand, eventName, streamMessage);
+          thisCommand = EventPluginCommand(eCommand, eventName, streamMessage, extra);
 
           if (eCommand.delay == 0) {
             thisCommand();

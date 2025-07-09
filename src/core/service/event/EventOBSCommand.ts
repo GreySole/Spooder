@@ -1,8 +1,14 @@
+import { spooderLog } from 'src/core/Logging.ts';
 import { EventService } from '../EventService.ts';
 import ModuleService from '../ModuleService.ts';
 
 export default function EventOBSCommand(eCommand: any, eventName: string) {
   const obs = ModuleService.getControlModule('obs');
+  if (!obs.connected) {
+    return () => {
+      spooderLog(`An OBS command for ${eventName} was triggered, but OBS is not connected.`);
+    };
+  }
   return () => {
     let commandDuration = parseFloat(eCommand.duration);
     if (eCommand.function == 'setinputmute') {

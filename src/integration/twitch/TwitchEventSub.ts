@@ -111,8 +111,6 @@ export default class TwitchEventSub {
     const botId = await api.getBotId();
     const subs = await this.getEventSubs();
 
-    twitchLog(subs);
-
     let redeemSet = false;
 
     const shareSubs = [] as string[];

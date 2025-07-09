@@ -37,8 +37,8 @@ export default function EventSoftwareCommand(
           if (eventCommand.etype == 'event') {
             continue;
           }
-          if (eventCommand.command.address == eCommand.address) {
-            if (eventCommand.command.valueOn.includes(',')) {
+          if (eventCommand?.command.address == eCommand.address) {
+            if (eventCommand?.command.valueOn.includes(',')) {
               let valueID = eventCommand.command.valueOn.split(',');
               if (eCommand.valueOn.includes(',')) {
                 let valueID2 = eCommand.valueOn.split(',');
@@ -76,16 +76,16 @@ export default function EventSoftwareCommand(
               if (eventCommand.etype == 'event') {
                 continue;
               }
-              if (eventCommand.event.address == eCommand.address) {
-                if (eventCommand.event.valueOn.includes(',')) {
-                  let valueID = eventCommand.event.valueOn.split(',');
+              if (eventCommand.command.address == eCommand.address) {
+                if (eventCommand.command.valueOn.includes(',')) {
+                  let valueID = eventCommand.command.valueOn.split(',');
                   if (eCommand.valueOn.includes(',')) {
                     let valueID2 = eCommand.valueOn.split(',');
                     if (valueID[0].trim() == valueID2[0].trim()) {
                       OSCService.sendToUDP(
                         eCommand.dest_udp,
-                        eventCommand.event.address,
-                        eventCommand.event.valueOn,
+                        eventCommand.command.address,
+                        eventCommand.command.valueOn,
                       );
                     } else {
                       continue;
@@ -94,8 +94,8 @@ export default function EventSoftwareCommand(
                 } else {
                   OSCService.sendToUDP(
                     eCommand.dest_udp,
-                    eventCommand.event.address,
-                    eventCommand.event.valueOn,
+                    eventCommand.command.address,
+                    eventCommand.command.valueOn,
                   );
                 }
 

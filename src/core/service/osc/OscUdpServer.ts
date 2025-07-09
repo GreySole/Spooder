@@ -36,19 +36,18 @@ export default class OscUdpServer {
         message.args,
       );
 
-      console.log('OSC UDP', message.address, message.args);
-
       for (const e of Object.keys(events)) {
         if (triggerExistsAndEnabled(events[e].triggers, 'osc')) {
           if (events[e].triggers.osc.handletype == 'search') {
             if (message.address == events[e].triggers.osc.address) {
+              const searchArg = events[e].triggers.osc.search?.arg ?? 0;
               const streamMessage = {
                 userId: '',
                 username: '',
                 displayName: '',
                 platform: 'osc',
                 channel: 'udp',
-                message: message.args[0],
+                message: message.args[searchArg],
                 messageType: 'osc',
                 respond: () => {},
                 emotes: [],
@@ -68,20 +67,19 @@ export default class OscUdpServer {
               }
             }
           } else if (message.address == events[e].triggers.osc.address) {
-            const conditionsOn = events[e].triggers.osc.condition_groups_on as OSCConditionGroup[];
-            const conditionsOff = events[e].triggers.osc
-              .condition_groups_off as OSCConditionGroup[];
+            const conditions = EventService.eventIsRunning(e)
+              ? (events[e].triggers.osc.condition_groups_off as OSCConditionGroup[])
+              : (events[e].triggers.osc.condition_groups_on as OSCConditionGroup[]);
 
-            if (!conditionsOn) {
+            if (!conditions) {
               return;
             }
 
-            if (message.args.length < conditionsOn?.length) {
+            if (message.args.length < conditions?.length) {
               return;
             }
 
             function runConditions(args: any[], conditionGroups: OSCConditionGroup[]) {
-              const groupConditionResults = [] as boolean[];
               for (let groupIndex = 0; groupIndex < conditionGroups.length; groupIndex++) {
                 const groupConditionMode = conditionGroups[groupIndex].mode;
                 const conditionValues = conditionGroups[groupIndex].conditions;
@@ -91,62 +89,69 @@ export default class OscUdpServer {
                     conditionIndex < conditionValues.length;
                     conditionIndex++
                   ) {
+                    const conditionArg = conditionValues[conditionIndex].arg;
                     const conditionType = conditionValues[conditionIndex].type;
                     const conditionValue = conditionValues[conditionIndex].value;
-                    if (eval(args[conditionIndex] + conditionType + conditionValue) === false) {
-                      groupConditionResults.push(false);
-                      break;
+
+                    if (
+                      eval(
+                        args[conditionArg ?? conditionIndex] + conditionType + conditionValue,
+                      ) === false
+                    ) {
+                      return false;
                     }
                   }
+                  return true;
                 } else if (groupConditionMode === 'OR') {
                   for (
                     let conditionIndex = 0;
                     conditionIndex < conditionValues.length;
                     conditionIndex++
                   ) {
+                    const conditionArg = conditionValues[conditionIndex].arg;
                     const conditionType = conditionValues[conditionIndex].type;
                     const conditionValue = conditionValues[conditionIndex].value;
-                    if (eval(args[conditionIndex] + conditionType + conditionValue) === true) {
-                      groupConditionResults.push(true);
-                      break;
+                    if (
+                      eval(
+                        args[conditionArg ?? conditionIndex] + conditionType + conditionValue,
+                      ) === true
+                    ) {
+                      return true;
                     }
                   }
-                }
-
-                if (groupConditionResults.some((result) => result === true)) {
-                  return true;
-                } else {
                   return false;
                 }
               }
             }
 
-            if (runConditions(message.args, conditionsOn)) {
-              const streamMessage = {
-                userId: '',
-                username: '',
-                displayName: '',
-                platform: 'osc',
-                channel: 'udp',
-                message: message.args[0],
-                messageType: 'osc',
-                respond: () => {},
-                emotes: [],
-                tags: {},
-                isBroadcaster: false,
-                isMod: false,
-                isSubscriber: false,
-                isVIP: false,
-                isFirstMessage: false,
-                isReturningChatter: false,
-              } as StreamMessage;
+            if (EventService.eventIsRunning(e)) {
+              if (runConditions(message.args, conditions)) {
+                EventService.stopEvent(e);
+              }
+            } else {
+              if (runConditions(message.args, conditions)) {
+                const streamMessage = {
+                  userId: '',
+                  username: '',
+                  displayName: '',
+                  platform: 'osc',
+                  channel: 'udp',
+                  message: message.args[0],
+                  messageType: 'osc',
+                  respond: () => {},
+                  emotes: [],
+                  tags: {},
+                  isBroadcaster: false,
+                  isMod: false,
+                  isSubscriber: false,
+                  isVIP: false,
+                  isFirstMessage: false,
+                  isReturningChatter: false,
+                } as StreamMessage;
 
-              EventService.runCommands(streamMessage, e, 'osc');
+                EventService.runCommands(streamMessage, e, 'osc');
+              }
             }
-
-            /*if (runConditions(message.args, conditionsOff)) {
-              EventService.stopEvent(e);
-            }*/
           }
         }
 

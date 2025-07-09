@@ -8,6 +8,7 @@ export default function EventPluginCommand(
   eCommand: any,
   eventName: string,
   streamMessage: StreamMessage,
+  extra: KeyedObject = {},
 ) {
   const activePlugins = PluginService.getActivePlugins();
   return async () => {
@@ -36,7 +37,7 @@ export default function EventPluginCommand(
               const response = await runResponseScript(
                 eventName,
                 streamMessage,
-                [],
+                extra,
                 responseScript,
               );
               if (response.status === 'ok') {

@@ -5,11 +5,11 @@
   "main": "spooder.ts",
   "type": "module",
   "scripts": {
-    "start": "tsx src/spooder.ts",
-    "dev": "node src/spooder.ts -d",
-    "init": "tsx spooder.ts -i",
-    "safe": "node spooder.ts -e",
-    "start-noautologin": "node spooder.ts -a",
+    "start": "tsx --enable-source-maps src/spooder.ts",
+    "dev": "tsx --enable-source-maps src/spooder.ts -d",
+    "init": "tsx --enable-source-maps spooder.ts -i",
+    "safe": "tsx --enable-source-maps spooder.ts -e",
+    "start-noautologin": "tsx --enable-source-maps spooder.ts -a",
     "build": "tsc"
   },
   "author": "Grey Sole",

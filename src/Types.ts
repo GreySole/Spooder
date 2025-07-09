@@ -44,6 +44,7 @@ export interface OSCConditionGroup {
 }
 
 export interface OSCCondition {
+  arg: number;
   type: string;
   value: string;
 }

@@ -9,7 +9,7 @@ export default function getDiscordRouters() {
   const publicRouter = Router();
   const discordModule = ModuleService.getCommunityModule('discord') as Discord;
 
-  router.post('/saveDiscordConfig', async (req: Request, res: Response) => {
+  router.post('/save_discord_config', async (req: Request, res: Response) => {
     Object.assign(discordModule.config, req.body);
     fs.writeFile(
       userDir + '/settings/discord.json',

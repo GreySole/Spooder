@@ -355,7 +355,7 @@ export function PluginRoutes() {
     const pluginName = req.query.pluginname as string;
     const includeAssets = req.query.include_assets === 'true';
     const includeSource = req.query.include_source === 'true';
-    console.log(pluginName);
+    console.log(pluginName, includeAssets, includeSource);
 
     const tempDir = path.join(userDir, 'tmp');
 
@@ -378,17 +378,17 @@ export function PluginRoutes() {
         zip.addLocalFolder(pluginDir, '/plugin', (filename) => {
           return !filename.includes('node_modules') && !filename.includes('settings.json');
         });
-      } else {
-        if (!fs.existsSync(path.join(pluginDir, 'build'))) {
-          webLog('No build directory found for plugin: ' + pluginName);
-          res.status(400).send({ status: 'error', message: 'No build directory found' });
-          return;
-        }
-        const buildDir = path.join(pluginDir, 'build');
-        zip.addLocalFolder(buildDir, '/plugin', (filename) => {
-          return !filename.includes('node_modules') && !filename.includes('settings.json');
-        });
       }
+
+      if (!fs.existsSync(path.join(pluginDir, 'build')) && !includeSource) {
+        webLog('No build directory found for plugin: ' + pluginName);
+        res.status(400).send({ status: 'error', message: 'No build directory found' });
+        return;
+      }
+      const buildDir = path.join(pluginDir, 'build');
+      zip.addLocalFolder(buildDir, '/plugin/build', (filename) => {
+        return !filename.includes('node_modules') && !filename.includes('settings.json');
+      });
     }
 
     if (fs.existsSync(overlayDir)) {

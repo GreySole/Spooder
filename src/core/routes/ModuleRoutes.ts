@@ -6,6 +6,12 @@ export default function ModuleRoutes() {
   const router = Router();
   const publicRouter = Router();
 
+  router.get('/is_module_loaded', (req, res) => {
+    const modName = req.query.module as string;
+    const isLoaded = ModuleService.findModule(modName) !== undefined;
+    res.send({ isLoaded });
+  });
+
   router.get('/restart_chat', (req, res) => {
     const modName = req.query.module as string;
 

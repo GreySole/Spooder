@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { KeyedObject } from '../../Types.ts';
 
 export interface ControlModuleInterface {
+  connected: boolean;
   autoLogin: () => void;
   call: (command: string, data: KeyedObject) => void;
   getPluginFunctions: () => KeyedObject;

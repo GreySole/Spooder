@@ -4,7 +4,7 @@ import { OBSRequestTypes } from 'obs-websocket-js';
 import getObsRouters from './ObsRouter.ts';
 import ObsWebsocket from './ObsWebsocket.ts';
 import fs from 'fs';
-import OSC from 'osc-js';
+import OSC from '@greysole/osc-js';
 
 export default class OBS implements ControlModuleInterface {
   constructor() {
@@ -69,7 +69,14 @@ export default class OBS implements ControlModuleInterface {
     console.log('OBS Login Saved!');
   }
 
-  connected = this.websocket.connected;
+  get connected() {
+    return this.websocket.connected;
+  }
+
+  set connected(value: boolean) {
+    this.websocket.connected = value;
+  }
+
   deckClients = [] as any[];
   streamReconnecting = false;
   streamBleeding = false;
