@@ -237,7 +237,7 @@ export function PluginRoutes() {
 
     const sampleURL = typescript
       ? 'https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/0.5.0-dev-ts'
-      : 'https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/main';
+      : 'https://api.github.com/repos/greysole/Spooder-Sample-Plugin/zipball/0.5.0-dev-js';
 
     fetch(sampleURL)
       .then((response) => response.arrayBuffer())
@@ -257,17 +257,11 @@ export function PluginRoutes() {
         const fileDir = path.join(tempDir, zip.getEntries()[0].entryName);
         const tempOverlayDir = path.join(fileDir, 'overlay');
         const tempUtilityDir = path.join(fileDir, 'utility');
-        const tempPublicDir = path.join(fileDir, 'public');
 
+        // Copy the overlay as utility since they're the same files
         if (pages.utility) {
           if (fs.existsSync(tempOverlayDir)) {
             await fs.copy(tempOverlayDir, tempUtilityDir);
-          }
-        }
-
-        if (pages.public) {
-          if (fs.existsSync(tempOverlayDir)) {
-            await fs.copy(tempOverlayDir, tempPublicDir);
           }
         }
 
