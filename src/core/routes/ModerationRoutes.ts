@@ -16,6 +16,7 @@ import {
 } from '../util/ResponseUtil.ts';
 import { isLocal, WebService } from '../service/WebService.ts';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
+import e from 'express';
 
 export function validateModAccess(req: Request, res: Response, next: NextFunction) {
   const isValid = validateUser(req);
@@ -33,7 +34,7 @@ export function validateUser(req: Request) {
     return 'No access cookie';
   }
   if (UserService.getActiveUserFromCookie(accessCookie) == 'local') {
-    return true;
+    return 'ok';
   }
   if (!UserService.isActive(accessCookie)) {
     return 'Not logged in';
@@ -114,7 +115,7 @@ export function ModerationRoutes() {
 
     if (isLocalHost) {
       oscURL = sconfig.network.host;
-      oscPort = sconfig.network.osc.osc_tcp_port;
+      oscPort = sconfig.network.host_port;
     } else {
       oscURL = WebService.getPublicOSCUrl();
     }
@@ -122,10 +123,17 @@ export function ModerationRoutes() {
     const modlocks = ModerationService.getModlocks();
 
     const activeEvents = EventService.getActiveEvents();
+    console.log('Active Events:', activeEvents);
     const modActiveEvents = {} as KeyedObject;
     for (let a in activeEvents) {
-      modActiveEvents[a].etype = events[a].etype;
-      modActiveEvents[a].timeout = events[a].timeout;
+      modActiveEvents[a] = activeEvents[a].map((command: any) => {
+        return {
+          etype: command.etype,
+          timeout: command.timeout,
+          start_time: command.start_time,
+          command: command.command,
+        };
+      });
     }
 
     res.send({

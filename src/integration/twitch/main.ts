@@ -155,7 +155,6 @@ export default class Twitch implements StreamModuleInterface {
   getActiveShares = async () => {
     const shares = ShareService.getShares();
     const channels = await this.api.getSharedChannels();
-    console.log('GET ACTIVE SHARES', this.shareUsers);
     const activeShares = {} as KeyedObject;
     for (let c in channels) {
       const channel = channels[c];
@@ -170,7 +169,6 @@ export default class Twitch implements StreamModuleInterface {
         userId: shares[shareId].streamPlatforms.twitch.userId,
       };
     }
-    console.log('TWITCH ACTIVE SHARES', activeShares, channels);
     return activeShares;
   };
   joinChannel = this.chat.joinChannel;

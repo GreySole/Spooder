@@ -98,19 +98,19 @@ export default class ConfigService {
     webui: {},
     modui: {},
     spooderpet: [
-      { partString: '/\\', partColor: '#FFFFFF' },
       { partString: '/╲', partColor: '#FFFFFF' },
-      { partString: '(', partColor: '#FFFFFF' },
-      { partString: ' ', partColor: '#FFFFFF' },
-      { partString: 'º', partColor: '#FFFFFF' },
-      { partString: 'o', partColor: '#FFFFFF' },
-      { partString: 'ω', partColor: '#FFFFFF' },
-      { partString: 'o', partColor: '#FFFFFF' },
-      { partString: 'º', partColor: '#FFFFFF' },
-      { partString: ' ', partColor: '#FFFFFF' },
-      { partString: ')', partColor: '#FFFFFF' },
-      { partString: '╱\\', partColor: '#FFFFFF' },
       { partString: '/\\', partColor: '#FFFFFF' },
+      { partString: '(', partColor: '#FFFFFF' },
+      { partString: 'º', partColor: '#FFFFFF' },
+      { partString: 'o', partColor: '#FFFFFF' },
+      { partString: ' ', partColor: '#FFFFFF' },
+      { partString: 'ω', partColor: '#FFFFFF' },
+      { partString: ' ', partColor: '#FFFFFF' },
+      { partString: 'o', partColor: '#FFFFFF' },
+      { partString: 'º', partColor: '#FFFFFF' },
+      { partString: ')', partColor: '#FFFFFF' },
+      { partString: '/\\', partColor: '#FFFFFF' },
+      { partString: '╱\\', partColor: '#FFFFFF' },
     ],
   } as KeyedObject;
 
@@ -224,7 +224,7 @@ export default class ConfigService {
         'longlegright',
       ];
       if (themesObj.spooderpet.parts == null && !Array.isArray(themesObj.spooderpet)) {
-        spooderLog('Upgrading themes file to new format');
+        spooderLog('Upgrading themes file to new format 1');
         const parts = [] as KeyedObject[];
         for (let l of legacyKeys) {
           parts.push({
@@ -233,9 +233,9 @@ export default class ConfigService {
           });
         }
 
-        themesObj.spooderpet.parts = parts;
+        themesObj.spooderpet = parts;
       } else if (!Array.isArray(themesObj.spooderpet)) {
-        spooderLog('Upgrading themes file to new format');
+        spooderLog('Upgrading themes file to new format 2');
         const parts = [] as KeyedObject[];
         for (let l of legacyKeys) {
           parts.push({

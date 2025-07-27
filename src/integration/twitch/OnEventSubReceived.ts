@@ -79,7 +79,6 @@ export default async function OnEventSubReceived(data: KeyedObject) {
     const modlocks = ModerationService.getModlocks();
     const events = EventService.getEvents();
     for (let e in events) {
-      console.log('Checking event', e);
       if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
         continue;
       }

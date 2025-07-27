@@ -1,1 +1,0 @@
-{"version":3,"file":"static/css/main.8c3b907e.css","mappings":"AAAA,WACE,+EAKF","sources":["index.css"],"sourcesContent":[".login-box {\r\n  background-color: color-mix(\r\n    in srgb,\r\n    var(--color-background-far) 75%,\r\n    transparent\r\n  );\r\n}\r\n"],"names":[],"sourceRoot":""}

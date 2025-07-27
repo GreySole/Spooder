@@ -169,7 +169,7 @@ export async function runResponseScript(
   useFakeStorage = false,
 ) {
   const responseScript = String.raw`
-    async (runCommands, sayInChat, modules, _eventStorage, _saveEventStorage) => {
+    async (runCommands, sayInChat, modules, activeVars, _eventStorage, _saveEventStorage) => {
       const event = ${JSON.stringify(message)};
       const extra = ${JSON.stringify(extra)};
       function say(txt) {
@@ -195,6 +195,38 @@ export async function runResponseScript(
         _eventStorage[eventname][key] = value;
         if (save == true && ${!useFakeStorage}) {
           _saveEventStorage(_eventStorage);
+        }
+      }
+      function getTimer(name){
+        return activeVars[name] ?? 0;
+      }
+      function setTimer(name, duration, cb) {
+        activeVars[name] = {
+          expires: Date.now() + duration * 1000,
+          callback:cb,
+          timeout: setTimeout(() => {
+            delete activeVars[name];
+            try {
+              cb();
+            } catch (e) {
+              console.error('Error in timer callback for ' + name + ':', e);
+            }
+          }, duration * 1000),
+          duration
+        };
+      }
+      function clearTimer(name, callCallback = false){
+        const timer = activeVars[name];
+        if (timer) {
+          clearTimeout(timer.timeout);
+          if (callCallback) {
+            try {
+              timer.callback();
+            } catch (e) {
+              console.error('Error in timer callback for ' + name + ':', e);
+            }
+          }
+          delete activeVars[name];
         }
       }
       function chooseRandom(...randArray) {
@@ -224,6 +256,7 @@ export async function runResponseScript(
       EventService.runCommands,
       sayInChat,
       responseHandlerFunctions,
+      EventService.getActiveResponseVariables(),
       EventService.getEventStorage(),
       EventService.saveEventStorage,
     );

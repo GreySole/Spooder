@@ -108,7 +108,6 @@ export default class TwitchApi {
   };
 
   async getUserId(channelName: string) {
-    await this.validateChatbot();
     const oauth = this.getModule().oauth;
 
     return new Promise<string>((res, rej) => {
@@ -130,8 +129,14 @@ export default class TwitchApi {
         .catch(async (error: AxiosError) => {
           twitchLog('Broadcaster auth error: ', error);
           if (error.response?.status == 401) {
-            await this.onAuthenticationFailure();
-            res(this.getUserId(channelName));
+            this.onAuthenticationFailure()
+              .then(() => {
+                res(this.getUserId(channelName));
+              })
+              .catch((error: AxiosError) => {
+                twitchLog('getUserId authentication failed: ', error.message);
+                rej('getUserId authentication failed: ' + error.message);
+              });
           } else {
             rej(error);
           }
@@ -279,7 +284,6 @@ export default class TwitchApi {
   };
 
   async getStreamInfo(username: string) {
-    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -303,8 +307,20 @@ export default class TwitchApi {
             res({ error: `No data for ${username}. They is not live.` });
           }
         })
-        .catch((error: AxiosError) => {
+        .catch(async (error: AxiosError) => {
           twitchLog('isStreamerLive fail', error.message);
+          if (error.response?.status == 401) {
+            this.onBroadcasterAuthFailure()
+              .then(() => {
+                res(this.getStreamInfo(username));
+              })
+              .catch((err: AxiosError) => {
+                twitchLog('getStreamInfo Broadcaster authentication failed: ', err.message);
+                rej('getStreamInfo Broadcaster authentication failed: ' + err.message);
+              });
+          } else {
+            rej(error);
+          }
         });
     });
   }
@@ -323,7 +339,6 @@ export default class TwitchApi {
   };
 
   callBotApi = async (url: string, postBody?: KeyedObject, method?: string) => {
-    await this.validateChatbot();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
@@ -344,13 +359,23 @@ export default class TwitchApi {
         .then((data: AxiosResponse) => res(data.data))
         .catch((error: AxiosError) => {
           twitchLog('Bot API use error: ', error.message);
-          rej(error);
+          if (error.response?.status == 401) {
+            this.onAuthenticationFailure()
+              .then(() => {
+                res(this.callBotApi(url, postBody, method));
+              })
+              .catch((err: AxiosError) => {
+                twitchLog('callBotApi authentication failed: ', err.message);
+                rej('callBotApi authentication failed: ' + err.message);
+              });
+          } else {
+            rej(error);
+          }
         });
     });
   };
 
   callBroadcasterApi = async (url: string, postBody?: KeyedObject, method?: string) => {
-    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     method = method == null ? (postBody == null ? 'GET' : 'POST') : method;
@@ -372,13 +397,23 @@ export default class TwitchApi {
         .then((data: AxiosResponse) => res(data.data))
         .catch((error: AxiosError) => {
           twitchLog('Broadcaster API use error: ', error.message);
-          rej(error);
+          if (error.response?.status == 401) {
+            this.onBroadcasterAuthFailure()
+              .then(() => {
+                res(this.callBroadcasterApi(url, postBody, method));
+              })
+              .catch((err: AxiosError) => {
+                twitchLog('callBroadcasterApi Broadcaster authentication failed: ', err.message);
+                rej('callBroadcasterApi Broadcaster authentication failed: ' + err.message);
+              });
+          } else {
+            rej(error);
+          }
         });
     });
   };
 
   getChannelInfo = async (channel?: string | undefined): Promise<KeyedObject> => {
-    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -408,13 +443,23 @@ export default class TwitchApi {
           }
         })
         .catch((error: AxiosError) => {
-          rej(error);
+          if (error.response?.status == 401) {
+            this.onBroadcasterAuthFailure()
+              .then(() => {
+                res(this.getChannelInfo(channel));
+              })
+              .catch((err: AxiosError) => {
+                twitchLog('getChannelInfo Broadcaster authentication failed: ', err.message);
+                rej('getChannelInfo Broadcaster authentication failed: ' + err.message);
+              });
+          } else {
+            rej(error);
+          }
         });
     });
   };
 
   getUserInfoById = async (id: string): Promise<KeyedObject> => {
-    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -443,13 +488,23 @@ export default class TwitchApi {
           }
         })
         .catch((error: AxiosError) => {
-          rej(error);
+          if (error.response?.status == 401) {
+            this.onBroadcasterAuthFailure()
+              .then(() => {
+                res(this.getUserInfoById(id));
+              })
+              .catch((err: AxiosError) => {
+                twitchLog('getUserInfoById Broadcaster authentication failed: ', err.message);
+                rej('getUserInfoById Broadcaster authentication failed: ' + err.message);
+              });
+          } else {
+            rej(error);
+          }
         });
     });
   };
 
   getUserInfo = async (user?: string | undefined): Promise<KeyedObject> => {
-    await this.validateBroadcaster();
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
     const broadcasterToken = oauth.broadcaster_token;
@@ -478,7 +533,18 @@ export default class TwitchApi {
           }
         })
         .catch((error: AxiosError) => {
-          res({ error: 'getUserInfo error: ' + error.message });
+          if (error.response?.status == 401) {
+            this.onBroadcasterAuthFailure()
+              .then(() => {
+                res(this.getUserInfo(user));
+              })
+              .catch((err: AxiosError) => {
+                twitchLog('getUserInfo Broadcaster authentication failed: ', err.message);
+                rej('getUserInfo Broadcaster authentication failed: ' + err.message);
+              });
+          } else {
+            res({ error: 'getUserInfo error: ' + error.message });
+          }
         });
     });
   };
@@ -489,7 +555,6 @@ export default class TwitchApi {
     if (loggedIn == false || chat == null) {
       return [];
     }
-    await this.validateChatbot();
     if (chat.chat?.readyState() == 'OPEN') {
       const channels = chat.activeChannels;
       if (channels.includes('#' + this.homeChannel)) {

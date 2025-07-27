@@ -278,7 +278,12 @@ export default class TwitchEventSub {
           res('SUCCESS');
         })
         .catch((error: any) => {
-          twitchLog('Eventsub init error: ', error.message, error.response?.data?.message);
+          if (error.status === 409) {
+            twitchLog('Eventsub already exists for', broadcasterId, eventType);
+            res('ALREADY_EXISTS');
+            return;
+          }
+          twitchLog('Eventsub init error: ', error, error.message, error.response?.data?.message);
           twitchLog({
             type: eventType,
             version: version,

@@ -83,12 +83,27 @@ export class EventService {
   uptime = 0;
 
   activeEvents = {} as KeyedObject;
+  activeResponseVariables = {} as KeyedObject;
   eventstorage = {} as KeyedObject;
 
   modCommands = {} as KeyedObject;
   events = {} as KeyedObject;
   eventGroups = ['Default'];
   recurringMessages = {} as KeyedObject;
+
+  static getActiveEventEndTime(eventName: string) {
+    const event = EventService.instance.activeEvents[eventName];
+    if (event && event.length > 0) {
+      let maxEndTime = 0;
+      for (const command of event) {
+        if (command.timeout > maxEndTime) {
+          maxEndTime = command.timeout;
+        }
+      }
+      return maxEndTime;
+    }
+    return null;
+  }
 
   static startRecurringMessage(eventName: string, key: string, commandData: KeyedObject) {
     console.log('Starting recurring message for', eventName, key, commandData);
@@ -215,6 +230,10 @@ export class EventService {
 
   static getEventStorage() {
     return EventService.instance.eventstorage;
+  }
+
+  static getActiveResponseVariables() {
+    return EventService.instance.activeResponseVariables;
   }
 
   static getGroups() {
@@ -496,12 +515,12 @@ export class EventService {
           Date.now() / 1000 >= activeEvents[name][activeCommand]['timeout']
         ) {
           activeEvents[name].splice(activeCommand, 1);
+          OSCService.sendToTCP('/events/end/' + name, activeCommand);
         }
       }
 
       if (activeEvents[name].length == 0) {
         delete activeEvents[name];
-        OSCService.sendToTCP('/events/end/' + name + '/' + command, name + ' is now deactivated!');
       }
     }
 
@@ -509,50 +528,18 @@ export class EventService {
     activeEvents[name].push({
       function: funct,
       command: command,
-      timeout: timeout,
+      start_time: Date.now(),
+      timeout: timeout * 1000,
       timeoutEvent: seconds != -1 ? setTimeout(endCommand, seconds * 1000) : null,
       etype: etype,
     });
+    OSCService.sendToTCP('/events/start/' + name, {
+      etype: etype,
+      command: command,
+      start_time: Date.now(),
+      timeout: timeout * 1000,
+    });
   }
-
-  /*private runInterval = () => {
-    this.uptime = Math.floor(Date.now() / 1000);
-    const activeEvents = EventService.getActiveEvents();
-    for (let e in activeEvents) {
-      //Loop 1 for action
-      for (let command in activeEvents[e]) {
-        if (activeEvents[e][command]['timeout'] != -1) {
-          OSCService.sendToTCP(
-            '/events/time/' + e + '/' + activeEvents[e][command]['etype'],
-            this.uptime - activeEvents[e][command]['timeout'],
-          );
-        }
-
-        if (
-          activeEvents[e][command]['timeout'] != -1 &&
-          this.uptime >= activeEvents[e][command]['timeout']
-        ) {
-          //activeEvents[e][command]["function"]();
-          activeEvents[e][command].finished = true;
-          OSCService.sendToTCP(
-            '/events/end/' + e + '/' + command,
-            e + '-' + command + ' is now deactivated!',
-          );
-        }
-      }
-
-      //Loop 2 for cleanup
-      for (let command in activeEvents[e]) {
-        if (activeEvents[e][command].finished == true) {
-          activeEvents[e].splice(command, 1);
-        }
-      }
-
-      if (activeEvents[e].length == 0) {
-        delete activeEvents[e];
-      }
-    }
-  };*/
 
   private sayAlreadyOn(name: string) {
     const events = EventService.getEvents();
@@ -562,7 +549,11 @@ export class EventService {
         sayInChat(
           events[name].name +
             ' is cooling down. Time Left: ' +
-            Math.abs(Math.floor(this.uptime - activeEvents[name][c]['timeout'])) +
+            Math.abs(
+              Math.floor(
+                (activeEvents[name][c]['start_time'] - activeEvents[name][c]['timeout']) / 1000,
+              ),
+            ) +
             's',
         );
         break;

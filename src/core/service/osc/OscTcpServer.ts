@@ -87,6 +87,13 @@ export default class OscTcpServer {
           module.onOSC(message);
         }
       }
+
+      const activePlugins = PluginService.getActivePlugins();
+      for (const plugin of Object.values(activePlugins)) {
+        if (plugin.onOSC) {
+          plugin.onOSC(message);
+        }
+      }
       //Must respond success or else they'll keep sending.
       if (message.address.endsWith('/connect')) {
         this.sendToTCP(`${message.address}/success`, 1, false);

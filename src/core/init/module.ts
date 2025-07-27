@@ -162,8 +162,12 @@ export default class Initializer {
       }
 
       webLog('COMPLETE');
-      ConfigService.refreshConfig();
-      ConfigService.refreshThemes();
+      if (selections['config']) {
+        ConfigService.refreshConfig();
+      }
+      if (selections['themes']) {
+        ConfigService.refreshThemes();
+      }
       res.send({ status: 'SUCCESS' });
     });
 

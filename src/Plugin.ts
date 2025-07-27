@@ -188,7 +188,7 @@ export default class Plugin {
       this.devMode = devMode;
       this.extra = {} as KeyedObject;
 
-      console.log('Using tsconfig:', tsConfigPath);
+      //console.log('Using tsconfig:', tsConfigPath);
 
       let module: any;
 
