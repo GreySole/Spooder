@@ -1,15 +1,15 @@
-import { StreamModuleInterface } from '../interface/StreamModuleInterface.ts';
-import TwitchApi from './TwitchApi.ts';
-import TwitchChat from './TwitchChat.ts';
-import TwitchEventSub from './TwitchEventSub.ts';
-import { logEffects } from '../../core/Logging.ts';
-import { EventService } from '../../core/service/EventService.ts';
-import { userDir, KeyedObject } from '../../Types.ts';
-import UserService from '../../core/service/UserService.ts';
+import { StreamModuleInterface } from '../interface/StreamModuleInterface';
+import TwitchApi from './TwitchApi';
+import TwitchChat from './TwitchChat';
+import TwitchEventSub from './TwitchEventSub';
+import { logEffects } from '../../core/Logging';
+import { EventService } from '../../core/service/EventService';
+import { userDir, KeyedObject } from '../../Types';
+import UserService from '../../core/service/UserService';
 import fs from 'fs';
-import getTwitchRouters from './TwitchRouter.ts';
-import ShareService from 'src/core/service/ShareService.ts';
-import getResponseHandlers from './TwitchResponseHandlers.ts';
+import getTwitchRouters from './TwitchRouter';
+import ShareService from 'src/core/service/ShareService';
+import getResponseHandlers from './TwitchResponseHandlers';
 
 export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));

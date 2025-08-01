@@ -1,11 +1,11 @@
 import tmi from 'tmi.js';
-import Twitch, { twitchLog } from './main.ts';
-import { EventService } from '../../core/service/EventService.ts';
-import ModuleService from '../../core/service/ModuleService.ts';
-import PluginService from '../../core/service/PluginService.ts';
-import ShareService from '../../core/service/ShareService.ts';
-import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types.ts';
-import { processStreamMessage } from 'src/core/util/ChatUtil.ts';
+import Twitch, { twitchLog } from './main';
+import { EventService } from '../../core/service/EventService';
+import ModuleService from '../../core/service/ModuleService';
+import PluginService from '../../core/service/PluginService';
+import ShareService from '../../core/service/ShareService';
+import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types';
+import { processStreamMessage } from 'src/core/util/ChatUtil';
 
 function stringifyArray(a: string[]) {
   return a.join(', ');

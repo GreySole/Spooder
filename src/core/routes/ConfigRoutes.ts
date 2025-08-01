@@ -1,11 +1,11 @@
-import { userDir } from '../../Types.ts';
+import { userDir } from '../../Types';
 import path from 'path';
 import { Request, Response, Router } from 'express';
 import fs from 'fs';
-import { WebService } from '../service/WebService.ts';
-import ConfigService from '../service/ConfigService.ts';
-import { webLog } from '../Logging.ts';
-import OSCService from '../service/OSCService.ts';
+import { WebService } from '../service/WebService';
+import ConfigService from '../service/ConfigService';
+import { webLog } from '../Logging';
+import OSCService from '../service/OSCService';
 import { json } from 'express';
 
 export function ConfigRoutes() {

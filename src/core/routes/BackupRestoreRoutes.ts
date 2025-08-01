@@ -3,12 +3,12 @@ import fs from 'fs-extra';
 import { Request, Response } from 'express';
 import AdmZip from 'adm-zip';
 import express from 'express';
-import { userDir } from '../../Types.ts';
-import { webLog } from '../Logging.ts';
-import ConfigService from '../service/ConfigService.ts';
-import PluginService from '../service/PluginService.ts';
+import { userDir } from '../../Types';
+import { webLog } from '../Logging';
+import ConfigService from '../service/ConfigService';
+import PluginService from '../service/PluginService';
 import multer from 'multer';
-import OSCService from '../service/OSCService.ts';
+import OSCService from '../service/OSCService';
 
 export function BackupRestoreRoutes() {
   const router = express.Router();

@@ -1,7 +1,7 @@
 import { Request, Response, Router } from 'express';
 import crypto from 'crypto';
-import UserService from '../service/UserService.ts';
-import { webLog } from '../Logging.ts';
+import UserService from '../service/UserService';
+import { webLog } from '../Logging';
 
 export function UserRoutes() {
   const router = Router();

@@ -1,5 +1,5 @@
-import { userDir, KeyedObject } from 'src/Types.ts';
-import OSCService from './OSCService.ts';
+import { userDir, KeyedObject } from 'src/Types';
+import OSCService from './OSCService';
 import si from 'systeminformation';
 
 export interface OSCLog {

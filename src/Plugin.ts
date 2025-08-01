@@ -1,23 +1,23 @@
-import { userDir, KeyedObject, StreamMessage } from './Types.ts';
+import { userDir, KeyedObject, StreamMessage } from './Types';
 import path, { resolve } from 'path';
 import fs from 'fs';
-import ModuleService from './core/service/ModuleService.ts';
+import ModuleService from './core/service/ModuleService';
 import os from 'os';
 import OSC from '@greysole/osc-js';
 import { createRequire } from 'module';
-import PluginService from './core/service/PluginService.ts';
-import OSCService from './core/service/OSCService.ts';
-import { WebService } from './core/service/WebService.ts';
-import { registerPluginApi } from './core/routes/PluginRoutes.ts';
+import PluginService from './core/service/PluginService';
+import OSCService from './core/service/OSCService';
+import { WebService } from './core/service/WebService';
+import { registerPluginApi } from './core/routes/PluginRoutes';
 import { Request, Response } from 'express';
-import UserService from './core/service/UserService.ts';
-import ConfigService from './core/service/ConfigService.ts';
+import UserService from './core/service/UserService';
+import ConfigService from './core/service/ConfigService';
 import childProcess from 'child_process';
 import chmodr from 'chmodr';
-import { sayInChat } from './core/service/EventService.ts';
-import { pluginLog } from './core/Logging.ts';
-import ShareService from './core/service/ShareService.ts';
-import { webJoin } from './core/util/PathUtil.ts';
+import { sayInChat } from './core/service/EventService';
+import { pluginLog } from './core/Logging';
+import ShareService from './core/service/ShareService';
+import { webJoin } from './core/util/PathUtil';
 
 interface PluginSpooderModules {
   stream: KeyedObject;

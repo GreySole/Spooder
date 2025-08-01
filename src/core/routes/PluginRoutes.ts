@@ -3,15 +3,15 @@ import AdmZip from 'adm-zip';
 import chmodr from 'chmodr';
 import path from 'path';
 import fs from 'fs-extra';
-import { KeyedObject, userDir } from '../../Types.ts';
-import { logToFile, webLog } from '../Logging.ts';
-import ConfigService from '../service/ConfigService.ts';
-import OSCService from '../service/OSCService.ts';
-import PluginService from '../service/PluginService.ts';
+import { KeyedObject, userDir } from '../../Types';
+import { logToFile, webLog } from '../Logging';
+import ConfigService from '../service/ConfigService';
+import OSCService from '../service/OSCService';
+import PluginService from '../service/PluginService';
 import multer from 'multer';
-import { isLocal, WebService } from '../service/WebService.ts';
-import { webJoin } from '../util/PathUtil.ts';
-import ShareService from '../service/ShareService.ts';
+import { isLocal, WebService } from '../service/WebService';
+import { webJoin } from '../util/PathUtil';
+import ShareService from '../service/ShareService';
 
 const pluginApi = {
   local: {

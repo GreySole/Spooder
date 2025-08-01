@@ -1,7 +1,7 @@
-import { KeyedObject, StreamMessage } from 'src/Types.ts';
-import { EventService, sayInChat } from '../service/EventService.ts';
-import { triggerExistsAndEnabled } from './EventTriggerUtil.ts';
-import ModuleService from '../service/ModuleService.ts';
+import { KeyedObject, StreamMessage } from 'src/Types';
+import { EventService, sayInChat } from '../service/EventService';
+import { triggerExistsAndEnabled } from './EventTriggerUtil';
+import ModuleService from '../service/ModuleService';
 
 function matchConditions(a: string, b: string) {
   if (a.includes('|')) {

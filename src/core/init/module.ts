@@ -1,14 +1,14 @@
 import { json, Request, Response } from 'express';
 import { networkInterfaces } from 'os';
-import { KeyedObject, userDir } from '../../Types.ts';
-import ConfigService from '../service/ConfigService.ts';
-import { WebService } from '../service/WebService.ts';
+import { KeyedObject, userDir } from '../../Types';
+import ConfigService from '../service/ConfigService';
+import { WebService } from '../service/WebService';
 import AdmZip from 'adm-zip';
 import path from 'path';
-import { spooderLog, webLog } from '../Logging.ts';
+import { spooderLog, webLog } from '../Logging';
 import fs from 'fs-extra';
 import multer from 'multer';
-import { isIPCConnected, sendToApp } from '../util/AppUtil.ts';
+import { isIPCConnected, sendToApp } from '../util/AppUtil';
 
 interface NetworkInterface {
   name: string;

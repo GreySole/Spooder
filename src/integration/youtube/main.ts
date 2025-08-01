@@ -1,6 +1,6 @@
-/*import { sayInChat, checkResponseTrigger } from "@manager/EventService.ts";
-import { logEffects } from "src/core/Logging.ts";
-import { userDir } from "src/Types.ts";
+/*import { sayInChat, checkResponseTrigger } from "@manager/EventService";
+import { logEffects } from "src/core/Logging";
+import { userDir } from "src/Types";
 
 const fs = require("fs");
 const Axios = require("axios");

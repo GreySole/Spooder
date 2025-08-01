@@ -7,6 +7,12 @@
         "rootDir": "./src",
         "moduleResolution": "node",
         "module": "CommonJS",
-        "target": "ES2021"
+        "target": "ES2021",
+        "baseUrl": "./",
+        "paths": {
+            "src/*": [
+                "./src/*"
+            ]
+        }
     }
 }

@@ -1,8 +1,8 @@
 import fs from 'fs';
-import { KeyedObject, SpooderOSCMessageOptions, userDir } from '../../Types.ts';
-import ConfigService from './ConfigService.ts';
-import OscUdpServer from './osc/OscUdpServer.ts';
-import OscTcpServer from './osc/OscTcpServer.ts';
+import { KeyedObject, SpooderOSCMessageOptions, userDir } from '../../Types';
+import ConfigService from './ConfigService';
+import OscUdpServer from './osc/OscUdpServer';
+import OscTcpServer from './osc/OscTcpServer';
 
 export default class OSCService {
   private static instance: OSCService;

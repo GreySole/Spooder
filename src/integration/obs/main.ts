@@ -1,8 +1,8 @@
-import { userDir, KeyedObject } from 'src/Types.ts';
-import { ControlModuleInterface } from '../interface/ControlModuleInterface.ts';
+import { userDir, KeyedObject } from 'src/Types';
+import { ControlModuleInterface } from '../interface/ControlModuleInterface';
 import { OBSRequestTypes } from 'obs-websocket-js';
-import getObsRouters from './ObsRouter.ts';
-import ObsWebsocket from './ObsWebsocket.ts';
+import getObsRouters from './ObsRouter';
+import ObsWebsocket from './ObsWebsocket';
 import fs from 'fs';
 import OSC from '@greysole/osc-js';
 

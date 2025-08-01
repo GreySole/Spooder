@@ -1,13 +1,13 @@
 import path from 'path';
 import fs from 'fs';
-import { CoreModule, KeyedObject, userDir } from '../../Types.ts';
-import ConfigService from './ConfigService.ts';
-import ModuleService from './ModuleService.ts';
-import PluginService from './PluginService.ts';
-import OSCService from './OSCService.ts';
-import { StreamModuleInterface } from 'src/integration/interface/StreamModuleInterface.ts';
-import { spooderLog, webLog } from '../Logging.ts';
-import { WebService } from './WebService.ts';
+import { CoreModule, KeyedObject, userDir } from '../../Types';
+import ConfigService from './ConfigService';
+import ModuleService from './ModuleService';
+import PluginService from './PluginService';
+import OSCService from './OSCService';
+import { StreamModuleInterface } from 'src/integration/interface/StreamModuleInterface';
+import { spooderLog, webLog } from '../Logging';
+import { WebService } from './WebService';
 import crypto from 'crypto';
 import { Request, Response } from 'express';
 

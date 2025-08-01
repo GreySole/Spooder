@@ -1,5 +1,5 @@
-import { sayInChat, EventService } from '../EventService.ts';
-import { ModerationService } from '../ModerationService.ts';
+import { sayInChat, EventService } from '../EventService';
+import { ModerationService } from '../ModerationService';
 
 export default function EventModCommand(
   eCommand: any,

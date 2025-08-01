@@ -1,6 +1,6 @@
-import { spooderLog } from 'src/core/Logging.ts';
-import { EventService } from '../EventService.ts';
-import ModuleService from '../ModuleService.ts';
+import { spooderLog } from 'src/core/Logging';
+import { EventService } from '../EventService';
+import ModuleService from '../ModuleService';
 
 export default function EventOBSCommand(eCommand: any, eventName: string) {
   const obs = ModuleService.getControlModule('obs');

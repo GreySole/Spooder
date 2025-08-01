@@ -1,8 +1,8 @@
-import Twitch from '../../integration/twitch/main.ts';
-import { KeyedObject } from '../../Types.ts';
-import ConfigService from '../service/ConfigService.ts';
-import ModuleService from '../service/ModuleService.ts';
-import PluginService from '../service/PluginService.ts';
+import Twitch from '../../integration/twitch/main';
+import { KeyedObject } from '../../Types';
+import ConfigService from '../service/ConfigService';
+import ModuleService from '../service/ModuleService';
+import PluginService from '../service/PluginService';
 import express, { Request, Response } from 'express';
 
 export function PublicRoutes() {

@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs-extra';
-import { spooderLog } from '../Logging.ts';
-import { userDir, KeyedObject } from '../../Types.ts';
+import { spooderLog } from '../Logging';
+import { userDir, KeyedObject } from '../../Types';
 import { config } from 'process';
 
 export interface ConfigBotSection {

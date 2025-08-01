@@ -1,7 +1,7 @@
 import { Request, Response, Router } from 'express';
-import Discord from './main.ts';
-import ModuleService from 'src/core/service/ModuleService.ts';
-import { userDir } from 'src/Types.ts';
+import Discord from './main';
+import ModuleService from 'src/core/service/ModuleService';
+import { userDir } from 'src/Types';
 import fs from 'fs';
 
 export default function getDiscordRouters() {

@@ -1,10 +1,10 @@
 import OBSWebSocket, { EventSubscription, OBSRequestTypes } from 'obs-websocket-js';
-import ModuleService from 'src/core/service/ModuleService.ts';
-import OSCService from 'src/core/service/OSCService.ts';
-import { KeyedObject } from 'src/Types.ts';
-import OBS from './main.ts';
+import ModuleService from 'src/core/service/ModuleService';
+import OSCService from 'src/core/service/OSCService';
+import { KeyedObject } from 'src/Types';
+import OBS from './main';
 import OSC from '@greysole/osc-js';
-import onObsOscMessage from './onObsOscMessage.ts';
+import onObsOscMessage from './onObsOscMessage';
 
 export default class ObsWebsocket {
   constructor() {}

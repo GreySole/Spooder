@@ -1,10 +1,10 @@
 import { Router, Request, Response, json } from 'express';
-import ModuleService from 'src/core/service/ModuleService.ts';
-import { userDir, KeyedObject } from 'src/Types.ts';
-import OBS from './main.ts';
+import ModuleService from 'src/core/service/ModuleService';
+import { userDir, KeyedObject } from 'src/Types';
+import OBS from './main';
 import fs from 'fs';
-import ObsControlRouter from './ObsControlRouter.ts';
-import ObsFetchRouter from './ObsFetchRouter.ts';
+import ObsControlRouter from './ObsControlRouter';
+import ObsFetchRouter from './ObsFetchRouter';
 
 export default function getObsRouters() {
   const obsModule = ModuleService.getControlModule('obs') as OBS;

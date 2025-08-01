@@ -2,14 +2,14 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import chmodr from 'chmodr';
 import fs from 'fs-extra';
-import { KeyedObject, userDir } from '../../Types.ts';
-import OSCService from './OSCService.ts';
-import { webLog } from '../Logging.ts';
+import { KeyedObject, userDir } from '../../Types';
+import OSCService from './OSCService';
+import { webLog } from '../Logging';
 import childProcess from 'child_process';
-import Plugin from 'src/Plugin.ts';
+import Plugin from 'src/Plugin';
 import { createRequire } from 'module';
-import ModuleService from './ModuleService.ts';
-import ShareService from './ShareService.ts';
+import ModuleService from './ModuleService';
+import ShareService from './ShareService';
 
 interface PluginMap {
   [key: string]: Plugin;

@@ -1,8 +1,8 @@
 import ngrok from '@ngrok/ngrok';
-import { webLog } from 'src/core/Logging.ts';
-import ConfigService from '../ConfigService.ts';
-import ModuleService from '../ModuleService.ts';
-import { WebService } from '../WebService.ts';
+import { webLog } from 'src/core/Logging';
+import ConfigService from '../ConfigService';
+import ModuleService from '../ModuleService';
+import { WebService } from '../WebService';
 
 export default class Ngrok {
   public async start() {

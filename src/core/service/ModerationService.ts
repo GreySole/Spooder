@@ -1,8 +1,8 @@
-import { KeyedObject, userDir } from '../../Types.ts';
-import { oscLog } from '../Logging.ts';
-import { EventService } from './EventService.ts';
-import OSCService from './OSCService.ts';
-import PluginService from './PluginService.ts';
+import { KeyedObject, userDir } from '../../Types';
+import { oscLog } from '../Logging';
+import { EventService } from './EventService';
+import OSCService from './OSCService';
+import PluginService from './PluginService';
 import fs from 'fs';
 
 type ModCommand = string | number | boolean;

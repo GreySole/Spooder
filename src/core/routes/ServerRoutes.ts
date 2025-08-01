@@ -1,11 +1,11 @@
 import express from 'express';
-import MonitorService from '../service/MonitorService.ts';
-import ConfigService from '../service/ConfigService.ts';
-import PluginService from '../service/PluginService.ts';
-import ShareService from '../service/ShareService.ts';
-import { EventService } from '../service/EventService.ts';
-import OSCService from '../service/OSCService.ts';
-import { WebService } from '../service/WebService.ts';
+import MonitorService from '../service/MonitorService';
+import ConfigService from '../service/ConfigService';
+import PluginService from '../service/PluginService';
+import ShareService from '../service/ShareService';
+import { EventService } from '../service/EventService';
+import OSCService from '../service/OSCService';
+import { WebService } from '../service/WebService';
 
 export function ServerRoutes() {
   const router = express.Router();

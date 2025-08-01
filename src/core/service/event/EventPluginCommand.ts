@@ -1,8 +1,8 @@
-import { spooderLog } from 'src/core/Logging.ts';
-import { EventService } from '../EventService.ts';
-import PluginService from '../PluginService.ts';
-import { KeyedObject, StreamMessage } from 'src/Types.ts';
-import { runResponseScript } from 'src/core/util/ResponseUtil.ts';
+import { spooderLog } from 'src/core/Logging';
+import { EventService } from '../EventService';
+import PluginService from '../PluginService';
+import { KeyedObject, StreamMessage } from 'src/Types';
+import { runResponseScript } from 'src/core/util/ResponseUtil';
 
 export default function EventPluginCommand(
   eCommand: any,

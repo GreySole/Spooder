@@ -1,4 +1,4 @@
-import { KeyedObject } from '../../Types.ts';
+import { KeyedObject } from '../../Types';
 
 export const scopes = [
   'channel:moderate',

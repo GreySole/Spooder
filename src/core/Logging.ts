@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { KeyedObject, userDir } from '../Types.ts';
+import { KeyedObject, userDir } from '../Types';
 
 export function logEffects(effect: string) {
   const effects = {

@@ -1,4 +1,4 @@
-import { KeyedObject } from 'src/Types.ts';
+import { KeyedObject } from 'src/Types';
 
 export function triggerExistsAndEnabled(triggers: KeyedObject, triggerType: string) {
   if (triggers[triggerType]) {

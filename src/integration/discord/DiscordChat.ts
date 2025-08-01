@@ -7,13 +7,13 @@ import {
   Message,
   TextChannel,
 } from 'discord.js';
-import ModuleService from 'src/core/service/ModuleService.ts';
-import { KeyedObject, userDir } from 'src/Types.ts';
-import Discord, { discordLog } from './main.ts';
+import ModuleService from 'src/core/service/ModuleService';
+import { KeyedObject, userDir } from 'src/Types';
+import Discord, { discordLog } from './main';
 import fs from 'fs';
 import { client } from 'tmi.js';
-import DiscordVoice from './DiscordVoice.ts';
-import DiscordApi from './DiscordApi.ts';
+import DiscordVoice from './DiscordVoice';
+import DiscordApi from './DiscordApi';
 
 export default class DiscordChat {
   private discordModule: Discord;

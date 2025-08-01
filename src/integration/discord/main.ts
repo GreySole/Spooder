@@ -13,17 +13,17 @@ import {
   ApplicationCommandOptionType,
   ChannelType,
 } from 'discord.js';
-import { CommunityModuleInterface } from '../interface/CommunityModuleInterface.ts';
-import { logEffects } from '../../core/Logging.ts';
-import PluginService from '../../core/service/PluginService.ts';
-import { userDir, KeyedObject } from '../../Types.ts';
-import UserService from '../../core/service/UserService.ts';
+import { CommunityModuleInterface } from '../interface/CommunityModuleInterface';
+import { logEffects } from '../../core/Logging';
+import PluginService from '../../core/service/PluginService';
+import { userDir, KeyedObject } from '../../Types';
+import UserService from '../../core/service/UserService';
 import fs from 'fs';
-import getDiscordRouters from './DiscordRouter.ts';
-import DiscordVoice from './DiscordVoice.ts';
-import DiscordChat from './DiscordChat.ts';
-import DiscordApi from './DiscordApi.ts';
-import DiscordButtons from './DiscordButtons.ts';
+import getDiscordRouters from './DiscordRouter';
+import DiscordVoice from './DiscordVoice';
+import DiscordChat from './DiscordChat';
+import DiscordApi from './DiscordApi';
+import DiscordButtons from './DiscordButtons';
 
 export function discordLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgCyan'), ...content, logEffects('Reset'));

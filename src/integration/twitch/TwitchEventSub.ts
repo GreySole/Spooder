@@ -1,14 +1,14 @@
-import ConfigService from '../../core/service/ConfigService.ts';
-import ModuleService from '../../core/service/ModuleService.ts';
-import { KeyedObject } from '../../Types.ts';
-import Twitch, { twitchLog } from './main.ts';
+import ConfigService from '../../core/service/ConfigService';
+import ModuleService from '../../core/service/ModuleService';
+import { KeyedObject } from '../../Types';
+import Twitch, { twitchLog } from './main';
 import Axios from 'axios';
-import { eventsubs } from './TwitchConstants.ts';
-import { EventService } from 'src/core/service/EventService.ts';
-import OnEventSubReceived from './OnEventSubReceived.ts';
-import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil.ts';
+import { eventsubs } from './TwitchConstants';
+import { EventService } from 'src/core/service/EventService';
+import OnEventSubReceived from './OnEventSubReceived';
+import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil';
 import WebSocket from 'ws';
-import { logToFile } from 'src/core/Logging.ts';
+import { logToFile } from 'src/core/Logging';
 
 export default class TwitchEventSub {
   websocket: WebSocket | undefined = undefined;

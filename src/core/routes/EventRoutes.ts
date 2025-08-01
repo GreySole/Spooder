@@ -1,14 +1,14 @@
-import { EventService } from '../service/EventService.ts';
-import PluginService from '../service/PluginService.ts';
+import { EventService } from '../service/EventService';
+import PluginService from '../service/PluginService';
 import { json, Request, Response } from 'express';
 import express from 'express';
-import { webLog } from '../Logging.ts';
-import { KeyedObject } from 'src/Types.ts';
+import { webLog } from '../Logging';
+import { KeyedObject } from 'src/Types';
 import {
   buildMockStreamMessage,
   checkResponseTrigger,
   verifyResponseScript,
-} from 'src/core/util/ResponseUtil.ts';
+} from 'src/core/util/ResponseUtil';
 
 export function EventRoutes() {
   const router = express.Router();

@@ -1,19 +1,19 @@
 import { v4 as uuidv4 } from 'uuid';
-import { KeyedObject, userDir, StreamMessage } from '../../Types.ts';
-import { spooderLog } from '../Logging.ts';
-import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
-import ConfigService from './ConfigService.ts';
-import EventModCommand from './event/EventModCommand.ts';
-import EventOBSCommand from './event/EventOBSCommand.ts';
-import EventPluginCommand from './event/EventPluginCommand.ts';
-import EventResponseCommand from './event/EventResponseCommand.ts';
-import EventSoftwareCommand from './event/EventSoftwareCommand.ts';
-import ModuleService from './ModuleService.ts';
-import OSCService from './OSCService.ts';
+import { KeyedObject, userDir, StreamMessage } from '../../Types';
+import { spooderLog } from '../Logging';
+import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
+import ConfigService from './ConfigService';
+import EventModCommand from './event/EventModCommand';
+import EventOBSCommand from './event/EventOBSCommand';
+import EventPluginCommand from './event/EventPluginCommand';
+import EventResponseCommand from './event/EventResponseCommand';
+import EventSoftwareCommand from './event/EventSoftwareCommand';
+import ModuleService from './ModuleService';
+import OSCService from './OSCService';
 import fs from 'fs';
-import ShareService from './ShareService.ts';
-import EventDiscordCommand from './event/EventDiscordCommand.ts';
-import { buildMockStreamMessage } from '../util/ResponseUtil.ts';
+import ShareService from './ShareService';
+import EventDiscordCommand from './event/EventDiscordCommand';
+import { buildMockStreamMessage } from '../util/ResponseUtil';
 
 export function sayInChat(message: string, platform?: string, channel?: string) {
   const activeStreams = ModuleService.getStreamModules();

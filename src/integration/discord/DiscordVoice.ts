@@ -7,8 +7,8 @@ import {
   AudioPlayer,
   VoiceConnection,
 } from '@discordjs/voice';
-import Discord, { discordLog } from './main.ts';
-import ModuleService from 'src/core/service/ModuleService.ts';
+import Discord, { discordLog } from './main';
+import ModuleService from 'src/core/service/ModuleService';
 
 export default class DiscordVoice {
   voiceChannel: VoiceConnection | undefined = undefined;

@@ -1,16 +1,16 @@
-import { twitchLog } from 'src/integration/twitch/main.ts';
-import { userDir, KeyedObject, StreamMessage } from 'src/Types.ts';
-import ConfigService from '../service/ConfigService.ts';
-import { EventService, sayInChat } from '../service/EventService.ts';
-import { ModerationService } from '../service/ModerationService.ts';
-import OSCService from '../service/OSCService.ts';
-import PluginService from '../service/PluginService.ts';
-import ShareService from '../service/ShareService.ts';
-import UserService from '../service/UserService.ts';
-import { checkResponseTrigger } from './ResponseUtil.ts';
-import { spooderLog } from '../Logging.ts';
+import { twitchLog } from 'src/integration/twitch/main';
+import { userDir, KeyedObject, StreamMessage } from 'src/Types';
+import ConfigService from '../service/ConfigService';
+import { EventService, sayInChat } from '../service/EventService';
+import { ModerationService } from '../service/ModerationService';
+import OSCService from '../service/OSCService';
+import PluginService from '../service/PluginService';
+import ShareService from '../service/ShareService';
+import UserService from '../service/UserService';
+import { checkResponseTrigger } from './ResponseUtil';
+import { spooderLog } from '../Logging';
 import fs from 'fs';
-import { triggerExistsAndEnabled } from './EventTriggerUtil.ts';
+import { triggerExistsAndEnabled } from './EventTriggerUtil';
 
 export function convertToStreamMessage(
   userId: string,

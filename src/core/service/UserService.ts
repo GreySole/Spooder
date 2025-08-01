@@ -1,7 +1,7 @@
 import crypto, { verify } from 'crypto';
-import { KeyedObject, userDir, PermissionType } from '../../Types.ts';
+import { KeyedObject, userDir, PermissionType } from '../../Types';
 import fs from 'fs';
-import { spooderLog } from '../Logging.ts';
+import { spooderLog } from '../Logging';
 import { v4 } from 'uuid';
 import { Request } from 'express';
 

@@ -1,5 +1,5 @@
-import { EventService } from '../EventService.ts';
-import OSCService from '../OSCService.ts';
+import { EventService } from '../EventService';
+import OSCService from '../OSCService';
 
 export default function EventSoftwareCommand(
   eCommand: any,

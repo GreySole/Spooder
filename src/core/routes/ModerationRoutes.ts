@@ -1,10 +1,10 @@
 import express, { NextFunction, Request, Response } from 'express';
-import { PermissionType, KeyedObject, userDir } from 'src/Types.ts';
-import ConfigService from '../service/ConfigService.ts';
-import { EventService, sayInChat } from '../service/EventService.ts';
-import { ModerationService } from '../service/ModerationService.ts';
-import PluginService from '../service/PluginService.ts';
-import UserService from '../service/UserService.ts';
+import { PermissionType, KeyedObject, userDir } from 'src/Types';
+import ConfigService from '../service/ConfigService';
+import { EventService, sayInChat } from '../service/EventService';
+import { ModerationService } from '../service/ModerationService';
+import PluginService from '../service/PluginService';
+import UserService from '../service/UserService';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -13,9 +13,9 @@ import {
   buildMockStreamMessage,
   checkResponseTrigger,
   verifyResponseScript,
-} from '../util/ResponseUtil.ts';
-import { isLocal, WebService } from '../service/WebService.ts';
-import { triggerExistsAndEnabled } from '../util/EventTriggerUtil.ts';
+} from '../util/ResponseUtil';
+import { isLocal, WebService } from '../service/WebService';
+import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
 import e from 'express';
 
 export function validateModAccess(req: Request, res: Response, next: NextFunction) {

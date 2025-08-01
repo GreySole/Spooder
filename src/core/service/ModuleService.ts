@@ -1,9 +1,9 @@
-import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface.ts';
-import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface.ts';
-import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface.ts';
-import { CoreModule, KeyedObject, PlatformType } from '../../Types.ts';
-import ConfigService from './ConfigService.ts';
-import { WebService } from './WebService.ts';
+import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface';
+import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface';
+import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface';
+import { CoreModule, KeyedObject, PlatformType } from '../../Types';
+import ConfigService from './ConfigService';
+import { WebService } from './WebService';
 
 interface ModuleContainer {
   [key: string]: any;
@@ -167,14 +167,14 @@ export default class ModuleService {
   }
 
   async registerCoreModule(name: string, coreModule: CoreModule) {
-    const newModule = await import(`../${name}/module.ts`);
+    const newModule = await import(`../${name}/module`);
     this.coreModules[coreModule] = new newModule.default();
   }
 
   static async registerIntegrationModule(name: string, platformType: PlatformType) {
     return new Promise(async (res, rej) => {
       console.log('REGISTERING MOD', name);
-      const newModule = await import(`../../integration/${name}/main.ts`);
+      const newModule = await import(`../../integration/${name}/main`);
       if (platformType === PlatformType.stream) {
         ModuleService.instance.activeStreams[name] =
           new newModule.default() as StreamModuleInterface;
