@@ -254,13 +254,6 @@ export default class PluginService {
       message: 'Copying folders...',
     });
     const tempDir = path.join(userDir, 'tmp', pluginDirName);
-    const pluginDir = path.join(userDir, 'plugins', pluginDirName);
-    const overlayDir = path.join(userDir, 'web', 'overlay', pluginDirName);
-    const utilityDir = path.join(userDir, 'web', 'utility', pluginDirName);
-    const publicDir = path.join(userDir, 'web', 'public', pluginDirName);
-    const settingsDir = path.join(userDir, 'web', 'settings', pluginDirName);
-    const assetsDir = path.join(userDir, 'web', 'assets', pluginDirName);
-    const iconDir = path.join(userDir, 'web', 'icons', pluginDirName + '.png');
 
     const tempPluginDir = fs.existsSync(tempDir + '/plugin') ? 'plugin' : 'command';
 
@@ -269,43 +262,54 @@ export default class PluginService {
         status: false,
         message: 'No plugin folder in temp directory',
       };
-    } else {
-      if (options.createInfo != null) {
-        if (fs.existsSync(tempDir + `/${tempPluginDir}/package.json`)) {
-          try {
-            let thisPackage = JSON.parse(
-              fs.readFileSync(tempDir + `/${tempPluginDir}/package.json`, { encoding: 'utf-8' }),
-            );
-            thisPackage.name = options.createInfo.name;
-            thisPackage.author = options.createInfo.author;
-            thisPackage.description = options.createInfo.description;
-            fs.writeFileSync(
-              tempDir + `/${tempPluginDir}/package.json`,
-              JSON.stringify(thisPackage),
-            );
-          } catch (e) {
-            webLog(
-              "Something went wrong with applying create info to the plugin's package.json",
-              e,
-            );
-          }
-        }
-      }
-
-      if (fs.existsSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'))) {
-        fs.rmSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'), { recursive: true });
-      }
-
-      if (fs.existsSync(pluginDir)) {
-        mergeDirectories(tempDir + `/${tempPluginDir}`, pluginDir);
-      } else {
-        await fs.move(tempDir + `/${tempPluginDir}`, pluginDir, { overwrite: true });
-      }
-
-      chmodr(pluginDir, 0o777, (err) => {
-        if (err) throw err;
-      });
     }
+
+    // Extract the plugin name from package.json
+    let finalPluginName = pluginDirName; // Default fallback
+    if (fs.existsSync(tempDir + `/${tempPluginDir}/package.json`)) {
+      try {
+        let thisPackage = JSON.parse(
+          fs.readFileSync(tempDir + `/${tempPluginDir}/package.json`, { encoding: 'utf-8' }),
+        );
+
+        if (options.createInfo != null) {
+          thisPackage.name = options.createInfo.name;
+          thisPackage.author = options.createInfo.author;
+          thisPackage.description = options.createInfo.description;
+          fs.writeFileSync(tempDir + `/${tempPluginDir}/package.json`, JSON.stringify(thisPackage));
+        }
+
+        // Use the name from package.json as the final plugin directory name
+        if (thisPackage.name) {
+          finalPluginName = thisPackage.name;
+        }
+      } catch (e) {
+        webLog("Something went wrong with applying create info to the plugin's package.json", e);
+      }
+    }
+
+    // Define directories using the final plugin name
+    const pluginDir = path.join(userDir, 'plugins', finalPluginName);
+    const overlayDir = path.join(userDir, 'web', 'overlay', finalPluginName);
+    const utilityDir = path.join(userDir, 'web', 'utility', finalPluginName);
+    const publicDir = path.join(userDir, 'web', 'public', finalPluginName);
+    const settingsDir = path.join(userDir, 'web', 'settings', finalPluginName);
+    const assetsDir = path.join(userDir, 'web', 'assets', finalPluginName);
+    const iconDir = path.join(userDir, 'web', 'icons', finalPluginName + '.png');
+
+    if (fs.existsSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'))) {
+      fs.rmSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'), { recursive: true });
+    }
+
+    if (fs.existsSync(pluginDir)) {
+      mergeDirectories(tempDir + `/${tempPluginDir}`, pluginDir);
+    } else {
+      await fs.move(tempDir + `/${tempPluginDir}`, pluginDir, { overwrite: true });
+    }
+
+    chmodr(pluginDir, 0o777, (err) => {
+      if (err) throw err;
+    });
 
     if (fs.existsSync(tempDir + '/overlay') && options.overlay == true) {
       await fs.move(tempDir + '/overlay', overlayDir, { overwrite: true });
@@ -363,10 +367,10 @@ export default class PluginService {
 
     webLog('Plugin added successfully!');
     fs.rm(tempDir, { recursive: true });
-    await PluginService.installPluginDependencies(pluginDirName, pluginDir);
+    await PluginService.installPluginDependencies(finalPluginName, pluginDir);
     PluginService.refreshAllPlugins();
     OSCService.sendToTCP('/spooder/plugin/install/complete', {
-      pluginName: pluginDirName,
+      pluginName: finalPluginName,
       status: 'complete',
       message: 'Complete!',
     });

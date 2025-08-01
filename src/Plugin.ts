@@ -171,7 +171,7 @@ export default class Plugin {
 
       this.modulePath = modulePath;
 
-      this.name = pluginMeta.name;
+      this.name = pluginMeta.display_name ?? pluginMeta.name;
       this.main = pluginMeta.main = pluginMeta.main ?? 'index.js';
       this.dirname = pluginDirName;
       this.author = pluginMeta.author;

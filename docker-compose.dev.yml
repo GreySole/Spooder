@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  spooder-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: spooder-dev
+    ports:
+      - '3000:3000'
+      - '8080:8080'
+    volumes:
+      # Mount source code for hot reloading
+      - .:/app
+      - /app/node_modules
+      # Persist user data
+      - spooder_dev_data:/app/user
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+    restart: unless-stopped
+    networks:
+      - spooder-dev-network
+    command: npm run dev
+
+networks:
+  spooder-dev-network:
+    driver: bridge
+
+volumes:
+  spooder_dev_data:
+    driver: local

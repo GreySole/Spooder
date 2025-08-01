@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  spooder:
+    build: .
+    container_name: spooder-app
+    ports:
+      - '3000:3000'
+      - '8080:8080' # Adjust ports as needed for your app
+    volumes:
+      # Persist user data
+      - spooder_user_data:/app/user
+      # Mount config files (optional - for easy editing)
+      - ./user/settings:/app/user/settings:rw
+      - ./user/plugins:/app/user/plugins:rw
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    networks:
+      - spooder-network
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  spooder-network:
+    driver: bridge
+
+volumes:
+  spooder_user_data:
+    driver: local

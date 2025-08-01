@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    # Allow both direct and indirect updates
+    allow:
+      - dependency-type: 'direct'
+      - dependency-type: 'indirect'
+    # Group minor and patch updates together
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    # Limit the number of open pull requests
+    open-pull-requests-limit: 5
+    # Add reviewers (optional - replace with your GitHub username)
+    reviewers:
+      - 'GreySole'
+    # Add labels to PRs
+    labels:
+      - 'dependencies'
+      - 'automated'
+    # Commit message preferences
+    commit-message:
+      prefix: 'deps'
+      include: 'scope'

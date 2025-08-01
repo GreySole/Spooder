@@ -218,7 +218,7 @@ export default class TwitchChat {
 
     for (let e in events) {
       if (shareChannel != null && shareChannel != homeChannel) {
-        if (!shares[shareChannel].commands.includes(e)) {
+        if (!Object.keys(shares[shareChannel].commands).includes(e)) {
           continue;
         }
       }

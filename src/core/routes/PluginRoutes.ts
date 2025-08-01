@@ -379,10 +379,28 @@ export function PluginRoutes() {
         res.status(400).send({ status: 'error', message: 'No build directory found' });
         return;
       }
+
       const buildDir = path.join(pluginDir, 'build');
-      zip.addLocalFolder(buildDir, '/plugin/build', (filename) => {
-        return !filename.includes('node_modules') && !filename.includes('settings.json');
-      });
+
+      if (fs.existsSync(buildDir)) {
+        webLog('Adding build directory for plugin: ' + pluginName);
+        zip.addLocalFolder(buildDir, '/plugin/build', (filename) => {
+          return !filename.includes('node_modules') && !filename.includes('settings.json');
+        });
+
+        if (!includeSource) {
+          const settingsFormDir = path.join(pluginDir, 'settings-form.json');
+          const eventsFormDir = path.join(pluginDir, 'events-form.json');
+
+          if (fs.existsSync(settingsFormDir)) {
+            zip.addLocalFile(settingsFormDir, '/plugin', 'settings-form.json');
+          }
+
+          if (fs.existsSync(eventsFormDir)) {
+            zip.addLocalFile(eventsFormDir, '/plugin', 'events-form.json');
+          }
+        }
+      }
     }
 
     if (fs.existsSync(overlayDir)) {
@@ -562,7 +580,7 @@ export function PluginRoutes() {
         });
       } else {
         const pluginAsset = req.file as Express.Multer.File;
-        const pluginName = req.params['0'];
+        const pluginName = req.body.pluginName;
 
         const iconDir = path.join(userDir, 'web', 'icons');
         const iconFile = path.join(iconDir, pluginName + '.png');
@@ -570,7 +588,10 @@ export function PluginRoutes() {
         if (!fs.existsSync(iconDir)) {
           fs.mkdirSync(iconDir);
         }
-        await fs.promises.writeFile(iconFile, pluginAsset.buffer);
+
+        await fs.move(pluginAsset.path, iconFile, {
+          overwrite: true,
+        });
 
         chmodr(iconFile, 0o777, (err) => {
           if (err) throw err;
