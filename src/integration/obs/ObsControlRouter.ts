@@ -1,5 +1,5 @@
 import { json, Response, Router } from 'express';
-import ModuleService from 'src/core/service/ModuleService';
+import ModuleService from '../../core/service/ModuleService';
 import OBS from './main';
 
 export default function ObsControlRouter() {

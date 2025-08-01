@@ -1,8 +1,8 @@
 import { Response, Router } from 'express';
-import ModuleService from 'src/core/service/ModuleService';
+import ModuleService from '../../core/service/ModuleService';
 import OBS from './main';
-import OSCService from 'src/core/service/OSCService';
-import { KeyedObject } from 'src/Types';
+import OSCService from '../../core/service/OSCService';
+import { KeyedObject } from '../../Types';
 
 export default function ObsFetchRouter() {
   const router = Router();

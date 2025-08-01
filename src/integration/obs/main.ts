@@ -1,4 +1,4 @@
-import { userDir, KeyedObject } from 'src/Types';
+import { userDir, KeyedObject } from '../../Types';
 import { ControlModuleInterface } from '../interface/ControlModuleInterface';
 import { OBSRequestTypes } from 'obs-websocket-js';
 import getObsRouters from './ObsRouter';

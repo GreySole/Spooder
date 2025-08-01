@@ -16,7 +16,7 @@ import { EventRoutes } from '../routes/EventRoutes';
 import { UserRoutes } from '../routes/UserRoutes';
 import { ShareRoutes } from '../routes/ShareRoutes';
 import { PublicRoutes } from '../routes/PublicRoutes';
-import { ControlModuleInterface } from 'src/integration/interface/ControlModuleInterface';
+import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface';
 import { ServerRoutes } from '../routes/ServerRoutes';
 import Ngrok from './webui/Ngrok';
 import MotherwolfTunnel from './webui/Motherwolf';
@@ -86,13 +86,21 @@ export async function findAvailablePort(startPort: number): Promise<number> {
 
 export class WebService {
   private static instance: WebService;
+  private initializationPromise?: Promise<void>;
+
   constructor() {
     if (WebService.instance) {
       return WebService.instance;
     }
 
     WebService.instance = this;
-    WebService.instance.startServer(ConfigService.getFlags().initMode);
+    this.initializationPromise = WebService.instance.startServer(ConfigService.getFlags().initMode);
+  }
+
+  public static async waitForInitialization(): Promise<void> {
+    if (WebService.instance && WebService.instance.initializationPromise) {
+      await WebService.instance.initializationPromise;
+    }
   }
 
   private server: http.Server | undefined = undefined;
@@ -289,7 +297,7 @@ export class WebService {
   }
 
   public static getServer() {
-    if (WebService.instance.server == undefined) {
+    if (!WebService.instance.server) {
       throw new Error('WebService server is not initialized');
     }
     return WebService.instance.server;

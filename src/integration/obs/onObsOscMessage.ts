@@ -1,6 +1,6 @@
-import ModuleService from 'src/core/service/ModuleService';
-import { userDir, KeyedObject } from 'src/Types';
-import OSCService from 'src/core/service/OSCService';
+import ModuleService from '../../core/service/ModuleService';
+import { userDir, KeyedObject } from '../../Types';
+import OSCService from '../../core/service/OSCService';
 import fs from 'fs';
 import OBS from './main';
 

@@ -7,8 +7,8 @@ import {
   Message,
   TextChannel,
 } from 'discord.js';
-import ModuleService from 'src/core/service/ModuleService';
-import { KeyedObject, userDir } from 'src/Types';
+import ModuleService from '../../core/service/ModuleService';
+import { KeyedObject, userDir } from '../../Types';
 import Discord, { discordLog } from './main';
 import fs from 'fs';
 import { client } from 'tmi.js';

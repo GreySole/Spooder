@@ -8,7 +8,7 @@ import { userDir, KeyedObject } from '../../Types';
 import UserService from '../../core/service/UserService';
 import fs from 'fs';
 import getTwitchRouters from './TwitchRouter';
-import ShareService from 'src/core/service/ShareService';
+import ShareService from '../../core/service/ShareService';
 import getResponseHandlers from './TwitchResponseHandlers';
 
 export function twitchLog(...content: any[]) {

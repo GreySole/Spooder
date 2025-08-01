@@ -1,7 +1,7 @@
 import OBSWebSocket, { EventSubscription, OBSRequestTypes } from 'obs-websocket-js';
-import ModuleService from 'src/core/service/ModuleService';
-import OSCService from 'src/core/service/OSCService';
-import { KeyedObject } from 'src/Types';
+import ModuleService from '../../core/service/ModuleService';
+import OSCService from '../../core/service/OSCService';
+import { KeyedObject } from '../../Types';
 import OBS from './main';
 import OSC from '@greysole/osc-js';
 import onObsOscMessage from './onObsOscMessage';

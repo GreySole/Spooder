@@ -6,7 +6,7 @@ import { KeyedObject, userDir } from '../../Types';
 import OSCService from './OSCService';
 import { webLog } from '../Logging';
 import childProcess from 'child_process';
-import Plugin from 'src/Plugin';
+import Plugin from '../../Plugin';
 import { createRequire } from 'module';
 import ModuleService from './ModuleService';
 import ShareService from './ShareService';

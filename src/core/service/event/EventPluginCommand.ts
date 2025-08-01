@@ -1,8 +1,8 @@
-import { spooderLog } from 'src/core/Logging';
+import { spooderLog } from '../../Logging';
 import { EventService } from '../EventService';
 import PluginService from '../PluginService';
-import { KeyedObject, StreamMessage } from 'src/Types';
-import { runResponseScript } from 'src/core/util/ResponseUtil';
+import { KeyedObject, StreamMessage } from '../../../Types';
+import { runResponseScript } from '../../util/ResponseUtil';
 
 export default function EventPluginCommand(
   eCommand: any,

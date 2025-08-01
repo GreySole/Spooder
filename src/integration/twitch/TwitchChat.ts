@@ -5,7 +5,7 @@ import ModuleService from '../../core/service/ModuleService';
 import PluginService from '../../core/service/PluginService';
 import ShareService from '../../core/service/ShareService';
 import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types';
-import { processStreamMessage } from 'src/core/util/ChatUtil';
+import { processStreamMessage } from '../../core/util/ChatUtil';
 
 function stringifyArray(a: string[]) {
   return a.join(', ');

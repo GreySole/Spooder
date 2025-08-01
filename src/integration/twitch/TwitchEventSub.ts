@@ -4,11 +4,11 @@ import { KeyedObject } from '../../Types';
 import Twitch, { twitchLog } from './main';
 import Axios from 'axios';
 import { eventsubs } from './TwitchConstants';
-import { EventService } from 'src/core/service/EventService';
+import { EventService } from '../../core/service/EventService';
 import OnEventSubReceived from './OnEventSubReceived';
-import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil';
+import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 import WebSocket from 'ws';
-import { logToFile } from 'src/core/Logging';
+import { logToFile } from '../../core/Logging';
 
 export default class TwitchEventSub {
   websocket: WebSocket | undefined = undefined;

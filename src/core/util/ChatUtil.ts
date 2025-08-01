@@ -1,5 +1,5 @@
-import { twitchLog } from 'src/integration/twitch/main';
-import { userDir, KeyedObject, StreamMessage } from 'src/Types';
+import { twitchLog } from '../../integration/twitch/main';
+import { userDir, KeyedObject, StreamMessage } from '../../Types';
 import ConfigService from '../service/ConfigService';
 import { EventService, sayInChat } from '../service/EventService';
 import { ModerationService } from '../service/ModerationService';

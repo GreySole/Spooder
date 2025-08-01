@@ -11,7 +11,7 @@
     "moduleResolution": "node",
     "isolatedModules": true,
     "noEmit": true,
-    "allowImportingTsExtensions": true,
+    "allowImportingTsExtensions": false,
     "sourceMap": true,
     "inlineSources": true,
     "baseUrl": "./",

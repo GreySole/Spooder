@@ -1,6 +1,6 @@
 /*import { sayInChat, checkResponseTrigger } from "@manager/EventService";
-import { logEffects } from "src/core/Logging";
-import { userDir } from "src/Types";
+import { logEffects } from "../../core/Logging";
+import { userDir } from "../../Types";
 
 const fs = require("fs");
 const Axios = require("axios");

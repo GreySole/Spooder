@@ -60,22 +60,30 @@ if (initMode) {
   ConfigService.refreshConfig();
   ConfigService.refreshThemes();
   new ShareService();
-  new WebService();
-  new ModuleService(async () => {
-    new EventService();
-    new ModerationService();
-    new OSCService();
-    new MonitorService();
-    new UserService();
-    console.log('Logging into modules');
-    await ModuleService.autoLoginModules();
-    console.log('Initializing plugins');
-    new PluginService();
 
-    console.log('Refreshing share users');
-    ShareService.refreshShareUsers();
-    console.log('Starting Public Hosting');
-    WebService.startPublicHosting();
-    sendToApp({ type: 'info', message: 'Public Hosting started' });
-  });
+  // Initialize WebService and wait for it to be ready before starting modules
+  new WebService();
+  WebService.waitForInitialization()
+    .then(() => {
+      new ModuleService(async () => {
+        new EventService();
+        new ModerationService();
+        new OSCService();
+        new MonitorService();
+        new UserService();
+        console.log('Logging into modules');
+        await ModuleService.autoLoginModules();
+        console.log('Initializing plugins');
+        new PluginService();
+
+        console.log('Refreshing share users');
+        ShareService.refreshShareUsers();
+        console.log('Starting Public Hosting');
+        WebService.startPublicHosting();
+        sendToApp({ type: 'info', message: 'Public Hosting started' });
+      });
+    })
+    .catch((error) => {
+      console.error('Failed to initialize WebService:', error);
+    });
 }

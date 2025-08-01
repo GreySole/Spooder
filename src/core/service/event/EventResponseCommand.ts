@@ -1,6 +1,6 @@
-import { spooderLog } from 'src/core/Logging';
+import { spooderLog } from '../../Logging';
 import { EventService, sayInChat } from '../EventService';
-import { runResponseScript } from 'src/core/util/ResponseUtil';
+import { runResponseScript } from '../../util/ResponseUtil';
 
 export default function EventResponseCommand(
   eCommand: any,

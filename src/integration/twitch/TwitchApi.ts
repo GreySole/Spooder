@@ -4,7 +4,7 @@ import { scopes } from './TwitchConstants';
 import ModuleService from '../../core/service/ModuleService';
 import { KeyedObject, userDir } from '../../Types';
 import Twitch, { twitchLog } from './main';
-import ShareService from 'src/core/service/ShareService';
+import ShareService from '../../core/service/ShareService';
 
 export default class TwitchApi {
   appToken = '';

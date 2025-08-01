@@ -1,5 +1,5 @@
 import express, { NextFunction, Request, Response } from 'express';
-import { PermissionType, KeyedObject, userDir } from 'src/Types';
+import { PermissionType, KeyedObject, userDir } from '../../Types';
 import ConfigService from '../service/ConfigService';
 import { EventService, sayInChat } from '../service/EventService';
 import { ModerationService } from '../service/ModerationService';

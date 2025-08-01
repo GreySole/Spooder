@@ -1,4 +1,4 @@
-import { userDir, KeyedObject } from 'src/Types';
+import { userDir, KeyedObject } from '../../Types';
 import OSCService from './OSCService';
 import si from 'systeminformation';
 

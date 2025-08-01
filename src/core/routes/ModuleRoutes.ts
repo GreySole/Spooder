@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import ModuleService from '../service/ModuleService';
-import { KeyedObject } from 'src/Types';
+import { KeyedObject } from '../../Types';
 
 export default function ModuleRoutes() {
   const router = Router();

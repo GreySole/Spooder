@@ -1,5 +1,5 @@
 import ngrok from '@ngrok/ngrok';
-import { webLog } from 'src/core/Logging';
+import { webLog } from '../../Logging';
 import ConfigService from '../ConfigService';
 import ModuleService from '../ModuleService';
 import { WebService } from '../WebService';

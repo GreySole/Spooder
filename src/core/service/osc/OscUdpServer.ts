@@ -1,8 +1,8 @@
 import OSC from '@greysole/osc-js';
-import { oscLog } from 'src/core/Logging';
-import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil';
-import { checkResponseTrigger } from 'src/core/util/ResponseUtil';
-import { StreamMessage, OSCConditionGroup } from 'src/Types';
+import { oscLog } from '../../Logging';
+import { triggerExistsAndEnabled } from '../../util/EventTriggerUtil';
+import { checkResponseTrigger } from '../../util/ResponseUtil';
+import { StreamMessage, OSCConditionGroup } from '../../../Types';
 import ConfigService from '../ConfigService';
 import { EventService } from '../EventService';
 import ModuleService from '../ModuleService';

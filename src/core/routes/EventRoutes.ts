@@ -3,12 +3,12 @@ import PluginService from '../service/PluginService';
 import { json, Request, Response } from 'express';
 import express from 'express';
 import { webLog } from '../Logging';
-import { KeyedObject } from 'src/Types';
+import { KeyedObject } from '../../Types';
 import {
   buildMockStreamMessage,
   checkResponseTrigger,
   verifyResponseScript,
-} from 'src/core/util/ResponseUtil';
+} from '../util/ResponseUtil';
 
 export function EventRoutes() {
   const router = express.Router();

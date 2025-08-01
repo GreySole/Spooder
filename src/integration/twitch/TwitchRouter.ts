@@ -11,7 +11,7 @@ import ModuleService from '../../core/service/ModuleService';
 import ShareService from '../../core/service/ShareService';
 import { userDir, KeyedObject } from '../../Types';
 import Discord from '../discord/main';
-import UserService from 'src/core/service/UserService';
+import UserService from '../../core/service/UserService';
 
 export default function getTwitchRouters() {
   const sconfig = ConfigService.getConfig();

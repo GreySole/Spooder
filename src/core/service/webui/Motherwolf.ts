@@ -3,7 +3,7 @@ import http from 'http';
 import ConfigService from '../ConfigService';
 import { WebService } from '../WebService';
 import ModuleService from '../ModuleService';
-import { webLog } from 'src/core/Logging';
+import { webLog } from '../../Logging';
 
 export default class MotherwolfTunnel {
   private socket!: WebSocket;

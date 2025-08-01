@@ -1,4 +1,4 @@
-import { spooderLog } from 'src/core/Logging';
+import { spooderLog } from '../../Logging';
 import { EventService } from '../EventService';
 import ModuleService from '../ModuleService';
 

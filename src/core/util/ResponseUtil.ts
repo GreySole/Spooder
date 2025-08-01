@@ -1,4 +1,4 @@
-import { KeyedObject, StreamMessage } from 'src/Types';
+import { KeyedObject, StreamMessage } from '../../Types';
 import { EventService, sayInChat } from '../service/EventService';
 import { triggerExistsAndEnabled } from './EventTriggerUtil';
 import ModuleService from '../service/ModuleService';

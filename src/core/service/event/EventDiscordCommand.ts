@@ -1,8 +1,8 @@
-import { spooderLog } from 'src/core/Logging';
+import { spooderLog } from '../../Logging';
 import { EventService, sayInChat } from '../EventService';
 import ModuleService from '../ModuleService';
-import Discord from 'src/integration/discord/main';
-import { runResponseScript } from 'src/core/util/ResponseUtil';
+import Discord from '../../../integration/discord/main';
+import { runResponseScript } from '../../util/ResponseUtil';
 
 export default function EventDiscordCommand(
   eCommand: any,
