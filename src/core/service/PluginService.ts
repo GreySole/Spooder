@@ -274,6 +274,7 @@ export default class PluginService {
 
         if (options.createInfo != null) {
           thisPackage.name = options.createInfo.name;
+          thisPackage.display_name = options.createInfo.display_name || thisPackage.name;
           thisPackage.author = options.createInfo.author;
           thisPackage.description = options.createInfo.description;
           fs.writeFileSync(tempDir + `/${tempPluginDir}/package.json`, JSON.stringify(thisPackage));

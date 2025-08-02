@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { spooderLog } from '../Logging';
 import { userDir, KeyedObject } from '../../Types';
-import { config } from 'process';
+import { sendToApp } from '../util/AppUtil';
 
 export interface ConfigBotSection {
   owner_name: string;
@@ -121,6 +121,7 @@ export default class ConfigService {
   static saveConfig(newConfig: KeyedObject) {
     try {
       fs.writeFileSync(userDir + '/settings/config.json', JSON.stringify(newConfig), 'utf-8');
+      sendToApp({ action: 'refresh_info' });
     } catch (e) {
       spooderLog('FAILED TO SAVE CONFIG FILE! Rolling back save operation.');
       fs.writeFileSync(
@@ -141,6 +142,7 @@ export default class ConfigService {
     fs.writeFileSync(userDir + '/settings/themes.json', JSON.stringify(newThemes), 'utf-8');
 
     ConfigService.refreshThemes();
+    sendToApp({ action: 'refresh_info' });
   }
 
   static getFlags() {

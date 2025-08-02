@@ -61,7 +61,6 @@ if (initMode) {
   ConfigService.refreshThemes();
   new ShareService();
 
-  // Initialize WebService and wait for it to be ready before starting modules
   new WebService();
   WebService.waitForInitialization()
     .then(() => {
@@ -80,7 +79,7 @@ if (initMode) {
         ShareService.refreshShareUsers();
         console.log('Starting Public Hosting');
         WebService.startPublicHosting();
-        sendToApp({ type: 'info', message: 'Public Hosting started' });
+        sendToApp({ type: 'status', message: 'ready' });
       });
     })
     .catch((error) => {

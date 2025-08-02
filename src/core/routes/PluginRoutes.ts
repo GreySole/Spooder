@@ -216,16 +216,17 @@ export function PluginRoutes() {
     const description = req.body.description;
     const typescript = req.body.typescript;
     const pages = req.body.pages;
+    const pluginDirName = req.body.internalName;
 
     const options = {
       createInfo: {
-        name: pluginName,
+        name: pluginDirName,
+        display_name: pluginName,
         author: author,
         description: description,
       },
       ...pages,
     };
-    const pluginDirName = req.body.internalName;
 
     const pluginPath = path.join(userDir, 'tmp', pluginDirName);
 
@@ -651,6 +652,7 @@ export function PluginRoutes() {
     const pluginDir = path.join(userDir, 'plugins', pluginName);
     const overlayDir = path.join(userDir, 'web', 'overlay', pluginName);
     const utilityDir = path.join(userDir, 'web', 'utility', pluginName);
+    const publicDir = path.join(userDir, 'web', 'public', pluginName);
     const settingsDir = path.join(userDir, 'web', 'settings', pluginName);
     const assetsDir = path.join(userDir, 'web', 'assets', pluginName);
     const iconFile = path.join(userDir, 'web', 'icons', pluginName + '.png');
@@ -662,6 +664,9 @@ export function PluginRoutes() {
     }
     if (fs.existsSync(utilityDir)) {
       fs.rmSync(utilityDir, { recursive: true });
+    }
+    if (fs.existsSync(publicDir)) {
+      fs.rmSync(publicDir, { recursive: true });
     }
     if (fs.existsSync(settingsDir)) {
       fs.rmSync(settingsDir, { recursive: true });

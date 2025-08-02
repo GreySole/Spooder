@@ -51,6 +51,11 @@ export default function getTwitchRouters() {
           if (isBroadcaster) {
             oauth['broadcaster_token'] = token;
             oauth['broadcaster_refreshToken'] = refreshToken;
+            if (!oauth.token) {
+              oauth.token = token;
+              oauth.refreshToken = refreshToken;
+              twitchLog('Setting bot token to broadcaster token');
+            }
           } else {
             oauth.token = token;
             oauth.refreshToken = refreshToken;
@@ -63,7 +68,7 @@ export default function getTwitchRouters() {
             async () => {
               twitchLog('oauth saved!');
               await autoLogin();
-              res.redirect('http://localhost:' + expressPort + '?twitchauthsuccess=true');
+              res.redirect('http://localhost:' + expressPort + '?tab=twitch');
             },
           );
         }

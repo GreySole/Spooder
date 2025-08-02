@@ -18,6 +18,11 @@ export default class TwitchEventSub {
   constructor() {}
 
   initialize() {
+    const twitchTriggeredEvents = this.getTwitchTriggeredEvents();
+    if (Object.keys(twitchTriggeredEvents).length === 0) {
+      twitchLog('No Twitch triggered events found, skipping EventSub initialization');
+      return;
+    }
     this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
     this.setupWebSocketHandlers();
   }
@@ -103,9 +108,21 @@ export default class TwitchEventSub {
     return response?.data;
   };
 
+  getTwitchTriggeredEvents = () => {
+    const events = EventService.getEvents();
+    let twitchTriggeredEvents = {} as KeyedObject;
+    for (let e in events) {
+      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+        continue;
+      }
+      twitchTriggeredEvents[e] = events[e];
+    }
+    return twitchTriggeredEvents;
+  };
+
   refreshEventSubs = async () => {
     await this.getModule().api.validateBroadcaster();
-    const events = EventService.getEvents();
+    const events = this.getTwitchTriggeredEvents();
     const api = this.getModule().api;
     const broadcasterId = await api.getBroadcasterId();
     const botId = await api.getBotId();
