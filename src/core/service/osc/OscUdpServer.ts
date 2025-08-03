@@ -1,4 +1,4 @@
-import OSC from '@greysole/osc-js';
+import OSC from '@spooder/osc-js';
 import { oscLog } from '../../Logging';
 import { triggerExistsAndEnabled } from '../../util/EventTriggerUtil';
 import { checkResponseTrigger } from '../../util/ResponseUtil';

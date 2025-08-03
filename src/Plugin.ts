@@ -3,7 +3,7 @@ import path, { resolve } from 'path';
 import fs from 'fs';
 import ModuleService from './core/service/ModuleService';
 import os from 'os';
-import OSC from '@greysole/osc-js';
+import OSC from '@spooder/osc-js';
 import { createRequire } from 'module';
 import PluginService from './core/service/PluginService';
 import OSCService from './core/service/OSCService';

@@ -1,4 +1,4 @@
-import OSC from '@greysole/osc-js';
+import OSC from '@spooder/osc-js';
 import http from 'http';
 import { oscLog } from '../../Logging';
 import ConfigService from '../ConfigService';

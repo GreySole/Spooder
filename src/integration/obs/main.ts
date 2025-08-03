@@ -4,7 +4,7 @@ import { OBSRequestTypes } from 'obs-websocket-js';
 import getObsRouters from './ObsRouter';
 import ObsWebsocket from './ObsWebsocket';
 import fs from 'fs';
-import OSC from '@greysole/osc-js';
+import OSC from '@spooder/osc-js';
 
 export default class OBS implements ControlModuleInterface {
   constructor() {
