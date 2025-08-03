@@ -16,8 +16,8 @@
   "license": "GPL-3.0",
   "dependencies": {
     "@discordjs/voice": "^0.15.0",
-    "@greysole/osc-js": "^2.4.5",
     "@ngrok/ngrok": "^1.5.1",
+    "@spooder/osc-js": "^2.4.6",
     "@vercel/ncc": "^0.38.3",
     "adm-zip": "^0.5.9",
     "axios": "^1.2.1",
