@@ -161,6 +161,11 @@ global.refreshFiles = () => {
 					events = eventsObj.events;
 					eventGroups = eventsObj.groups;
 				break;
+				case "sconfig":
+					sconfig = JSON.parse(settingFile);
+					if(!sconfig.network.mw_subdomain){sconfig.network.mw_subdomain = "";}
+					if(!sconfig.network.mw_token){sconfig.network.mw_token = "";}
+					break;
 				default:
 					global[s] = JSON.parse(settingFile);
 			}
@@ -396,6 +401,8 @@ if(initMode){
 		
 		if(sconfig.network.externalhandle == "ngrok" && sconfig.network.ngrokauthtoken != ""){
 			webUI.startNgrok();
+		}else if(sconfig.network.externalhandle == "motherwolf" && sconfig.network['mw_subdomain'] != "" && sconfig.network['mw_token'] != ""){
+			webUI.startMotherwolf();
 		}
 		if(safeMode == false){
 			webUI.getPlugins();
@@ -533,11 +540,6 @@ if(initMode){
 	}*/
 
 	global.callOBS = async (command, data) => {
-		if(obs.connected == false){
-			spooderLog("OBS NOT CONNECTED");
-			return;
-		}
-
 		return obs.call(command,data);
 	}
 
@@ -988,11 +990,6 @@ if(initMode){
 					
 				break;
 				case "obs":
-					if(obs.connected == false){
-						spooderLog("OBS NOT CONNECTED");
-						break;
-					}
-					
 					thisCommand = ()=>{
 						if(eCommand.function == "setinputmute"){
 							if(eCommand.etype == "timed"){

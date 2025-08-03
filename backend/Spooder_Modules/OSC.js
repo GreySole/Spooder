@@ -121,12 +121,17 @@ class SOSC {
             }
         }else{
             let message = null;
-            if(valueType.length > 1){
-                message = new OSC.Message(address, ...oscValue);
-            }else{
-                message = new OSC.Message(address, oscValue);
+            try{
+                if(valueType.length > 1){
+                    message = new OSC.Message(address, ...oscValue);
+                }else{
+                    message = new OSC.Message(address, oscValue);
+                }
+                this.osc.send(message, {host:udpClients[dest].ip, port:udpClients[dest].port});
+            }catch(e){
+                oscLog("Error sending OSC", address, oscValue);
+                return;
             }
-            this.osc.send(message, {host:udpClients[dest].ip, port:udpClients[dest].port});
         }
     }
 
