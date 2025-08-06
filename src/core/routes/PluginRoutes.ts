@@ -697,9 +697,9 @@ export function PluginRoutes() {
     PluginService.refreshPlugin(pluginName);
   });
 
-  router.get('/get_plugin/*', async (req: Request, res: Response) => {
+  router.get('/get_plugin/:pluginName', async (req: Request, res: Response) => {
     let plugin = {};
-    let a = req.params['0'];
+    let a = req.params.pluginName;
     let thisPlugin = fs.readFileSync(userDir + 's/' + a + '/settings.json', {
       encoding: 'utf8',
     });
@@ -719,27 +719,27 @@ export function PluginRoutes() {
     res.send(plugin);
   });
 
-  router.get('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.local.get[`${req.params[0]}`]) {
-      pluginApi.local.get[`${req.params[0]}`](req, res);
+  router.get('/api/:apiPath', (req: Request, res: Response) => {
+    if (pluginApi.local.get[`${req.params.apiPath}`]) {
+      pluginApi.local.get[`${req.params.apiPath}`](req, res);
     }
   });
 
-  router.post('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.local.post[`${req.params[0]}`]) {
-      pluginApi.local.post[`${req.params[0]}`](req, res);
+  router.post('/api/:apiPath', (req: Request, res: Response) => {
+    if (pluginApi.local.post[`${req.params.apiPath}`]) {
+      pluginApi.local.post[`${req.params.apiPath}`](req, res);
     }
   });
 
-  publicRouter.get('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.public.get[`${req.params[0]}`]) {
-      pluginApi.public.get[`${req.params[0]}`](req, res);
+  publicRouter.get('/api/:apiPath', (req: Request, res: Response) => {
+    if (pluginApi.public.get[`${req.params.apiPath}`]) {
+      pluginApi.public.get[`${req.params.apiPath}`](req, res);
     }
   });
 
-  publicRouter.post('/api/*', (req: Request, res: Response) => {
-    if (pluginApi.public.post[`${req.params[0]}`]) {
-      pluginApi.public.post[`${req.params[0]}`](req, res);
+  publicRouter.post('/api/:apiPath', (req: Request, res: Response) => {
+    if (pluginApi.public.post[`${req.params.apiPath}`]) {
+      pluginApi.public.post[`${req.params.apiPath}`](req, res);
     }
   });
 

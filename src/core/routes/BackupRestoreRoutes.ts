@@ -27,27 +27,27 @@ export function BackupRestoreRoutes() {
   router.use('/prepare_restore_settings', restoreUpload.single('file'));
   router.use('/prepare_restore_plugins', restoreUpload.single('file'));
 
-  router.get('/get_backups_settings', (req, res) => {
+  router.get('/get_backups_settings', (req: Request, res: Response) => {
     let backupSettingsDir = path.join(userDir, 'backup', 'settings');
     const backups = fs.existsSync(backupSettingsDir) ? fs.readdirSync(backupSettingsDir) : [];
     res.send(backups);
   });
 
-  router.get('/get_backups_plugins', (req, res) => {
+  router.get('/get_backups_plugins', (req: Request, res: Response) => {
     const backupPluginsDir = path.join(userDir, 'backup', 'plugins');
     const backups = fs.existsSync(backupPluginsDir) ? fs.readdirSync(backupPluginsDir) : [];
     res.send(backups);
   });
 
-  router.get('/checkout_settings/*', async (req: Request, res: Response) => {
-    let backupName = req.params['0'];
+  router.get('/checkout_settings/:filename', async (req: Request, res: Response) => {
+    let backupName = req.params.filename;
     webLog('DOWNLOADING SETTINGS', path.join(userDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
     res.download(path.join(userDir, 'backup', 'settings', backupName));
   });
 
-  router.get('/checkout_plugins/*', async (req: Request, res: Response) => {
-    let backupName = req.params['0'];
+  router.get('/checkout_plugins/:filename', async (req: Request, res: Response) => {
+    let backupName = req.params.filename;
     webLog('DOWNLOADING PLUGINS', path.join(userDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
     res.download(path.join(userDir, 'backup', 'plugins', backupName));

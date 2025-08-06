@@ -31,7 +31,7 @@ export function UserRoutes() {
     res.send({ status: 'ok' });
   });
 
-  router.post('/create_user', (req, res) => {
+  router.post('/create_user', (req: Request, res: Response) => {
     const permissions = req.body.permissions;
     UserService.createUser(permissions);
     res.send({ status: 'ok' });

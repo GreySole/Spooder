@@ -91,14 +91,14 @@ export function ShareRoutes() {
     res.send({ status: 'ok' });
   });
 
-  router.post('/set_auto_share', (req, res) => {
+  router.post('/set_auto_share', (req: Request, res: Response) => {
     const shareId = req.body.shareId as string;
     const isEnabled = req.body.enabled as boolean;
     ShareService.setAutoShare(shareId, isEnabled);
     res.send({ status: 'ok' });
   });
 
-  router.post('/create_share_key', (req, res) => {
+  router.post('/create_share_key', (req: Request, res: Response) => {
     const shareId = req.body.shareId as string;
     const shareKey = ShareService.generateShareKey(shareId, false);
     res.send({
@@ -107,7 +107,7 @@ export function ShareRoutes() {
     });
   });
 
-  router.post('/delete_share_key', (req, res) => {
+  router.post('/delete_share_key', (req: Request, res: Response) => {
     const shareId = req.body.shareId as string;
     ShareService.deleteShareKey(shareId);
     res.send({ status: 'ok' });

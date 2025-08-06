@@ -13,11 +13,11 @@ export function ConfigRoutes() {
   const router = Router();
   const publicRouter = Router();
 
-  router.get('/server_config', (req, res) => {
+  router.get('/server_config', (req: Request, res: Response) => {
     res.send(sconfig);
   });
 
-  router.post('/save_config', async (req, res) => {
+  router.post('/save_config', async (req: Request, res: Response) => {
     ConfigService.saveConfig(req.body);
 
     res.send({ status: 'ok' });

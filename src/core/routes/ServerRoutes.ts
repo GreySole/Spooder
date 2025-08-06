@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import MonitorService from '../service/MonitorService';
 import ConfigService from '../service/ConfigService';
 import PluginService from '../service/PluginService';
@@ -28,12 +28,12 @@ export function ServerRoutes() {
     });
   });
 
-  router.get('/active_events', (req, res) => {
+  router.get('/active_events', (req: Request, res: Response) => {
     const events = EventService.getActiveEvents();
     res.send(events);
   });
 
-  router.get('/log', (req, res) => {
+  router.get('/log', (req: Request, res: Response) => {
     const logs = MonitorService.getMonitorLogs();
     res.send(logs);
   });
@@ -43,7 +43,7 @@ export function ServerRoutes() {
     res.send(status);
   });
 
-  router.get('/public_url', (req, res) => {
+  router.get('/public_url', (req: Request, res: Response) => {
     const publicHttpUrl = WebService.getPublicHTTPUrl();
     const publicOscUrl = WebService.getPublicOSCUrl();
     res.send({ http: publicHttpUrl, osc: publicOscUrl });

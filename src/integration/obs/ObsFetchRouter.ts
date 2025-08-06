@@ -1,4 +1,4 @@
-import { Response, Router } from 'express';
+import { Request, Response, Router } from 'express';
 import ModuleService from '../../core/service/ModuleService';
 import OBS from './main';
 import OSCService from '../../core/service/OSCService';

@@ -112,24 +112,34 @@ export default class Plugin {
 
   private pluginModule: PluginModule | undefined = undefined;
   private modulePath: string | undefined = undefined;
+  private pluginPath: string | undefined = undefined;
   private require: NodeJS.Require | undefined = undefined;
 
   constructor(pluginDirName: string, pluginPath: string) {
     const tsConfigPath = resolve(pluginPath, 'tsconfig.json');
-
+    this.pluginPath = pluginPath;
     try {
       let pluginMeta = undefined;
+
       let devMode = PluginService.isPluginInDevMode(pluginDirName);
+      if (devMode && !fs.existsSync(path.resolve(pluginPath, 'package.json'))) {
+        console.log(
+          'No package.json found for plugin in dev mode, switching to build:',
+          pluginDirName,
+        );
+        PluginService.setDevMode(pluginDirName, false);
+        devMode = false;
+      }
       if (!devMode && fs.existsSync(path.resolve(pluginPath, 'build', 'manifest.json'))) {
         pluginMeta = JSON.parse(
-          fs.readFileSync(pluginPath + '/build/manifest.json', {
+          fs.readFileSync(path.resolve(pluginPath, 'build', 'manifest.json'), {
             encoding: 'utf8',
           }),
         );
         this.pluginMode = PluginMode.ncc;
       } else if (fs.existsSync(path.resolve(pluginPath, 'package.json'))) {
         pluginMeta = JSON.parse(
-          fs.readFileSync(pluginPath + '/package.json', {
+          fs.readFileSync(path.resolve(pluginPath, 'package.json'), {
             encoding: 'utf8',
           }),
         );
@@ -153,16 +163,11 @@ export default class Plugin {
         return;
       }
 
-      const isWindows = os.platform() === 'win32';
       let modulePath = undefined;
       if (this.pluginMode === PluginMode.ncc) {
-        modulePath = isWindows
-          ? `file://${pluginPath}\\build\\${pluginMeta.main}`
-          : `${pluginPath}/build/${pluginMeta.main}`;
+        modulePath = path.resolve(pluginPath, 'build', pluginMeta.main);
       } else {
-        modulePath = isWindows
-          ? `file://${pluginPath}\\${pluginMeta.main}`
-          : `${pluginPath}/${pluginMeta.main}`;
+        modulePath = path.resolve(pluginPath, pluginMeta.main);
       }
 
       if (!modulePath) {
@@ -303,9 +308,9 @@ export default class Plugin {
 
       this.pluginModule.getActiveViewer = UserService.getActiveViewer;
 
-      if (fs.existsSync(userDir + '/plugins/' + pluginDirName + '/settings.json')) {
+      if (fs.existsSync(path.resolve(userDir, 'plugins', pluginDirName, 'settings.json'))) {
         this.pluginModule.settings = JSON.parse(
-          fs.readFileSync(userDir + '/plugins/' + pluginDirName + '/settings.json', {
+          fs.readFileSync(path.resolve(userDir, 'plugins', pluginDirName, 'settings.json'), {
             encoding: 'utf8',
           }),
         );
@@ -327,8 +332,16 @@ export default class Plugin {
         }
       }
     } catch (e: any) {
+      let pluginMetaPath = '';
+      if (fs.existsSync(path.resolve(userDir, 'plugins', pluginDirName, 'package.json'))) {
+        pluginMetaPath = path.resolve(userDir, 'plugins', pluginDirName, 'package.json');
+      } else if (
+        fs.existsSync(path.resolve(userDir, 'plugins', pluginDirName, 'build', 'manifest.json'))
+      ) {
+        pluginMetaPath = path.resolve(userDir, 'plugins', pluginDirName, 'build', 'manifest.json');
+      }
       const pluginMeta = JSON.parse(
-        fs.readFileSync(userDir + '/plugins/' + pluginDirName + '/package.json', {
+        fs.readFileSync(pluginMetaPath, {
           encoding: 'utf8',
         }),
       );
@@ -382,12 +395,18 @@ export default class Plugin {
               rej(error);
               return;
             }
+            const pluginMeta = JSON.parse(
+              fs.readFileSync(path.resolve(this.pluginPath!, 'package.json'), {
+                encoding: 'utf8',
+              }),
+            );
             const manifest = {
-              name: this.name,
+              name: pluginMeta.name,
+              display_name: pluginMeta.display_name ?? pluginMeta.name,
               main: mainFile,
-              author: this.author,
-              version: this.version,
-              description: this.description,
+              author: pluginMeta.author,
+              version: pluginMeta.version,
+              description: pluginMeta.description,
             };
             try {
               fs.writeFileSync(

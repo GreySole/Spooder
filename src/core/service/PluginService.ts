@@ -28,7 +28,7 @@ export default class PluginService {
     PluginService.instance = this;
 
     try {
-      const pluginFilePath = userDir + '/settings/plugins.json';
+      const pluginFilePath = path.resolve(userDir, 'settings', 'plugins.json');
       if (!fs.existsSync(pluginFilePath)) {
         PluginService.instance.saveGlobalPluginSettings();
       } else {
@@ -49,7 +49,7 @@ export default class PluginService {
 
   private saveGlobalPluginSettings() {
     fs.writeFileSync(
-      userDir + '/settings/plugins.json',
+      path.resolve(userDir, 'settings', 'plugins.json'),
       JSON.stringify(PluginService.instance.settings),
     );
   }
@@ -207,7 +207,7 @@ export default class PluginService {
   static refreshAllPlugins() {
     try {
       PluginService.stopAllPlugins();
-      const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
+      const dirents = fs.readdirSync(path.resolve(userDir, 'plugins'), { withFileTypes: true });
 
       for (const dirent of dirents) {
         if (dirent.isDirectory()) {
@@ -226,7 +226,7 @@ export default class PluginService {
 
   static stopAllPlugins() {
     try {
-      const dirents = fs.readdirSync(userDir + '/plugins', { withFileTypes: true });
+      const dirents = fs.readdirSync(path.resolve(userDir, 'plugins'), { withFileTypes: true });
 
       for (const dirent of dirents) {
         if (dirent.isDirectory()) {
@@ -259,9 +259,14 @@ export default class PluginService {
     });
     const tempDir = path.join(userDir, 'tmp', pluginDirName);
 
-    const tempPluginDir = fs.existsSync(tempDir + '/plugin') ? 'plugin' : 'command';
+    const tempPluginDir = fs.existsSync(path.resolve(tempDir, 'plugin'))
+      ? path.resolve(tempDir, 'plugin')
+      : path.resolve(tempDir, 'command');
 
-    if (!fs.existsSync(tempDir + `/${tempPluginDir}`)) {
+    webLog('Temp plugin dir:', tempPluginDir);
+
+    if (!fs.existsSync(path.resolve(tempPluginDir))) {
+      webLog('No plugin folder in temp directory');
       return {
         status: false,
         message: 'No plugin folder in temp directory',
@@ -270,10 +275,19 @@ export default class PluginService {
 
     // Extract the plugin name from package.json
     let finalPluginName = pluginDirName; // Default fallback
-    if (fs.existsSync(tempDir + `/${tempPluginDir}/package.json`)) {
+    let pluginMetaPath = '';
+    if (fs.existsSync(path.resolve(tempPluginDir, 'package.json'))) {
+      pluginMetaPath = path.resolve(tempPluginDir, 'package.json');
+    } else if (fs.existsSync(path.resolve(tempPluginDir, 'build', 'manifest.json'))) {
+      pluginMetaPath = path.resolve(tempPluginDir, 'build', 'manifest.json');
+    }
+
+    if (fs.existsSync(pluginMetaPath)) {
       try {
         let thisPackage = JSON.parse(
-          fs.readFileSync(tempDir + `/${tempPluginDir}/package.json`, { encoding: 'utf-8' }),
+          fs.readFileSync(pluginMetaPath, {
+            encoding: 'utf-8',
+          }),
         );
 
         if (options.createInfo != null) {
@@ -281,7 +295,10 @@ export default class PluginService {
           thisPackage.display_name = options.createInfo.display_name || thisPackage.name;
           thisPackage.author = options.createInfo.author;
           thisPackage.description = options.createInfo.description;
-          fs.writeFileSync(tempDir + `/${tempPluginDir}/package.json`, JSON.stringify(thisPackage));
+          fs.writeFileSync(
+            path.resolve(tempPluginDir, 'package.json'),
+            JSON.stringify(thisPackage),
+          );
         }
 
         // Use the name from package.json as the final plugin directory name
@@ -302,57 +319,57 @@ export default class PluginService {
     const assetsDir = path.join(userDir, 'web', 'assets', finalPluginName);
     const iconDir = path.join(userDir, 'web', 'icons', finalPluginName + '.png');
 
-    if (fs.existsSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'))) {
-      fs.rmSync(path.join(tempDir + `/${tempPluginDir}`, 'node_modules'), { recursive: true });
+    if (fs.existsSync(path.resolve(tempPluginDir, 'node_modules'))) {
+      fs.rmSync(path.resolve(tempPluginDir, 'node_modules'), { recursive: true });
     }
 
     if (fs.existsSync(pluginDir)) {
-      mergeDirectories(tempDir + `/${tempPluginDir}`, pluginDir);
+      mergeDirectories(path.resolve(tempPluginDir), pluginDir);
     } else {
-      await fs.move(tempDir + `/${tempPluginDir}`, pluginDir, { overwrite: true });
+      await fs.move(path.resolve(tempPluginDir), pluginDir, { overwrite: true });
     }
 
     chmodr(pluginDir, 0o777, (err) => {
       if (err) throw err;
     });
 
-    if (fs.existsSync(tempDir + '/overlay') && options.overlay == true) {
-      await fs.move(tempDir + '/overlay', overlayDir, { overwrite: true });
+    if (fs.existsSync(path.resolve(tempDir, 'overlay')) && options.overlay == true) {
+      await fs.move(path.resolve(tempDir, 'overlay'), overlayDir, { overwrite: true });
 
       chmodr(overlayDir, 0o777, (err) => {
         if (err) throw err;
       });
     }
 
-    if (fs.existsSync(tempDir + '/utility') && options.utility == true) {
-      await fs.move(tempDir + '/utility', utilityDir, { overwrite: true });
+    if (fs.existsSync(path.resolve(tempDir, 'utility')) && options.utility == true) {
+      await fs.move(path.resolve(tempDir, 'utility'), utilityDir, { overwrite: true });
 
       chmodr(utilityDir, 0o777, (err) => {
         if (err) throw err;
       });
     }
 
-    if (fs.existsSync(tempDir + '/public') && options.public == true) {
-      await fs.move(tempDir + '/public', publicDir, { overwrite: true });
+    if (fs.existsSync(path.resolve(tempDir, 'public')) && options.public == true) {
+      await fs.move(path.resolve(tempDir, 'public'), publicDir, { overwrite: true });
 
       chmodr(publicDir, 0o777, (err) => {
         if (err) throw err;
       });
     }
 
-    if (fs.existsSync(tempDir + '/settings')) {
-      await fs.move(tempDir + '/settings', settingsDir, { overwrite: true });
+    if (fs.existsSync(path.resolve(tempDir, 'settings'))) {
+      await fs.move(path.resolve(tempDir, 'settings'), settingsDir, { overwrite: true });
 
       chmodr(settingsDir, 0o777, (err) => {
         if (err) throw err;
       });
     }
 
-    if (fs.existsSync(tempDir + '/assets')) {
+    if (fs.existsSync(path.resolve(tempDir, 'assets'))) {
       if (fs.existsSync(assetsDir)) {
-        mergeDirectories(tempDir + '/assets', assetsDir);
+        mergeDirectories(path.resolve(tempDir, 'assets'), assetsDir);
       } else {
-        await fs.move(tempDir + '/assets', assetsDir, { overwrite: true });
+        await fs.move(path.resolve(tempDir, 'assets'), assetsDir, { overwrite: true });
       }
 
       chmodr(assetsDir, 0o777, (err) => {
@@ -362,8 +379,8 @@ export default class PluginService {
       fs.mkdirSync(assetsDir, { recursive: true });
     }
 
-    if (fs.existsSync(tempDir + '/icon.png')) {
-      await fs.move(tempDir + '/icon.png', iconDir, { overwrite: true });
+    if (fs.existsSync(path.resolve(tempDir, 'icon.png'))) {
+      await fs.move(path.resolve(tempDir, 'icon.png'), iconDir, { overwrite: true });
 
       chmodr(iconDir, 0o777, (err) => {
         if (err) throw err;

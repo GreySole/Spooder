@@ -79,8 +79,10 @@ export default function getTwitchRouters() {
         return;
       });
   }
-  router.get('/authorize/bot', (req, res) => authorizeTwitch(req, res, false));
-  router.get('/authorize/broadcaster', (req, res) => authorizeTwitch(req, res, true));
+  router.get('/authorize/bot', (req: Request, res: Response) => authorizeTwitch(req, res, false));
+  router.get('/authorize/broadcaster', (req: Request, res: Response) =>
+    authorizeTwitch(req, res, true),
+  );
 
   router.get('/revoke', async (req, res) => {
     const account = req.query.account as string;
@@ -146,11 +148,11 @@ export default function getTwitchRouters() {
     });
   });
 
-  router.get('/get_available_eventsubs', (req, res) => {
+  router.get('/get_available_eventsubs', (req: Request, res: Response) => {
     res.send(eventsubs);
   });
 
-  router.get('/get_available_scopes', (req, res) => {
+  router.get('/get_available_scopes', (req: Request, res: Response) => {
     res.send(scopes);
   });
 
@@ -345,7 +347,7 @@ export default function getTwitchRouters() {
     registerViewer(token, req, res);
   });
 
-  router.get('/eventsub_types', (req, res) => {
+  router.get('/eventsub_types', (req: Request, res: Response) => {
     res.send(eventsubs);
   });
 
