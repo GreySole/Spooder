@@ -77,8 +77,7 @@ export default class ConfigService {
     initMode:
       (process.argv.length > 2 ? process.argv[2] == '-i' : false) ||
       !fs.existsSync(path.join(userDir, 'settings', 'config.json')),
-    safeMode: process.argv.length > 2 ? process.argv[2] == '-e' : false,
-    noAutoLogin: process.argv.length > 2 ? process.argv[2] == '-a' : false,
+    safeMode: process.argv.length > 2 ? process.argv[2] == '-s' : false,
   };
 
   private config: ConfigFile = {

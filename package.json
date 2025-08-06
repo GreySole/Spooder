@@ -1,16 +1,14 @@
 {
   "name": "spooder",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.ts",
   "scripts": {
-    "start": "tsx --enable-source-maps src/spooder.ts",
-    "dev": "tsx --enable-source-maps src/spooder.ts -d",
-    "init": "tsx --enable-source-maps spooder.ts -i",
-    "safe": "tsx --enable-source-maps spooder.ts -e",
-    "start-noautologin": "tsx --enable-source-maps spooder.ts -a",
-    "build": "tsc -p tsconfig.build.json",
-    "start-build": "node --enable-source-maps dist/spooder.js"
+    "start": "node --enable-source-maps dist/spooder.js",
+    "dev": "tsx --enable-source-maps src/spooder.ts",
+    "init": "tsx --enable-source-maps src/spooder.ts -i",
+    "safe": "tsx --enable-source-maps src/spooder.ts -s",
+    "build": "tsc -p tsconfig.build.json"
   },
   "author": "Grey Sole",
   "license": "GPL-3.0",

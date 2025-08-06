@@ -4,12 +4,13 @@ import chmodr from 'chmodr';
 import fs from 'fs-extra';
 import { KeyedObject, userDir } from '../../Types';
 import OSCService from './OSCService';
-import { webLog } from '../Logging';
+import { spooderLog, webLog } from '../Logging';
 import childProcess from 'child_process';
 import Plugin from '../../Plugin';
 import { createRequire } from 'module';
 import ModuleService from './ModuleService';
 import ShareService from './ShareService';
+import ConfigService from './ConfigService';
 
 interface PluginMap {
   [key: string]: Plugin;
@@ -39,8 +40,11 @@ export default class PluginService {
     } catch (e: any) {
       console.log('Plugin settings file error', e);
     }
-
-    PluginService.refreshAllPlugins();
+    if (!ConfigService.getFlags().safeMode) {
+      PluginService.refreshAllPlugins();
+    } else {
+      spooderLog('PluginService', 'Safe mode is enabled, skipping plugin loading.');
+    }
   }
 
   private saveGlobalPluginSettings() {

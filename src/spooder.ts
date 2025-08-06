@@ -12,6 +12,7 @@ import UserService from './core/service/UserService';
 import { WebService } from './core/service/WebService';
 import { userDir, KeyedObject } from './Types';
 import { connectToIPC, sendToApp } from './core/util/AppUtil';
+import { spooderLog } from './core/Logging';
 
 const logDir = path.join(userDir, 'log');
 
@@ -53,6 +54,7 @@ process.on('uncaughtException', function (err) {
 
 new ConfigService();
 const initMode = ConfigService.getFlags().initMode;
+const safeMode = ConfigService.getFlags().safeMode;
 
 if (initMode) {
   new ModuleService(() => {});
@@ -71,12 +73,21 @@ if (initMode) {
         new MonitorService();
         new UserService();
         console.log('Logging into modules');
-        await ModuleService.autoLoginModules();
+        if (!safeMode) {
+          await ModuleService.autoLoginModules();
+        } else {
+          spooderLog('Safe mode enabled, skipping module auto login');
+        }
         console.log('Initializing plugins');
         new PluginService();
 
         console.log('Refreshing share users');
-        ShareService.refreshShareUsers();
+        if (!safeMode) {
+          ShareService.refreshShareUsers();
+        } else {
+          spooderLog('Safe mode enabled, skipping share user refresh');
+        }
+
         console.log('Starting Public Hosting');
         WebService.startPublicHosting();
         sendToApp({ type: 'status', message: 'ready' });
