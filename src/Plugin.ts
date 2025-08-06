@@ -157,11 +157,11 @@ export default class Plugin {
       let modulePath = undefined;
       if (this.pluginMode === PluginMode.ncc) {
         modulePath = isWindows
-          ? `file://${pluginPath}/build/${pluginMeta.main}`
+          ? `file://${pluginPath}\\build\\${pluginMeta.main}`
           : `${pluginPath}/build/${pluginMeta.main}`;
       } else {
         modulePath = isWindows
-          ? `file://${pluginPath}/${pluginMeta.main}`
+          ? `file://${pluginPath}\\${pluginMeta.main}`
           : `${pluginPath}/${pluginMeta.main}`;
       }
 
@@ -365,7 +365,7 @@ export default class Plugin {
         );
       });
     }
-    if (this.devMode && (PluginMode.ts === this.pluginMode || this.dirname === 'animallauncher')) {
+    if (this.devMode && PluginMode.ts === this.pluginMode) {
       const mainFile =
         this.pluginMode === PluginMode.ts
           ? `${this.main.substring(this.main.lastIndexOf('/') + 1).replace('.ts', '.js')}`
@@ -385,6 +385,7 @@ export default class Plugin {
             const manifest = {
               name: this.name,
               main: mainFile,
+              author: this.author,
               version: this.version,
               description: this.description,
             };
