@@ -49,7 +49,6 @@ export function ShareRoutes() {
 
   router.get('/active_shares', async (req: Request, res: Response) => {
     const activeShares = await ShareService.getActiveShares();
-    console.log('ACTIVE SHARES', activeShares);
     res.send(activeShares);
   });
 

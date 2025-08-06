@@ -52,7 +52,6 @@ export default function EventSoftwareCommand(
             } else if (eCommand.priority < eventCommand.command.priority) {
               commandUsed = true;
             }
-
             continue;
           }
         }

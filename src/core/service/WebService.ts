@@ -3,7 +3,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { userDir, frontendDir } from '../../Types';
-import { logToFile, webLog } from '../Logging';
+import { logToFile, spooderLog, webLog } from '../Logging';
 import ConfigService from './ConfigService';
 import { ConfigRoutes } from '../routes/ConfigRoutes';
 import { PluginRoutes } from '../routes/PluginRoutes';
@@ -343,6 +343,10 @@ export class WebService {
   }
 
   static startPublicHosting() {
+    if (ConfigService.getFlags().safeMode) {
+      spooderLog('Safe mode enabled, skipping public hosting start');
+      return;
+    }
     const config = ConfigService.getConfig();
     if (config.network.externalhandle == 'disabled') {
       return;
