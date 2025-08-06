@@ -27,7 +27,7 @@
     "discord.js": "^14.7.1",
     "eslint": "^8.57.0",
     "express": "^5.1.0",
-    "fs-extra": "^10.1.0",
+    "fs-extra": "^11.3.1",
     "googleapis": "^118.0.0",
     "multer": "^1.4.5-lts.1",
     "obs-websocket-js": "^5.0.0",
