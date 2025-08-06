@@ -719,27 +719,39 @@ export function PluginRoutes() {
     res.send(plugin);
   });
 
-  router.get('/api/:apiPath', (req: Request, res: Response) => {
-    if (pluginApi.local.get[`${req.params.apiPath}`]) {
-      pluginApi.local.get[`${req.params.apiPath}`](req, res);
+  router.get('/api/*apiPath', (req: Request, res: Response) => {
+    const apiPath = Array.isArray(req.params.apiPath)
+      ? req.params.apiPath.join('/')
+      : req.params.apiPath;
+    if (pluginApi.local.get[apiPath]) {
+      pluginApi.local.get[apiPath](req, res);
     }
   });
 
-  router.post('/api/:apiPath', (req: Request, res: Response) => {
-    if (pluginApi.local.post[`${req.params.apiPath}`]) {
-      pluginApi.local.post[`${req.params.apiPath}`](req, res);
+  router.post('/api/*apiPath', (req: Request, res: Response) => {
+    const apiPath = Array.isArray(req.params.apiPath)
+      ? req.params.apiPath.join('/')
+      : req.params.apiPath;
+    if (pluginApi.local.post[apiPath]) {
+      pluginApi.local.post[apiPath](req, res);
     }
   });
 
-  publicRouter.get('/api/:apiPath', (req: Request, res: Response) => {
-    if (pluginApi.public.get[`${req.params.apiPath}`]) {
-      pluginApi.public.get[`${req.params.apiPath}`](req, res);
+  publicRouter.get('/api/*apiPath', (req: Request, res: Response) => {
+    const apiPath = Array.isArray(req.params.apiPath)
+      ? req.params.apiPath.join('/')
+      : req.params.apiPath;
+    if (pluginApi.public.get[apiPath]) {
+      pluginApi.public.get[apiPath](req, res);
     }
   });
 
-  publicRouter.post('/api/:apiPath', (req: Request, res: Response) => {
-    if (pluginApi.public.post[`${req.params.apiPath}`]) {
-      pluginApi.public.post[`${req.params.apiPath}`](req, res);
+  publicRouter.post('/api/*apiPath', (req: Request, res: Response) => {
+    const apiPath = Array.isArray(req.params.apiPath)
+      ? req.params.apiPath.join('/')
+      : req.params.apiPath;
+    if (pluginApi.public.post[apiPath]) {
+      pluginApi.public.post[apiPath](req, res);
     }
   });
 
