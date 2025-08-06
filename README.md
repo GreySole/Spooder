@@ -1,25 +1,3 @@
-###### Table of Contents<br>
-
-<a href="#getting-started">Getting Started</a><br>
-<a href="#user-authentication">User Authentication</a><br>
-<a href="#udp-clients">UDP Clients</a><br>
-<a href="#creating-events">Creating Events</a><br>
-<a href="#helping-commands">Helping Commands</a><br>
-<a href="#toggling-events">Toggling Events</a><br>
-<a href="#moderating-spooder">Moderating Spooder</a><br>
-<a href="#the-mod-ui">The Mod UI</a><br>
-<a href="#authenticating-mods">Authenticating Mods</a><br>
-<a href="#creatingmanaging-plugins">Creating/Managing Plugins</a><br>
-<a href="#sharing-pluginscommands">Sharing Plugins/Commands</a><br>
-<a href="#osc-tunnels">OSC Tunnels</a><br>
-<a href="#accessing-externally">Accessing Externally</a><br>
-<a href="#eventsubs">EventSubs</a><br>
-<a href="#connecting-to-obs">Connecting to OBS</a><br>
-<a href="#connecting-to-discord-wip">Connecting to Discord</a><br>
-<a href="#discord-master-and-trusted-handlers">Discord Master and Trusted Handlers</a><br>
-<a href="#developing-web-ui-and-mod-ui">Developing Web UI and Mod UI</a><br>
-<a href="#have-questions">Have Questions?</a><br>
-
 # Getting Started
 
 ## Windows
