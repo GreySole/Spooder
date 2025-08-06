@@ -82,7 +82,7 @@ export default class Discord implements CommunityModuleInterface {
         });
         res(true);
       } else {
-        discordLog('No Discord token. You can set this in the Config tab.');
+        discordLog('No Discord token.');
         res(false);
       }
     });

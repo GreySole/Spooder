@@ -1,4 +1,4 @@
-import { json, Response, Router } from 'express';
+import { json, Request, Response, Router } from 'express';
 import ModuleService from '../../core/service/ModuleService';
 import OBS from './main';
 
@@ -17,7 +17,7 @@ export default function ObsControlRouter() {
     console.log('OBS Control Error', reason);
   }
 
-  router.get('/get_output_status', (req, res) => {
+  router.get('/get_output_status', (req: Request, res: Response) => {
     obsWebsocket
       .call('GetStats')
       .then((data) => obsSuccess(data, res))
@@ -25,14 +25,14 @@ export default function ObsControlRouter() {
   });
 
   //Streaming
-  router.get('/start_stream', (req, res) => {
+  router.get('/start_stream', (req: Request, res: Response) => {
     obsWebsocket
       .call('StartStream')
       .then((data) => obsSuccess(data, res))
       .catch(obsError);
   });
 
-  router.get('/stop_stream', (req, res) => {
+  router.get('/stop_stream', (req: Request, res: Response) => {
     obsWebsocket
       .call('StopStream')
       .then((data) => obsSuccess(data, res))
@@ -75,7 +75,7 @@ export default function ObsControlRouter() {
   });
 
   //Studio Mode
-  router.post('/set_studio_mode', (req, res) => {
+  router.post('/set_studio_mode', (req: Request, res: Response) => {
     const studioModeEnabled = req.body.studioModeEnabled;
     console.log(req.body);
     obsWebsocket
@@ -84,7 +84,7 @@ export default function ObsControlRouter() {
       .catch(obsError);
   });
 
-  router.post('/set_current_preview_scene', (req, res) => {
+  router.post('/set_current_preview_scene', (req: Request, res: Response) => {
     const sceneName = req.body.sceneName;
     obsWebsocket
       .call('SetCurrentPreviewScene', { sceneName: sceneName })
@@ -92,7 +92,7 @@ export default function ObsControlRouter() {
       .catch(obsError);
   });
 
-  router.post('/set_current_program_scene', (req, res) => {
+  router.post('/set_current_program_scene', (req: Request, res: Response) => {
     const sceneName = req.body.sceneName;
     obsWebsocket
       .call('SetCurrentProgramScene', { sceneName: sceneName })
@@ -100,7 +100,7 @@ export default function ObsControlRouter() {
       .catch(obsError);
   });
 
-  router.get('/transition', (req, res) => {
+  router.get('/transition', (req: Request, res: Response) => {
     obsWebsocket
       .call('TriggerStudioModeTransition')
       .then((data) => obsSuccess(data, res))
@@ -108,7 +108,7 @@ export default function ObsControlRouter() {
   });
 
   //Volume
-  router.post('/set_input_mute', (req, res) => {
+  router.post('/set_input_mute', (req: Request, res: Response) => {
     const inputName = req.body.inputName;
     const inputMuted = req.body.inputMuted;
     obsWebsocket
@@ -117,7 +117,7 @@ export default function ObsControlRouter() {
       .catch(obsError);
   });
 
-  router.post('/set_input_volume', (req, res) => {
+  router.post('/set_input_volume', (req: Request, res: Response) => {
     const inputName = req.body.inputName;
     const inputVolumeMul = req.body.inputVolumeMul;
     obsWebsocket
@@ -127,7 +127,7 @@ export default function ObsControlRouter() {
   });
 
   //Scene Item
-  router.post('/set_scene_item_enabled', (req, res) => {
+  router.post('/set_scene_item_enabled', (req: Request, res: Response) => {
     const sceneName = req.body.sceneName;
     const sceneItemId = req.body.sceneItemId;
     const sceneItemEnabled = req.body.sceneItemEnabled;

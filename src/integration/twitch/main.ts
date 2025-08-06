@@ -212,9 +212,7 @@ export default class Twitch implements StreamModuleInterface {
         this.oauth['client-secret'] == '' ||
         this.oauth['client-secret'] == null
       ) {
-        twitchLog(
-          "No chat oauth saved. Go into the Web UI, click the top for the navigation menu, then click 'authorize'. You must be on localhost to make auth tokens.",
-        );
+        twitchLog('No Twitch tokens.');
         res(false);
         return;
       }
