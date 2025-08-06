@@ -385,6 +385,7 @@ export default class Plugin {
             const manifest = {
               name: this.name,
               main: mainFile,
+              author: this.author,
               version: this.version,
               description: this.description,
             };
