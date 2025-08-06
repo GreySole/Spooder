@@ -157,11 +157,11 @@ export default class Plugin {
       let modulePath = undefined;
       if (this.pluginMode === PluginMode.ncc) {
         modulePath = isWindows
-          ? `file://${pluginPath}/build/${pluginMeta.main}`
+          ? `file://${pluginPath}\\build\\${pluginMeta.main}`
           : `${pluginPath}/build/${pluginMeta.main}`;
       } else {
         modulePath = isWindows
-          ? `file://${pluginPath}/${pluginMeta.main}`
+          ? `file://${pluginPath}\\${pluginMeta.main}`
           : `${pluginPath}/${pluginMeta.main}`;
       }
 
