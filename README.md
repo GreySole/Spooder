@@ -2,7 +2,7 @@
 
 ## Windows
 
-Get the installer app! It has Node.js built in and will take care of installation for you. (Other platforms will be supported later. Linux is next.)
+Get the Manager app on <a href="https://github.com/GreySole/SpooderInstallerSharp/releases/latest">Windows!</a> It has Node.js built in and will take care of installation for you. (Other platforms will be supported later. Linux is next.)
 
 ## Manual (Command line)
 
