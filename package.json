@@ -13,12 +13,12 @@
   "author": "Grey Sole",
   "license": "GPL-3.0",
   "dependencies": {
-    "@discordjs/voice": "^0.15.0",
-    "@ngrok/ngrok": "^1.5.1",
+    "@discordjs/voice": "^0.18.0",
+    "@ngrok/ngrok": "^1.5.2",
     "@spooder/osc-js": "^2.4.6",
     "@vercel/ncc": "^0.38.3",
     "adm-zip": "^0.5.9",
-    "axios": "^1.2.1",
+    "axios": "^1.11.0",
     "buffer": "^6.0.3",
     "chmodr": "^1.2.0",
     "cookie-parser": "^1.4.6",
@@ -26,8 +26,8 @@
     "discord-rpc": "^4.0.1",
     "discord.js": "^14.7.1",
     "eslint": "^8.57.0",
-    "express": "^4.18.1",
-    "fs-extra": "^10.1.0",
+    "express": "^5.1.0",
+    "fs-extra": "^11.3.1",
     "googleapis": "^118.0.0",
     "multer": "^1.4.5-lts.1",
     "obs-websocket-js": "^5.0.0",
@@ -38,7 +38,7 @@
     "tmi.js": "^1.8.5",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.1",
-    "typescript": "^5.5.3",
+    "typescript": "^5.9.2",
     "uuid": "^11.1.0",
     "ws": "^8.18.1"
   },
@@ -46,10 +46,10 @@
     "@types/adm-zip": "^0.5.5",
     "@types/chmodr": "^1.0.3",
     "@types/cookie-parser": "^1.4.7",
-    "@types/express": "^4.17.21",
+    "@types/express": "^5.0.3",
     "@types/fs-extra": "^11.0.4",
     "@types/multer": "^1.4.12",
-    "@types/node": "^22.15.18",
+    "@types/node": "^24.2.0",
     "@types/tmi.js": "^1.8.6"
   }
 }
