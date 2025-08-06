@@ -365,7 +365,7 @@ export default class Plugin {
         );
       });
     }
-    if (this.devMode && (PluginMode.ts === this.pluginMode || this.dirname === 'animallauncher')) {
+    if (this.devMode && PluginMode.ts === this.pluginMode) {
       const mainFile =
         this.pluginMode === PluginMode.ts
           ? `${this.main.substring(this.main.lastIndexOf('/') + 1).replace('.ts', '.js')}`
