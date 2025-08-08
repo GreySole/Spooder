@@ -193,7 +193,7 @@ export default class Plugin {
 
       let modulePath = undefined;
       if (this.pluginMode === PluginMode.ncc) {
-        modulePath = path.resolve(pluginPath, 'build', pluginMeta.main);
+        modulePath = path.resolve(pluginPath, 'build', 'index.js');
       } else {
         modulePath = path.resolve(pluginPath, pluginMeta.main);
       }
@@ -223,7 +223,7 @@ export default class Plugin {
 
       //console.log('Using tsconfig:', tsConfigPath);
 
-      let module: any;
+      let requiredModule: any;
 
       this.require = createRequire(resolve(pluginPath)); // Adjust to the plugin's entry point
       if (fs.existsSync(tsConfigPath) && devMode) {
@@ -232,13 +232,14 @@ export default class Plugin {
           skipProject: false,
           transpileOnly: true,
         });
-        module = this.require(modulePath).default;
-      } else if (this.pluginMode === PluginMode.js || this.pluginMode === PluginMode.ncc) {
-        console.log('Loading DEFAULT MODULE in plugin', modulePath);
-        module = this.require(modulePath).default;
+        requiredModule = this.require(modulePath);
+      } else if (this.pluginMode === PluginMode.ncc) {
+        requiredModule = this.require(modulePath);
       } else {
-        module = this.require(modulePath);
+        requiredModule = this.require(modulePath);
       }
+
+      const module = requiredModule.default || requiredModule;
 
       if (!module) {
         throw new Error('Plugin module not found');
@@ -512,15 +513,16 @@ export default class Plugin {
         );
       });
     }
-    if (this.devMode && PluginMode.ts === this.pluginMode) {
+    console.log('IS DEV MODE', this.devMode);
+    if (this.devMode) {
       const mainFile =
         this.pluginMode === PluginMode.ts
-          ? `${this.main.substring(this.main.lastIndexOf('/') + 1).replace('.ts', '.js')}`
+          ? `js/${this.main.substring(this.main.lastIndexOf('/') + 1).replace('.ts', '.js')}`
           : this.main;
       console.log('Building plugin', this.dirname, mainFile);
       return new Promise((res, rej) => {
         childProcess.exec(
-          `ncc build ${this.pluginMode === PluginMode.ts ? `js/${mainFile}` : mainFile} -o build --source-map`,
+          `ncc build ${mainFile} -o build --source-map --minify`,
           {
             cwd: path.resolve('user', 'plugins', this.dirname),
           },
@@ -548,7 +550,10 @@ export default class Plugin {
                 JSON.stringify(manifest, null, 2),
                 { encoding: 'utf8' },
               );
-              fs.rmSync(path.resolve('user', 'plugins', this.dirname, 'js'), { recursive: true });
+              const jsPath = path.resolve('user', 'plugins', this.dirname, 'js');
+              if (fs.existsSync(jsPath)) {
+                fs.rmSync(jsPath, { recursive: true });
+              }
             } catch (e) {
               console.log('Failed to write manifest', e);
             }
