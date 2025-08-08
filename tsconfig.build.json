@@ -8,11 +8,6 @@
         "moduleResolution": "node",
         "module": "CommonJS",
         "target": "ES2021",
-        "baseUrl": "./",
-        "paths": {
-            "src/*": [
-                "./src/*"
-            ]
-        }
+        "baseUrl": "./src"
     }
 }

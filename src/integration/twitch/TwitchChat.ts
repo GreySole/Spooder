@@ -6,6 +6,7 @@ import PluginService from '../../core/service/PluginService';
 import ShareService from '../../core/service/ShareService';
 import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types';
 import { processStreamMessage } from '../../core/util/ChatUtil';
+import { processTwitchEvent, twitchEvents } from './functions/processTwitchMessage';
 
 function stringifyArray(a: string[]) {
   return a.join(', ');
@@ -66,49 +67,6 @@ export default class TwitchChat {
     return message;
   };
 
-  processDeletedMessage = (
-    channel: string,
-    username: string,
-    deletedMessage: string,
-    userstate: KeyedObject,
-  ) => {
-    const activePlugins = PluginService.getActivePlugins();
-    const homeChannel = this.getModule().api.homeChannel;
-    const channelName = channel.replace('#', '');
-
-    let shareId = undefined;
-
-    if (channelName !== this.getModule().api.homeChannel) {
-      shareId = this.getModule().shareUsers[channelName];
-    }
-
-    let message = {
-      channel: channelName,
-      platform: 'twitch',
-      username: username,
-      deletedMessage: deletedMessage,
-      userstate: userstate,
-    };
-
-    for (let p in activePlugins) {
-      try {
-        if (channelName != homeChannel) {
-          if (ShareService.hasPluginEnabled(shareId, p)) {
-            if (activePlugins[p].onEvent != null) {
-              activePlugins[p].onEvent('messagedeleted', message);
-            }
-          }
-        } else {
-          if (activePlugins[p].onEvent != null) {
-            activePlugins[p].onEvent('messagedeleted', message);
-          }
-        }
-      } catch (e) {
-        twitchLog(e);
-      }
-    }
-  };
-
   processMessage = (channel: string, tags: KeyedObject, txt: string, self: boolean) => {
     if (self) return;
     const streamMessage = this.twitchjsify(channel, tags, txt);
@@ -130,10 +88,6 @@ export default class TwitchChat {
     };
   };
 
-  processCheer = (channel: string, userstate: KeyedObject, message: string) => {
-    twitchLog('CHEER', userstate);
-  };
-
   runChat = async (startCase?: string) => {
     const shares = ShareService.getShares();
     const botUsername = this.getModule().api.botUsername;
@@ -150,7 +104,6 @@ export default class TwitchChat {
         await this.chat.disconnect();
       }
       this.chat.removeListener('message', this.processMessage.bind(this));
-      this.chat.removeListener('cheer', this.processCheer.bind(this));
     }
 
     this.chat = new tmi.Client({
@@ -202,8 +155,14 @@ export default class TwitchChat {
       });
 
     this.chat.on('message', this.processMessage.bind(this));
-    this.chat.on('messagedeleted', this.processDeletedMessage.bind(this));
-    this.chat.on('cheer', this.processCheer.bind(this));
+
+    // Register all other Twitch events except 'chat' and 'message'
+
+    twitchEvents.forEach((event) => {
+      this.chat?.on(event as any, (...args: any[]) => {
+        processTwitchEvent.call(this, event, ...args);
+      });
+    });
   };
 
   getChatCommands = (shareChannel: string) => {

@@ -2,7 +2,7 @@ import { userDir, KeyedObject, StreamMessage } from './Types';
 import path, { resolve } from 'path';
 import fs from 'fs';
 import ModuleService from './core/service/ModuleService';
-import os from 'os';
+import os, { type } from 'os';
 import OSC from '@spooder/osc-js';
 import { createRequire } from 'module';
 import PluginService from './core/service/PluginService';
@@ -23,6 +23,7 @@ interface PluginSpooderModules {
   stream: KeyedObject;
   community: KeyedObject;
   control: KeyedObject;
+  [key: string]: KeyedObject;
 }
 
 interface PluginPublicInfo {
@@ -64,6 +65,7 @@ interface PluginModule {
   osc: PluginOscInfo;
   public: PluginPublicInfo;
   chat: PluginChatInfo;
+  subscribeToModuleEvent: (eventName: string, callback: Function) => void;
   registerPluginApi: (
     router: 'local' | 'public',
     method: 'get' | 'post' | 'put' | 'delete',
@@ -73,6 +75,15 @@ interface PluginModule {
   getActiveViewer: (req: Request) => KeyedObject | undefined;
   getAssetPath: (assetPath: string) => string;
   getLocalFilePath: (filePath: string) => string;
+  getSettings: () => KeyedObject | undefined;
+  setSettings: (settings: KeyedObject) => void;
+
+  getShareSettings: (shareId: string) => KeyedObject | undefined;
+  setShareSettings: (shareId: string, settings: KeyedObject) => void;
+  getSettingsForm: () => KeyedObject | undefined;
+  setSettingsForm: (form: KeyedObject) => void;
+  getEventsForm: () => KeyedObject | undefined;
+  setEventsForm: (form: KeyedObject) => void;
   getOverlayUrl: () => string;
   getUtilityUrl: () => string;
   settings?: KeyedObject;
@@ -87,11 +98,10 @@ interface PluginModule {
 }
 
 enum PluginMode {
-  ncc = 'ncc',
-  js = 'js',
-  ts = 'ts',
-  legacy = 'legacy',
-  none = 'none',
+  ncc = 'NCC',
+  js = 'JS',
+  ts = 'TS',
+  none = 'None',
 }
 
 export default class Plugin {
@@ -114,6 +124,24 @@ export default class Plugin {
   private modulePath: string | undefined = undefined;
   private pluginPath: string | undefined = undefined;
   private require: NodeJS.Require | undefined = undefined;
+
+  private moduleEventSubscriptions: PluginSpooderModules = {
+    stream: {
+      subscribeToModuleEvent: (eventName: string, callback: Function) => {
+        this.moduleEventSubscriptions.stream[eventName] = callback;
+      },
+    },
+    community: {
+      subscribeToModuleEvent: (eventName: string, callback: Function) => {
+        this.moduleEventSubscriptions.community[eventName] = callback;
+      },
+    },
+    control: {
+      subscribeToModuleEvent: (eventName: string, callback: Function) => {
+        this.moduleEventSubscriptions.control[eventName] = callback;
+      },
+    },
+  };
 
   constructor(pluginDirName: string, pluginPath: string) {
     const tsConfigPath = resolve(pluginPath, 'tsconfig.json');
@@ -143,7 +171,7 @@ export default class Plugin {
             encoding: 'utf8',
           }),
         );
-        this.pluginMode = fs.existsSync(tsConfigPath) ? PluginMode.ts : PluginMode.legacy;
+        this.pluginMode = fs.existsSync(tsConfigPath) ? PluginMode.ts : PluginMode.js;
         devMode = true;
       }
 
@@ -226,10 +254,63 @@ export default class Plugin {
 
       const functions = ModuleService.getModulePluginFunctions();
 
+      const streamModuleNames = Object.keys(functions.stream);
+      const communityModuleNames = Object.keys(functions.community);
+      const controlModuleNames = Object.keys(functions.control);
+
+      this.moduleEventSubscriptions = {
+        stream: streamModuleNames.reduce((acc, name) => ({ ...acc, [name]: {} }), {}),
+        community: communityModuleNames.reduce((acc, name) => ({ ...acc, [name]: {} }), {}),
+        control: controlModuleNames.reduce((acc, name) => ({ ...acc, [name]: {} }), {}),
+      };
+
+      const subscribeToModuleEvent = (
+        moduleType: 'stream' | 'community' | 'control',
+        moduleName: string,
+        eventName: string,
+        callback: Function,
+      ) => {
+        const moduleEvents = this.moduleEventSubscriptions[moduleType][moduleName];
+        if (moduleEvents) {
+          moduleEvents[eventName] = callback;
+        }
+      };
+
+      // Add subscribeToModuleEvent to each individual module
+      const enhancedStreamFunctions = {} as KeyedObject;
+      for (const [moduleName, moduleFunction] of Object.entries(functions.stream)) {
+        enhancedStreamFunctions[moduleName] = {
+          ...moduleFunction,
+          subscribeToModuleEvent: (eventName: string, callback: Function) => {
+            subscribeToModuleEvent('stream', moduleName, eventName, callback);
+          },
+        };
+      }
+
+      const enhancedCommunityFunctions = {} as KeyedObject;
+      for (const [moduleName, moduleFunction] of Object.entries(functions.community)) {
+        enhancedCommunityFunctions[moduleName] = {
+          ...moduleFunction,
+          subscribeToModuleEvent: (eventName: string, callback: Function) => {
+            subscribeToModuleEvent('community', moduleName, eventName, callback);
+          },
+        };
+      }
+
+      const enhancedControlFunctions = {} as KeyedObject;
+      for (const [moduleName, moduleFunction] of Object.entries(functions.control)) {
+        enhancedControlFunctions[moduleName] = {
+          ...moduleFunction,
+          subscribeToModuleEvent: (eventName: string, callback: Function) => {
+            subscribeToModuleEvent('control', moduleName, eventName, callback);
+          },
+        };
+      }
+
       this.pluginModule.modules = {
-        stream: functions.stream,
-        community: functions.community,
-        control: functions.control,
+        stream: enhancedStreamFunctions,
+        community: enhancedCommunityFunctions,
+        control: enhancedControlFunctions,
       } as PluginSpooderModules;
       this.pluginModule.osc = {
         sendToTCP: OSCService.sendToTCP,
@@ -249,8 +330,61 @@ export default class Plugin {
         return path.resolve(userDir, 'web', 'assets', this.dirname, assetPath);
       };
 
-      this.pluginModule.getLocalFilePath = (filePath: string) => {
+      const getLocalFilePath = (filePath: string) => {
         return path.resolve(userDir, 'plugins', this.dirname, filePath);
+      };
+
+      this.pluginModule.getLocalFilePath = getLocalFilePath;
+      this.pluginModule.getSettings = () => {
+        const settingsPath = getLocalFilePath('settings.json');
+        if (!fs.existsSync(settingsPath)) {
+          return undefined;
+        }
+        return JSON.parse(fs.readFileSync(settingsPath, { encoding: 'utf8' }));
+      };
+
+      this.pluginModule.setSettings = (settings: KeyedObject) => {
+        const settingsPath = getLocalFilePath('settings.json');
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), { encoding: 'utf8' });
+      };
+
+      this.pluginModule.getShareSettings = (shareId: string) => {
+        const settingsPath = getLocalFilePath(path.join('_share', `${shareId}.json`));
+        if (!fs.existsSync(settingsPath)) {
+          return undefined;
+        }
+        return JSON.parse(fs.readFileSync(settingsPath, { encoding: 'utf8' }));
+      };
+
+      this.pluginModule.setShareSettings = (shareId: string, settings: KeyedObject) => {
+        const settingsPath = getLocalFilePath(path.join('_share', `${shareId}.json`));
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), { encoding: 'utf8' });
+      };
+
+      this.pluginModule.getSettingsForm = () => {
+        const formPath = getLocalFilePath('settings-form.json');
+        if (!fs.existsSync(formPath)) {
+          return undefined;
+        }
+        return JSON.parse(fs.readFileSync(formPath, { encoding: 'utf8' }));
+      };
+
+      this.pluginModule.setSettingsForm = (form: KeyedObject) => {
+        const formPath = getLocalFilePath('settings-form.json');
+        fs.writeFileSync(formPath, JSON.stringify(form, null, 2), { encoding: 'utf8' });
+      };
+
+      this.pluginModule.getEventsForm = () => {
+        const formPath = getLocalFilePath('events-form.json');
+        if (!fs.existsSync(formPath)) {
+          return undefined;
+        }
+        return JSON.parse(fs.readFileSync(formPath, { encoding: 'utf8' }));
+      };
+
+      this.pluginModule.setEventsForm = (form: KeyedObject) => {
+        const formPath = getLocalFilePath('events-form.json');
+        fs.writeFileSync(formPath, JSON.stringify(form, null, 2), { encoding: 'utf8' });
       };
 
       this.pluginModule.getOverlayUrl = () => {
@@ -455,6 +589,33 @@ export default class Plugin {
       this.pluginModule?.onEvent?.(event, data);
     } catch (e) {
       pluginLog(this.dirname, this.dirname + ' onEvent failed:', e);
+    }
+  }
+
+  onStreamModuleEvent(moduleName: string, eventName: string, data: KeyedObject) {
+    if (
+      this.moduleEventSubscriptions.stream[moduleName] &&
+      this.moduleEventSubscriptions.stream[moduleName][eventName]
+    ) {
+      this.moduleEventSubscriptions.stream[moduleName][eventName](data);
+    }
+  }
+
+  onCommunityModuleEvent(moduleName: string, eventName: string, data: KeyedObject) {
+    if (
+      this.moduleEventSubscriptions.community[moduleName] &&
+      this.moduleEventSubscriptions.community[moduleName][eventName]
+    ) {
+      this.moduleEventSubscriptions.community[moduleName][eventName](data);
+    }
+  }
+
+  onControlModuleEvent(moduleName: string, eventName: string, data: KeyedObject) {
+    if (
+      this.moduleEventSubscriptions.control[moduleName] &&
+      this.moduleEventSubscriptions.control[moduleName][eventName]
+    ) {
+      this.moduleEventSubscriptions.control[moduleName][eventName](data);
     }
   }
 
