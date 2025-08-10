@@ -312,6 +312,7 @@ export default class PluginService {
 
     // Define directories using the final plugin name
     const pluginDir = path.join(userDir, 'plugins', finalPluginName);
+    const settingsFormFile = path.join(pluginDir, 'settings-form.json');
     const overlayDir = path.join(userDir, 'web', 'overlay', finalPluginName);
     const utilityDir = path.join(userDir, 'web', 'utility', finalPluginName);
     const publicDir = path.join(userDir, 'web', 'public', finalPluginName);
@@ -387,6 +388,31 @@ export default class PluginService {
       });
     }
 
+    if (fs.existsSync(settingsFormFile)) {
+      // Read the settings form file to get defaults
+      try {
+        const settingsFormContent = JSON.parse(
+          fs.readFileSync(settingsFormFile, { encoding: 'utf8' }),
+        );
+        if (settingsFormContent.defaults && settingsFormContent.form) {
+          const settingsFile = path.join(pluginDir, 'settings.json');
+
+          // Only create settings.json if it doesn't exist
+          if (!fs.existsSync(settingsFile)) {
+            // Process defaults to handle subform types
+            const processedDefaults = processDefaultsForSubforms(
+              settingsFormContent.defaults,
+              settingsFormContent.form,
+            );
+            fs.writeFileSync(settingsFile, JSON.stringify(processedDefaults, null, 2));
+            webLog(`Created default settings.json for plugin: ${finalPluginName}`);
+          }
+        }
+      } catch (e) {
+        webLog(`Error creating default settings for plugin ${finalPluginName}:`, e);
+      }
+    }
+
     webLog('Plugin added successfully!');
     fs.rm(tempDir, { recursive: true });
     await PluginService.installPluginDependencies(finalPluginName, pluginDir);
@@ -437,6 +463,48 @@ export default class PluginService {
       });
     });
   }
+}
+
+//Process defaults to handle subform types by creating empty objects for subform fields
+function processDefaultsForSubforms(defaults: KeyedObject, form: KeyedObject): KeyedObject {
+  const processedDefaults = { ...defaults };
+
+  // Recursively check form structure for subform types
+  function checkFormForSubforms(
+    formObj: KeyedObject,
+    defaultsObj: KeyedObject,
+    path: string[] = [],
+  ) {
+    for (const key in formObj) {
+      const formField = formObj[key];
+
+      if (formField && typeof formField === 'object') {
+        // Check if this field is a subform type
+        if (formField.type === 'subform') {
+          // Create empty object for subform in defaults
+          setNestedValue(defaultsObj, [...path, key], {});
+        } else if (formField.fields && typeof formField.fields === 'object') {
+          // Recursively check nested fields (like sections)
+          checkFormForSubforms(formField.fields, defaultsObj, [...path, key]);
+        }
+      }
+    }
+  }
+
+  // Helper function to set nested values in an object
+  function setNestedValue(obj: KeyedObject, path: string[], value: any) {
+    let current = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+      if (!current[path[i]] || typeof current[path[i]] !== 'object') {
+        current[path[i]] = {};
+      }
+      current = current[path[i]];
+    }
+    current[path[path.length - 1]] = value;
+  }
+
+  checkFormForSubforms(form, processedDefaults);
+  return processedDefaults;
 }
 
 //Contribution by ChatGPT :3

@@ -22,7 +22,6 @@ export default class TwitchChat {
   };
 
   twitchjsify = (channel: string, tags: KeyedObject, txt: string): StreamMessage => {
-    const botUsername = this.getModule().api.botUsername;
     const emotes = tags.emotes;
     const newEmotes = [];
     for (let e in emotes) {
@@ -48,7 +47,6 @@ export default class TwitchChat {
         this.sayInChat(responseTxt, channelName);
       }).bind(this),
       username: tags.username,
-      botUsername: botUsername,
       displayName: tags['display-name'],
       tags: tags,
       message: txt,
@@ -68,8 +66,12 @@ export default class TwitchChat {
   };
 
   processMessage = (channel: string, tags: KeyedObject, txt: string, self: boolean) => {
-    if (self) return;
     const streamMessage = this.twitchjsify(channel, tags, txt);
+
+    if (self) {
+      processTwitchEvent.call(this, 'botmessage', streamMessage);
+      return;
+    }
 
     let shareId = undefined;
 
@@ -77,9 +79,10 @@ export default class TwitchChat {
 
     if (channelName !== this.getModule().api.homeChannel) {
       shareId = this.getModule().shareUsers[streamMessage.channel];
+      streamMessage.shareId = shareId;
     }
 
-    processStreamMessage(streamMessage, shareId);
+    processStreamMessage(streamMessage);
 
     this.lastMessage = {
       username: streamMessage.username,

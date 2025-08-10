@@ -67,6 +67,8 @@ export function processTwitchEvent(this: TwitchChat, eventType: string, ...args:
     channel = homeChannel; // This event has messageCloned and message parameters
   } else if (eventType === 'whisper') {
     channel = homeChannel; // Whispers don't have a channel, use homeChannel
+  } else if (eventType === 'botmessage') {
+    channel = args[0].channel;
   } else {
     channel = args[0] || homeChannel; // Most events have channel as first parameter
   }
@@ -91,6 +93,9 @@ export function processTwitchEvent(this: TwitchChat, eventType: string, ...args:
 
   // Map event-specific parameters to message object
   switch (eventType) {
+    case 'botmessage':
+      message = args[0];
+      break;
     case 'action':
       message.username = args[1]?.username;
       message.displayName = args[1]?.['display-name'];

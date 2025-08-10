@@ -24,6 +24,7 @@ export interface StreamMessage {
   isVIP: boolean;
   isFirstMessage: boolean;
   isReturningChatter: boolean;
+  shareId?: string;
   triggeredEventData?: KeyedObject;
   platformEventData?: KeyedObject;
   pluginEventData?: KeyedObject;

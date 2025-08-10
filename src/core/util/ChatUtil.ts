@@ -86,14 +86,13 @@ function checkForSpamming(viewername: string) {
   return false;
 }
 
-export function processStreamMessage(streamMessage: StreamMessage, shareId?: string) {
+export function processStreamMessage(streamMessage: StreamMessage) {
   // Do something with the message
   const modlocks = ModerationService.getModlocks();
   const modEvents = EventService.getModCommandsAsEvents();
   const spooderEvents = EventService.getEvents();
   const sendToTCP = OSCService.sendToTCP;
   const activePlugins = PluginService.getActivePlugins();
-  const shares = ShareService.getShares();
   const sconfig = ConfigService.getConfig();
   const events = { ...modEvents, ...spooderEvents };
 
@@ -289,8 +288,8 @@ export function processStreamMessage(streamMessage: StreamMessage, shareId?: str
       continue;
     }
 
-    if (shareId) {
-      if (!ShareService.hasCommandEnabled(shareId, e)) {
+    if (streamMessage.shareId) {
+      if (!ShareService.hasCommandEnabled(streamMessage.shareId, e)) {
         continue;
       }
     }
@@ -330,8 +329,8 @@ export function processStreamMessage(streamMessage: StreamMessage, shareId?: str
   for (let p in activePlugins) {
     if (modlocks.plugins[p] != 1) {
       try {
-        if (shareId) {
-          if (ShareService.hasPluginEnabled(shareId, p)) {
+        if (streamMessage.shareId) {
+          if (ShareService.hasPluginEnabled(streamMessage.shareId, p)) {
             if (activePlugins[p].onChat != null) {
               activePlugins[p].onChat(streamMessage);
             }
