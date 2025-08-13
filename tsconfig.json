@@ -16,6 +16,9 @@
     "inlineSources": true,
     "baseUrl": "./",
     "paths": {
+      "src/*": [
+        "src/*"
+      ],
       "@frontend/*": [
         "webui"
       ],
