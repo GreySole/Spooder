@@ -493,76 +493,85 @@ export default class Plugin {
   }
 
   async buildPlugin() {
-    if (this.pluginMode === PluginMode.ts) {
-      await new Promise((res, rej) => {
-        console.log('Transpiling plugin', this.dirname);
-        childProcess.exec(
-          `tsc --outDir ./js`,
-          {
-            cwd: path.resolve('user', 'plugins', this.dirname),
-          },
-          (error: any, out: any, err: any) => {
-            console.log('Transpiled plugin', this.dirname, out);
-            if (error) {
-              rej(error);
-              return;
-            }
-            res('OK');
-            chmodr('./js', 0o755, (err: any) => {});
-          },
-        );
-      });
-    }
-    console.log('IS DEV MODE', this.devMode);
-    if (this.devMode) {
-      const mainFile =
-        this.pluginMode === PluginMode.ts
-          ? `js/${this.main.substring(this.main.lastIndexOf('/') + 1).replace('.ts', '.js')}`
-          : this.main;
-      console.log('Building plugin', this.dirname, mainFile);
-      return new Promise((res, rej) => {
-        childProcess.exec(
-          `ncc build ${mainFile} -o build --source-map --minify`,
-          {
-            cwd: path.resolve('user', 'plugins', this.dirname),
-          },
-          (error: any, out: any, err: any) => {
-            if (error) {
-              rej(error);
-              return;
-            }
-            const pluginMeta = JSON.parse(
-              fs.readFileSync(path.resolve(this.pluginPath!, 'package.json'), {
-                encoding: 'utf8',
-              }),
+    return new Promise(async (res, rej) => {
+      try {
+        if (this.pluginMode === PluginMode.ts) {
+          await new Promise((tsRes, tsRej) => {
+            console.log('Transpiling plugin', this.dirname);
+            childProcess.exec(
+              `tsc --outDir ./js`,
+              {
+                cwd: path.resolve('user', 'plugins', this.dirname),
+              },
+              (error: any, out: any, err: any) => {
+                console.log('Transpiled plugin', this.dirname, out);
+                if (error) {
+                  tsRej(error);
+                  return;
+                }
+                tsRes('OK');
+                chmodr('./js', 0o755, (err: any) => {});
+              },
             );
-            const manifest = {
-              name: pluginMeta.name,
-              display_name: pluginMeta.display_name ?? pluginMeta.name,
-              main: mainFile,
-              author: pluginMeta.author,
-              version: pluginMeta.version,
-              description: pluginMeta.description,
-            };
-            try {
-              fs.writeFileSync(
-                path.resolve('user', 'plugins', this.dirname, 'build', 'manifest.json'),
-                JSON.stringify(manifest, null, 2),
-                { encoding: 'utf8' },
-              );
-              const jsPath = path.resolve('user', 'plugins', this.dirname, 'js');
-              if (fs.existsSync(jsPath)) {
-                fs.rmSync(jsPath, { recursive: true });
+          });
+        }
+
+        console.log('IS DEV MODE', this.devMode);
+        if (this.devMode) {
+          const mainFile =
+            this.pluginMode === PluginMode.ts
+              ? `js/${this.main.substring(this.main.lastIndexOf('/') + 1).replace('.ts', '.js')}`
+              : this.main;
+          console.log('Building plugin', this.dirname, mainFile);
+
+          childProcess.exec(
+            `ncc build ${mainFile} -o build --source-map --minify`,
+            {
+              cwd: path.resolve('user', 'plugins', this.dirname),
+            },
+            (error: any, out: any, err: any) => {
+              if (error) {
+                rej(error);
+                return;
               }
-            } catch (e) {
-              console.log('Failed to write manifest', e);
-            }
-            PluginService.refreshPlugin(this.dirname);
-            res('OK');
-          },
-        );
-      });
-    }
+              const pluginMeta = JSON.parse(
+                fs.readFileSync(path.resolve(this.pluginPath!, 'package.json'), {
+                  encoding: 'utf8',
+                }),
+              );
+              const manifest = {
+                name: pluginMeta.name,
+                display_name: pluginMeta.display_name ?? pluginMeta.name,
+                main: mainFile,
+                author: pluginMeta.author,
+                version: pluginMeta.version,
+                description: pluginMeta.description,
+              };
+              try {
+                fs.writeFileSync(
+                  path.resolve('user', 'plugins', this.dirname, 'build', 'manifest.json'),
+                  JSON.stringify(manifest, null, 2),
+                  { encoding: 'utf8' },
+                );
+                const jsPath = path.resolve('user', 'plugins', this.dirname, 'js');
+                if (fs.existsSync(jsPath)) {
+                  fs.rmSync(jsPath, { recursive: true });
+                }
+              } catch (e) {
+                console.log('Failed to write manifest', e);
+              }
+              PluginService.setDevMode(this.dirname, false);
+              PluginService.refreshPlugin(this.dirname);
+              res('OK');
+            },
+          );
+        } else {
+          res('OK');
+        }
+      } catch (error) {
+        rej(error);
+      }
+    });
   }
 
   onChat(message: StreamMessage) {
