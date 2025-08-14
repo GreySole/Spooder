@@ -3,7 +3,8 @@ import { KeyedObject } from '../../Types';
 
 export interface ControlModuleInterface {
   connected: boolean;
-  autoLogin: () => void;
+  autoLogin: () => Promise<boolean>;
+  getResponseHandlers: () => KeyedObject;
   call: (command: string, data: KeyedObject) => void;
   getPluginFunctions: () => KeyedObject;
   onPluginsLoaded: () => void;

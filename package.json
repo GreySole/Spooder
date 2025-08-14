@@ -1,6 +1,6 @@
 {
   "name": "spooder",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.ts",
   "scripts": {
@@ -48,7 +48,7 @@
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^5.0.3",
     "@types/fs-extra": "^11.0.4",
-    "@types/multer": "^1.4.12",
+    "@types/multer": "^1.4.13",
     "@types/node": "^24.2.0",
     "@types/tmi.js": "^1.8.6"
   }

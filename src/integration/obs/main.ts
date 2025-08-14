@@ -48,17 +48,26 @@ export default class OBS implements ControlModuleInterface {
 
   settings = {} as KeyedObject;
 
-  autoLogin() {
-    return new Promise(async (res, rej) => {
-      if (this.settings.host != null) {
-        await this.websocket.connect(
-          this.settings.host,
-          this.settings.port,
-          this.settings.password,
-        );
-        res('success');
-      }
-    });
+  async autoLogin() {
+    try {
+      return await new Promise<boolean>(async (res, rej) => {
+        if (this.settings.host != null) {
+          await this.websocket.connect(
+            this.settings.host,
+            this.settings.port,
+            this.settings.password,
+          );
+          res(true);
+        }
+      });
+    } catch (e) {
+      console.log('OBS auto-login error', e);
+      return false;
+    }
+  }
+
+  getResponseHandlers() {
+    return {};
   }
 
   saveLogin(host: string, port: number, password: string) {

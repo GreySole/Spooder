@@ -540,7 +540,6 @@ export function PluginRoutes() {
         });
       } else {
         const uploadedFiles = req.files as Express.Multer.File[];
-        console.log(uploadedFiles);
         const pluginName = req.body.pluginName;
         const assetPath = req.body.assetPath;
 
