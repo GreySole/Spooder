@@ -65,6 +65,7 @@ interface PluginModule {
   public: PluginPublicInfo;
   chat: PluginChatInfo;
   subscribeToModuleEvent: (eventName: string, callback: Function) => void;
+  getModule: (name: string) => KeyedObject | undefined;
   registerPluginApi: (
     router: 'local' | 'public',
     method: 'get' | 'post' | 'put' | 'delete',
@@ -73,10 +74,10 @@ interface PluginModule {
   ) => void;
   getActiveViewer: (req: Request) => KeyedObject | undefined;
   getAssetPath: (assetPath: string) => string;
+  getAssetUrl: (assetPath: string) => string;
   getLocalFilePath: (filePath: string) => string;
   getSettings: () => KeyedObject | undefined;
   setSettings: (settings: KeyedObject) => void;
-
   getShareSettings: (shareId: string) => KeyedObject | undefined;
   setShareSettings: (shareId: string, settings: KeyedObject) => void;
   getSettingsForm: () => KeyedObject | undefined;
@@ -322,6 +323,19 @@ export default class Plugin {
         publicOscUrl: WebService.getPublicOSCUrl(),
       } as PluginPublicInfo;
 
+      this.pluginModule.getModule = (name: string) => {
+        if (Object.keys(this.pluginModule!.modules.stream).includes(name)) {
+          return this.pluginModule!.modules.stream[name];
+        }
+        if (Object.keys(this.pluginModule!.modules.community).includes(name)) {
+          return this.pluginModule!.modules.community[name];
+        }
+        if (Object.keys(this.pluginModule!.modules.control).includes(name)) {
+          return this.pluginModule!.modules.control[name];
+        }
+        return undefined;
+      };
+
       this.pluginModule.chat = {
         sayInChat: sayInChat,
       };
@@ -345,6 +359,7 @@ export default class Plugin {
 
       this.pluginModule.setSettings = (settings: KeyedObject) => {
         const settingsPath = getLocalFilePath('settings.json');
+        this.pluginModule!.settings = settings;
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), { encoding: 'utf8' });
       };
 
@@ -385,6 +400,14 @@ export default class Plugin {
       this.pluginModule.setEventsForm = (form: KeyedObject) => {
         const formPath = getLocalFilePath('events-form.json');
         fs.writeFileSync(formPath, JSON.stringify(form, null, 2), { encoding: 'utf8' });
+      };
+
+      this.pluginModule.getAssetUrl = (assetPath: string) => {
+        const publicHTTPUrl = WebService.getPublicHTTPUrl();
+        if (!publicHTTPUrl) {
+          return '';
+        }
+        return webJoin(publicHTTPUrl, 'assets', this.dirname, assetPath);
       };
 
       this.pluginModule.getOverlayUrl = () => {

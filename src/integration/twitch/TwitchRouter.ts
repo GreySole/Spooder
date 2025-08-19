@@ -243,6 +243,41 @@ export default function getTwitchRouters() {
     res.send(JSON.stringify({ status: subStatus }));
   });
 
+  router.get('/get_test_eventsub_status', (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+    const status = twitchModule.eventsub.testMode ? true : false;
+    const url = twitchModule.eventsub.websocketUrl;
+    res.send({ status: 'ok', testMode: status, websocketUrl: url });
+  });
+
+  router.get('/enable_test_eventsub', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+
+    const { host, port } = req.query;
+
+    const enabled = await twitchModule.eventsub.enableTestMode(
+      host as string,
+      parseInt(port as string),
+    );
+    res.send({ status: enabled ? 'ok' : 'error' });
+  });
+
+  router.get('/disable_test_eventsub', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+
+    twitchModule.eventsub.disableTestMode();
+    res.send({ status: 'ok' });
+  });
+
   router.get('/get_eventsubs_by_user', async (req, res) => {
     if (twitchModule.loggedIn === false) {
       res.send({ error: 'nologin' });

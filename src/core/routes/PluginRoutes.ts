@@ -31,17 +31,18 @@ export function registerPluginApi(
   address: string,
   funct: (req: express.Request, res: express.Response) => void,
 ) {
+  const realAddress = address.startsWith('/') ? address : `/${address}`;
   if (router === 'local') {
     if (method.toLowerCase() === 'get') {
-      pluginApi.local.get[webJoin(context.dirname, address)] = funct.bind(context);
+      pluginApi.local.get[webJoin(context.dirname, realAddress)] = funct.bind(context);
     } else if (method.toLowerCase() === 'post') {
-      pluginApi.local.post[webJoin(context.dirname, address)] = funct.bind(context);
+      pluginApi.local.post[webJoin(context.dirname, realAddress)] = funct.bind(context);
     }
   } else if (router === 'public') {
     if (method.toLowerCase() === 'get') {
-      pluginApi.public.get[webJoin(context.dirname, address)] = funct.bind(context);
+      pluginApi.public.get[webJoin(context.dirname, realAddress)] = funct.bind(context);
     } else if (method.toLowerCase() === 'post') {
-      pluginApi.public.post[webJoin(context.dirname, address)] = funct.bind(context);
+      pluginApi.public.post[webJoin(context.dirname, realAddress)] = funct.bind(context);
     }
   } else {
     throw new Error(`Unknown router: ${router}. There's only local and public routers.`);

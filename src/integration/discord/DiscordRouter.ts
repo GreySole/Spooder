@@ -35,6 +35,16 @@ export default function getDiscordRouters() {
     res.send(guilds);
   });
 
+  router.get('/get_roles', async (req: Request, res: Response) => {
+    if (discordModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+    const guild = req.query.guild as string;
+    const roles = discordModule.api.getRoles(guild);
+    res.send(roles);
+  });
+
   router.get('/config', async (req: Request, res: Response) => {
     res.send(discordModule.config);
   });

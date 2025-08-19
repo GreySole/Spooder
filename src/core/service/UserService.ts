@@ -68,6 +68,7 @@ export default class UserService {
 
   activeUsers = {} as KeyedObject;
   activeViewers = {} as KeyedObject;
+  pendingPasswords = {} as KeyedObject;
 
   private saveUsers() {
     fs.writeFileSync(userDir + '/settings/users.json', JSON.stringify(UserService.instance.users));
@@ -93,7 +94,7 @@ export default class UserService {
   }
 
   private generateInviteCode() {
-    return crypto.randomBytes(16).toString('hex');
+    return crypto.randomBytes(8).toString('hex');
   }
 
   static createUser(permissions: PermissionType[]) {
@@ -104,9 +105,40 @@ export default class UserService {
       permissions,
     };
     UserService.instance.saveUsers();
+
+    return code;
   }
 
-  static verifyUserInviteCode(registerInfo: KeyedObject, code: string) {
+  static editUser(id: string, editData: any) {
+    const currentUsername = Object.keys(UserService.instance.users.trusted_users.user_names).find(
+      (username) => UserService.instance.users.trusted_users.user_names[username] === id,
+    );
+    if (!currentUsername) {
+      console.error(`User with ID ${id} does not exist.`);
+      return;
+    }
+    UserService.instance.users.trusted_users.display_names[id] = editData.display_name;
+    UserService.instance.users.trusted_users.permissions[id] = editData.permissions;
+    UserService.changeUsername(currentUsername, editData.username);
+    UserService.instance.saveUsers();
+  }
+
+  static deleteUser(id: string) {
+    const currentUsername = Object.keys(UserService.instance.users.trusted_users.user_names).find(
+      (username) => UserService.instance.users.trusted_users.user_names[username] === id,
+    );
+    if (!currentUsername) {
+      console.error(`User with ID ${id} does not exist.`);
+      return;
+    }
+    delete UserService.instance.users.trusted_users.user_names[currentUsername];
+    delete UserService.instance.users.trusted_users.display_names[id];
+    delete UserService.instance.users.trusted_users.permissions[id];
+    delete UserService.instance.users.trusted_users_pw[id];
+    UserService.instance.saveUsers();
+  }
+
+  static verifyUserInviteCode(code: string, registerInfo: KeyedObject) {
     const pendingUser = UserService.instance.users.trusted_users.pending[code];
     if (pendingUser == null) {
       return false;
@@ -115,21 +147,19 @@ export default class UserService {
     const userId = pendingUser.userId;
     const newPermissions = pendingUser.permissions;
     const newUserName = registerInfo.username;
-    const newDisplayName = registerInfo.display_name;
+    const newDisplayName = registerInfo.display_name ?? registerInfo.username;
     const newPassword = registerInfo.password;
 
     UserService.instance.users.trusted_users.user_names[newUserName] = userId;
     UserService.instance.users.trusted_users.display_names[userId] = newDisplayName;
     UserService.instance.users.trusted_users.permissions[userId] = newPermissions;
-    UserService.instance.saveUsers();
     UserService.instance.setPassword(userId, newPassword, false);
     delete UserService.instance.users.trusted_users.pending[code];
-
+    UserService.instance.saveUsers();
     return true;
   }
 
-  static resetPassword(username: string) {
-    const userId = UserService.instance.users.trusted_users.user_names[username];
+  static resetPassword(userId: string) {
     const newPassword = crypto.randomBytes(8).toString('hex');
     UserService.instance.setPassword(userId, newPassword, true);
     UserService.instance.saveUsers();
@@ -184,15 +214,27 @@ export default class UserService {
 
   static cancelPendingUser(code: string) {
     delete UserService.instance.users.trusted_users.pending[code];
+    UserService.instance.saveUsers();
   }
 
   static hasPassword(username: string) {
-    return UserService.instance.users.trusted_users_pw[username] !== undefined;
+    const userId = UserService.instance.users.trusted_users.user_names[username];
+    return UserService.instance.users.trusted_users_pw[userId] !== undefined;
   }
 
   static isPasswordTemporary(username: string) {
     const userId = UserService.instance.users.trusted_users.user_names[username];
     return UserService.instance.users.trusted_users_pw[userId].temporary;
+  }
+
+  static setPendingPassword(username: string) {
+    const userId = UserService.instance.users.trusted_users.user_names[username];
+    UserService.instance.pendingPasswords[userId] = true;
+  }
+
+  static isPendingPassword(username: string) {
+    const userId = UserService.instance.users.trusted_users.user_names[username];
+    return UserService.instance.pendingPasswords[userId] === true;
   }
 
   private setPassword(userId: string, newPassword: string, temporary: boolean) {
@@ -210,6 +252,13 @@ export default class UserService {
   static matchPassword(username: string, password: string) {
     const userId = UserService.instance.users.trusted_users.user_names[username];
     const pwInfo = UserService.instance.users.trusted_users_pw[userId];
+    const temporary = pwInfo.temporary;
+    if (temporary) {
+      if (UserService.isPendingPassword(username)) {
+        this.instance.setPassword(userId, password, false);
+        return true;
+      }
+    }
     return (
       crypto.pbkdf2Sync(password, pwInfo.salt, 1000, 64, `sha512`).toString(`hex`) === pwInfo.hash
     );

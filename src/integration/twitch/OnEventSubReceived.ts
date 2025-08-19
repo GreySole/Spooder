@@ -13,6 +13,11 @@ export default async function OnEventSubReceived(data: KeyedObject) {
   const type = data.payload.subscription.type;
   const event = { ...data.payload.event };
 
+  const broadcasterUserId = twitchModule.api.broadcasterUserID;
+  if (event.broadcaster_user_name === 'testBroadcaster') {
+    event.broadcaster_user_id = broadcasterUserId;
+  }
+
   const streamMessage = {
     userId: event.user_id ?? event.from_broadcaster_user_id,
     username: event.user_login ?? event.from_broadcaster_user_login,

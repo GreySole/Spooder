@@ -138,6 +138,13 @@ export default class Discord implements CommunityModuleInterface {
       getUser: this.api.getUser.bind(this.api),
       findUser: this.api.findUser.bind(this.api),
       sendDM: this.chat.sendDM.bind(this.chat),
+      voice: {
+        join: this.voice.joinVoiceChannel.bind(this.voice),
+        leave: this.voice.leaveVoiceChannel.bind(this.voice),
+        playSound: this.voice.playAudio.bind(this.voice),
+        startListening: this.voice.startListening.bind(this.voice),
+        stopListening: this.voice.stopListening.bind(this.voice),
+      },
     };
   };
 

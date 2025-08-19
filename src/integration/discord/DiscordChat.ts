@@ -128,6 +128,10 @@ export default class DiscordChat {
     return '<@' + id + '> ';
   }
 
+  makeRoleTag(roleId: string) {
+    return `<@&${roleId}>`;
+  }
+
   chopMessage(message: string) {
     let returnArray = [];
     if (message.length >= 2000) {

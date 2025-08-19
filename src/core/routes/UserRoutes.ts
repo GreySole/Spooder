@@ -2,22 +2,22 @@ import { Request, Response, Router } from 'express';
 import crypto from 'crypto';
 import UserService from '../service/UserService';
 import { webLog } from '../Logging';
+import { PermissionType } from '../../Types';
 
 export function UserRoutes() {
   const router = Router();
   const publicRouter = Router();
   router.get('/data', (req: Request, res: Response) => {
-    console.log('User data requested');
     res.send(UserService.getUsers());
   });
 
   router.get('/reset_password', (req: Request, res: Response) => {
-    const username = req.query.username as string;
-    if (!username) {
-      res.send({ error: 'No username' });
+    const userId = req.query.id as string;
+    if (!userId) {
+      res.send({ error: 'No user ID' });
       return;
     }
-    const newTempPassword = UserService.resetPassword(username);
+    const newTempPassword = UserService.resetPassword(userId);
     res.send({ status: 'ok', temp_password: newTempPassword });
   });
 
@@ -31,17 +31,36 @@ export function UserRoutes() {
     res.send({ status: 'ok' });
   });
 
-  router.post('/create_user', (req: Request, res: Response) => {
-    const permissions = req.body.permissions;
-    UserService.createUser(permissions);
+  router.post('/edit_user', (req: Request, res: Response) => {
+    const { id, username, display_name, permissions } = req.body;
+
+    UserService.editUser(id, { username, display_name, permissions });
     res.send({ status: 'ok' });
   });
 
-  async function userVerify(req: Request, res: Response) {
-    const username = req.body.username;
-    const code = req.body.code;
+  router.post('/create_user', (req: Request, res: Response) => {
+    const inviteCode = UserService.createUser([PermissionType.mod]);
+    res.send({ status: 'ok', invite_code: inviteCode });
+  });
 
-    const isVerified = UserService.verifyUserInviteCode(username, code);
+  router.delete('/delete_user', (req: Request, res: Response) => {
+    const id = req.query.id as string;
+
+    UserService.deleteUser(id);
+    res.send({ status: 'ok' });
+  });
+
+  router.delete('/cancel_pending_user', (req: Request, res: Response) => {
+    const id = req.query.id as string;
+
+    UserService.cancelPendingUser(id);
+    res.send({ status: 'ok' });
+  });
+
+  async function userRegister(req: Request, res: Response) {
+    const { code, username, display_name, password } = req.body;
+
+    const isVerified = UserService.verifyUserInviteCode(code, { username, display_name, password });
 
     if (isVerified) {
       res.send({ status: 'verified' });
@@ -50,8 +69,8 @@ export function UserRoutes() {
     }
   }
 
-  router.post('/verify', userVerify);
-  publicRouter.post('/verify', userVerify);
+  router.post('/register', userRegister);
+  publicRouter.post('/register', userRegister);
 
   async function userLogin(req: Request, res: Response) {
     let username = req.body.username.toLowerCase();
@@ -68,8 +87,16 @@ export function UserRoutes() {
 
     if (UserService.matchPassword(username, password)) {
       if (UserService.isPasswordTemporary(username)) {
-        res.send({ status: 'temporary' });
-        return;
+        console.log(
+          'Temporary password detected for user:',
+          username,
+          UserService.isPendingPassword(username),
+        );
+        if (!UserService.isPendingPassword(username)) {
+          UserService.setPendingPassword(username);
+          res.send({ status: 'temporary' });
+          return;
+        }
       }
       webLog('Welcome back, ' + username + '!');
       const browserToken = crypto.randomBytes(48).toString('hex');
@@ -95,6 +122,7 @@ export function UserRoutes() {
     });
     res.send({ status: 'active' });
   });
+  //router.post('/login', userLogin);
   publicRouter.post('/login', userLogin);
 
   return {
