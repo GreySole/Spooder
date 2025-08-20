@@ -18,11 +18,18 @@ import { pluginLog } from './core/Logging';
 import ShareService from './core/service/ShareService';
 import { webJoin } from './core/util/PathUtil';
 
+interface IntegrationModule {
+  [key: string]: {
+    subscribeToModuleEvent: (eventName: string, callback: Function) => void;
+    [key: string]: any;
+  };
+}
+
 interface PluginSpooderModules {
-  stream: KeyedObject;
-  community: KeyedObject;
-  control: KeyedObject;
-  [key: string]: KeyedObject;
+  stream: IntegrationModule;
+  community: IntegrationModule;
+  control: IntegrationModule;
+  [key: string]: IntegrationModule;
 }
 
 interface PluginPublicInfo {
@@ -64,7 +71,6 @@ interface PluginModule {
   osc: PluginOscInfo;
   public: PluginPublicInfo;
   chat: PluginChatInfo;
-  subscribeToModuleEvent: (eventName: string, callback: Function) => void;
   getModule: (name: string) => KeyedObject | undefined;
   registerPluginApi: (
     router: 'local' | 'public',
@@ -127,18 +133,18 @@ export default class Plugin {
 
   private moduleEventSubscriptions: PluginSpooderModules = {
     stream: {
-      subscribeToModuleEvent: (eventName: string, callback: Function) => {
-        this.moduleEventSubscriptions.stream[eventName] = callback;
+      dummy: {
+        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
       },
     },
     community: {
-      subscribeToModuleEvent: (eventName: string, callback: Function) => {
-        this.moduleEventSubscriptions.community[eventName] = callback;
+      dummy: {
+        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
       },
     },
     control: {
-      subscribeToModuleEvent: (eventName: string, callback: Function) => {
-        this.moduleEventSubscriptions.control[eventName] = callback;
+      dummy: {
+        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
       },
     },
   };
