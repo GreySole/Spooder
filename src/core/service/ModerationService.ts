@@ -101,7 +101,6 @@ export class ModerationService {
     }
     let eventLocked = false;
     for (let e in events) {
-      console.log(target, e);
       if (target == 'all') {
         ModerationService.instance.modlocks.events[e] = modCommand == 'lock' ? 1 : 0;
         OSCService.sendToTCP('/mod/lock/event/' + e, modCommand == 'lock' ? 1 : 0);

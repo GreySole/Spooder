@@ -78,7 +78,7 @@ function checkForSpamming(viewername: string) {
   }
   modlocks.blacklist[viewername].lastCommand = Date.now();
   if (modlocks.blacklist[viewername].commandCount >= 6) {
-    sayInChat('Hey, cut that out ' + viewername + ", you're on cooldown for a minute.");
+    sayInChat(`@${viewername}, too many commands. You're on cooldown for a minute.`);
     ModerationService.blacklistUser(true, viewername, 60);
     return true;
   }
@@ -123,23 +123,28 @@ export function processStreamMessage(streamMessage: StreamMessage) {
         let response = ModerationService.setSpamGuard(command[2]);
         sayInChat(response);
       } else if (modCommand == 'lock' || modCommand == 'unlock') {
-        let eventtarget = command[2];
-        let plugin = command[2];
-        let target = command.length >= 4 ? command[3] : undefined;
-        if (ModerationService.lockEvent(modCommand, eventtarget) == true && eventtarget != 'all') {
-          return;
-        }
-        if (ModerationService.lockPlugin(modCommand, plugin, target) == true && plugin != 'all') {
-          return;
-        }
-        if (command[2] == 'all') {
-          ModerationService.lockEvent(modCommand, eventtarget);
-          ModerationService.lockPlugin(modCommand, plugin, target);
+        let eventTarget = command[2];
+        let pluginTarget = command.length >= 4 ? command[3] : undefined;
+        if (command[2] != 'all') {
+          if (spooderEvents[eventTarget]) {
+            const isLocked = ModerationService.lockEvent(modCommand, eventTarget);
+            sayInChat(
+              `${streamMessage.displayName} ${isLocked ? 'locked' : 'unlocked'} ${spooderEvents[eventTarget].name}`,
+            );
+          }
+          if (activePlugins[eventTarget]) {
+            const isLocked = ModerationService.lockPlugin(modCommand, eventTarget, pluginTarget);
+            sayInChat(
+              `${streamMessage.displayName} ${isLocked ? 'locked' : 'unlocked'} ${activePlugins[eventTarget].name}`,
+            );
+          }
+        } else if (command[2] == 'all') {
+          const isLockedDown = ModerationService.setLockdown(modCommand);
           sayInChat(
             streamMessage.username +
               ' ' +
-              (modCommand == 'lock' ? 'locked' : 'unlocked') +
-              ' all chat commands',
+              (isLockedDown ? 'locked' : 'unlocked') +
+              ' all chat commands and plugins',
           );
         }
       } else if (modCommand == 'blacklist') {
@@ -278,9 +283,13 @@ export function processStreamMessage(streamMessage: StreamMessage) {
           sayInChat(command[1] + ' are: ' + commands.join(', '));
         }
       } else {
-        sayInChat("Hi, I'm " + sconfig.bot.bot_name + '. ' + sconfig.bot.introduction);
+        sayInChat(sconfig.bot.introduction);
       }
     }
+  }
+
+  if (ModerationService.isOnLockdown()) {
+    return;
   }
 
   for (let e in events) {

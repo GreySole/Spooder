@@ -31,7 +31,14 @@ export default function EventDiscordCommand(
           components.push(linkButton);
         }
 
-        discord.chat.sendToChannel(eCommand.guild, eCommand.channel, response.response, components);
+        const roleTag = eCommand.role ? discord.chat.makeRoleTag(eCommand.role) : null;
+
+        discord.chat.sendToChannel(
+          eCommand.guild,
+          eCommand.channel,
+          `${roleTag ? roleTag + ' ' : ''}${response.response}`,
+          components,
+        );
       } catch (e) {
         spooderLog(
           `Failed to run response script for ${eventName}. Check the event settings to verify it.`,

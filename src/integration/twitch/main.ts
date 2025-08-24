@@ -152,6 +152,7 @@ export default class Twitch implements StreamModuleInterface {
 
   getChannelInfo = this.api.getChannelInfo;
   getUserInfo = this.api.getUserInfo;
+  verifyShareTarget = this.api.verifyShareTarget.bind(this.api);
   getActiveShares = async () => {
     const shares = ShareService.getShares();
     const channels = await this.api.getSharedChannels();

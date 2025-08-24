@@ -1,4 +1,15 @@
-import { userDir, KeyedObject, StreamMessage } from './Types';
+import {
+  userDir,
+  KeyedObject,
+  StreamMessage,
+  PluginConfigInfo,
+  PluginMode,
+  PluginModule,
+  PluginOscInfo,
+  PluginPublicInfo,
+  PluginSpooderModules,
+  PluginThemeInfo,
+} from './Types';
 import path, { resolve } from 'path';
 import fs from 'fs';
 import ModuleService from './core/service/ModuleService';
@@ -17,91 +28,6 @@ import { sayInChat } from './core/service/EventService';
 import { pluginLog } from './core/Logging';
 import ShareService from './core/service/ShareService';
 import { webJoin } from './core/util/PathUtil';
-
-interface PluginSpooderModules {
-  stream: KeyedObject;
-  community: KeyedObject;
-  control: KeyedObject;
-  [key: string]: KeyedObject;
-}
-
-interface PluginPublicInfo {
-  publicHostUrl: string;
-  publicOscUrl: string;
-}
-
-interface PluginOscInfo {
-  sendToTCP: (address: string, oscValue: any, log?: boolean) => void;
-  sendToUDP: (address: string, oscValue: any, log?: boolean) => void;
-  udpServers: KeyedObject;
-}
-
-interface PluginConfigInfo {
-  ownerName: string;
-  botName: string;
-  host: string;
-  hostPort: number;
-  oscTcpPort: number;
-  oscUdpPort: number;
-  externalHandle: string;
-}
-
-interface PluginThemeInfo {
-  webui: KeyedObject;
-  spooderPet: KeyedObject;
-}
-
-interface PluginChatInfo {
-  sayInChat: (message: string, platform: string, channel: string) => void;
-}
-
-interface PluginModule {
-  dirname: string;
-  modules: PluginSpooderModules;
-  activePlugins: KeyedObject;
-  spooderConfig: PluginConfigInfo;
-  spooderTheme: PluginThemeInfo;
-  osc: PluginOscInfo;
-  public: PluginPublicInfo;
-  chat: PluginChatInfo;
-  subscribeToModuleEvent: (eventName: string, callback: Function) => void;
-  registerPluginApi: (
-    router: 'local' | 'public',
-    method: 'get' | 'post' | 'put' | 'delete',
-    address: string,
-    funct: (req: Request, res: Response) => void,
-  ) => void;
-  getActiveViewer: (req: Request) => KeyedObject | undefined;
-  getAssetPath: (assetPath: string) => string;
-  getLocalFilePath: (filePath: string) => string;
-  getSettings: () => KeyedObject | undefined;
-  setSettings: (settings: KeyedObject) => void;
-
-  getShareSettings: (shareId: string) => KeyedObject | undefined;
-  setShareSettings: (shareId: string, settings: KeyedObject) => void;
-  getSettingsForm: () => KeyedObject | undefined;
-  setSettingsForm: (form: KeyedObject) => void;
-  getEventsForm: () => KeyedObject | undefined;
-  setEventsForm: (form: KeyedObject) => void;
-  getOverlayUrl: () => string;
-  getUtilityUrl: () => string;
-  settings?: KeyedObject;
-  onSettings?: (settings: KeyedObject) => void;
-  onLoad?: () => void;
-  onDestroy?: () => void;
-  onChat?: (message: StreamMessage) => void;
-  onCommunityChat?: (type: string, data: any) => void;
-  onOSC?: (message: OSC.Message) => void;
-  onEvent?: (event: string, data: KeyedObject) => void;
-  registerExtra: (key: string, value: any) => void;
-}
-
-enum PluginMode {
-  ncc = 'NCC',
-  js = 'JS',
-  ts = 'TS',
-  none = 'None',
-}
 
 export default class Plugin {
   name: string = '';
@@ -126,18 +52,18 @@ export default class Plugin {
 
   private moduleEventSubscriptions: PluginSpooderModules = {
     stream: {
-      subscribeToModuleEvent: (eventName: string, callback: Function) => {
-        this.moduleEventSubscriptions.stream[eventName] = callback;
+      dummy: {
+        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
       },
     },
     community: {
-      subscribeToModuleEvent: (eventName: string, callback: Function) => {
-        this.moduleEventSubscriptions.community[eventName] = callback;
+      dummy: {
+        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
       },
     },
     control: {
-      subscribeToModuleEvent: (eventName: string, callback: Function) => {
-        this.moduleEventSubscriptions.control[eventName] = callback;
+      dummy: {
+        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
       },
     },
   };
@@ -322,6 +248,19 @@ export default class Plugin {
         publicOscUrl: WebService.getPublicOSCUrl(),
       } as PluginPublicInfo;
 
+      this.pluginModule.getModule = (name: string) => {
+        if (Object.keys(this.pluginModule!.modules.stream).includes(name)) {
+          return this.pluginModule!.modules.stream[name];
+        }
+        if (Object.keys(this.pluginModule!.modules.community).includes(name)) {
+          return this.pluginModule!.modules.community[name];
+        }
+        if (Object.keys(this.pluginModule!.modules.control).includes(name)) {
+          return this.pluginModule!.modules.control[name];
+        }
+        return undefined;
+      };
+
       this.pluginModule.chat = {
         sayInChat: sayInChat,
       };
@@ -345,6 +284,7 @@ export default class Plugin {
 
       this.pluginModule.setSettings = (settings: KeyedObject) => {
         const settingsPath = getLocalFilePath('settings.json');
+        this.pluginModule!.settings = settings;
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), { encoding: 'utf8' });
       };
 
@@ -385,6 +325,14 @@ export default class Plugin {
       this.pluginModule.setEventsForm = (form: KeyedObject) => {
         const formPath = getLocalFilePath('events-form.json');
         fs.writeFileSync(formPath, JSON.stringify(form, null, 2), { encoding: 'utf8' });
+      };
+
+      this.pluginModule.getAssetUrl = (assetPath: string) => {
+        const publicHTTPUrl = WebService.getPublicHTTPUrl();
+        if (!publicHTTPUrl) {
+          return '';
+        }
+        return webJoin(publicHTTPUrl, 'assets', this.dirname, assetPath);
       };
 
       this.pluginModule.getOverlayUrl = () => {
@@ -498,13 +446,14 @@ export default class Plugin {
           await new Promise((tsRes, tsRej) => {
             console.log('Transpiling plugin', this.dirname);
             childProcess.exec(
-              `tsc --outDir ./js`,
+              `"${path.join(process.cwd(), 'node_modules', '.bin', 'tsc')}" --outDir ./js`,
               {
                 cwd: path.resolve('user', 'plugins', this.dirname),
               },
               (error: any, out: any, err: any) => {
                 console.log('Transpiled plugin', this.dirname, out);
                 if (error) {
+                  console.log('Build error', error);
                   tsRej(error);
                   return;
                 }
@@ -524,15 +473,17 @@ export default class Plugin {
           console.log('Building plugin', this.dirname, mainFile);
 
           childProcess.exec(
-            `ncc build ${mainFile} -o build --source-map --minify`,
+            `"${path.join(process.cwd(), 'node_modules', '.bin', 'ncc')}" build ${mainFile} -o build --source-map --minify`,
             {
               cwd: path.resolve('user', 'plugins', this.dirname),
             },
             (error: any, out: any, err: any) => {
               if (error) {
+                console.log('Build error', error);
                 rej(error);
                 return;
               }
+              console.log('Build complete!');
               const pluginMeta = JSON.parse(
                 fs.readFileSync(path.resolve(this.pluginPath!, 'package.json'), {
                   encoding: 'utf8',

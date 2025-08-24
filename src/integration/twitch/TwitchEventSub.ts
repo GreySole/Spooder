@@ -9,11 +9,14 @@ import OnEventSubReceived from './OnEventSubReceived';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 import WebSocket from 'ws';
 import { logToFile } from '../../core/Logging';
+import { websocketTest } from '../../core/util/NetUtil';
 
 export default class TwitchEventSub {
   websocket: WebSocket | undefined = undefined;
   wsSessionId: string | undefined = undefined;
   wsKeepAliveInterval: NodeJS.Timeout | undefined = undefined;
+  testMode: boolean = false;
+  websocketUrl = 'wss://eventsub.wss.twitch.tv/ws';
 
   constructor() {}
 
@@ -23,7 +26,8 @@ export default class TwitchEventSub {
       twitchLog('No Twitch triggered events found, skipping EventSub initialization');
       return;
     }
-    this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+    //this.enableTestMode('localhost', 8080);
+    this.websocket = new WebSocket(this.websocketUrl);
     this.setupWebSocketHandlers();
   }
 
@@ -63,7 +67,7 @@ export default class TwitchEventSub {
     this.websocket.onerror = (error) => {
       twitchLog('Eventsub error:', error);
       logToFile('twitch-eventsub-error', 'Eventsub error: ' + error.message, 100);
-      this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+      this.websocket = new WebSocket(this.websocketUrl);
       this.setupWebSocketHandlers();
     };
 
@@ -74,12 +78,41 @@ export default class TwitchEventSub {
         100,
       );
       twitchLog('Eventsub connection closed:', event.code, event.reason);
-      this.websocket = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+      this.websocket = new WebSocket(this.websocketUrl);
       this.setupWebSocketHandlers();
     };
 
     this.refreshEventSubs();
   }
+
+  enableTestMode = (host: string, port: number) => {
+    return new Promise<boolean>((res, rej) => {
+      websocketTest(host, port)
+        .then((isAlive) => {
+          if (isAlive) {
+            this.testMode = true;
+            this.websocketUrl = `ws://${host}:${port}/ws`;
+            this.websocket = new WebSocket(this.websocketUrl);
+            this.setupWebSocketHandlers();
+            res(true);
+          } else {
+            twitchLog(`Test mode failed: ${host}:${port} is not reachable`);
+            res(false);
+          }
+        })
+        .catch((e) => {
+          twitchLog(`Test mode error: ${e.message}`);
+          rej(false);
+        });
+    });
+  };
+
+  disableTestMode = () => {
+    this.testMode = false;
+    this.websocketUrl = 'wss://eventsub.wss.twitch.tv/ws';
+    this.websocket = new WebSocket(this.websocketUrl);
+    this.setupWebSocketHandlers();
+  };
 
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
@@ -155,6 +188,10 @@ export default class TwitchEventSub {
         shareSubs.push(subs.data[s].condition.broadcaster_user_id);
       }
       await this.deleteEventSub(subs.data[s].id);
+    }
+
+    if (this.testMode) {
+      return;
     }
 
     for (let e in events) {

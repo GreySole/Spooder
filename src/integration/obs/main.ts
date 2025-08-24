@@ -5,6 +5,7 @@ import getObsRouters from './ObsRouter';
 import ObsWebsocket from './ObsWebsocket';
 import fs from 'fs';
 import OSC from '@spooder/osc-js';
+import { websocketTest } from '../../core/util/NetUtil';
 
 export default class OBS implements ControlModuleInterface {
   constructor() {
@@ -48,17 +49,34 @@ export default class OBS implements ControlModuleInterface {
 
   settings = {} as KeyedObject;
 
-  autoLogin() {
-    return new Promise(async (res, rej) => {
-      if (this.settings.host != null) {
-        await this.websocket.connect(
-          this.settings.host,
-          this.settings.port,
-          this.settings.password,
-        );
-        res('success');
-      }
-    });
+  async autoLogin() {
+    try {
+      return await new Promise<boolean>(async (res, rej) => {
+        if (this.settings.host != null) {
+          const portAlive = await websocketTest(this.settings.host, this.settings.port);
+          if (!portAlive) {
+            console.log(`OBS host ${this.settings.host}:${this.settings.port} is not reachable.`);
+            res(false);
+            return;
+          }
+          await this.websocket.connect(
+            this.settings.host,
+            this.settings.port,
+            this.settings.password,
+          );
+          res(true);
+        } else {
+          res(false);
+        }
+      });
+    } catch (e) {
+      console.log('OBS auto-login error', e);
+      return false;
+    }
+  }
+
+  getResponseHandlers() {
+    return {};
   }
 
   saveLogin(host: string, port: number, password: string) {

@@ -6,7 +6,7 @@ import ConfigService from './ConfigService';
 import { WebService } from './WebService';
 
 interface ModuleContainer {
-  [key: string]: any;
+  [key: string]: StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface;
 }
 
 interface StreamModuleContainer {
@@ -201,6 +201,9 @@ export default class ModuleService {
     }
     for (let s in ModuleService.instance.activeCommunities) {
       await ModuleService.instance.activeCommunities[s].autoLogin();
+    }
+    for (let s in ModuleService.instance.activeControls) {
+      await ModuleService.instance.activeControls[s].autoLogin();
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Client, TextChannel, User } from 'discord.js';
+import { Client, TextChannel, User, ChannelType } from 'discord.js';
 import Module from 'module';
 import ModuleService from '../../core/service/ModuleService';
 import Discord from './main';
@@ -83,50 +83,6 @@ export default class DiscordApi {
     }
   }
 
-  getServerByName(servername: string) {
-    if (!this.module.loggedIn) {
-      return null;
-    }
-    let guilds = this.getGuilds();
-    //discordLog("GUILDS", servername, guilds);
-    for (let g in guilds) {
-      if (guilds[g].name == servername) {
-        //discordLog("SERVER FOUND", guilds[g].id, guilds[g].name);
-        return guilds[g].id;
-      }
-    }
-  }
-
-  getChannelByName(servername: string, channelname: string) {
-    if (!this.module.loggedIn) {
-      return null;
-    }
-    let serverId = this.getServerByName(servername);
-    let channels =
-      (this.getGuild(serverId)?.channels.cache.toJSON() as KeyedObject) ?? ({} as KeyedObject);
-    //discordLog("CHANNELS", channels);
-    for (let c in channels) {
-      //discordLog("CHANNEL SEARCH",channels[c].name, channelname);
-      if (channels[c].name == channelname) {
-        return { server: serverId, channel: channels[c].id };
-      }
-    }
-  }
-
-  getServerName(serverId: string) {
-    if (!this.module.loggedIn) {
-      return undefined;
-    }
-    return this.getGuild(serverId)?.name;
-  }
-
-  getChannelName(serverId: string, channelId: string) {
-    if (!this.module.loggedIn) {
-      return undefined;
-    }
-    return this.getGuild(serverId)?.channels.cache.get(channelId);
-  }
-
   getUser(userId: string) {
     if (!this.module.loggedIn) {
       return undefined;
@@ -169,8 +125,51 @@ export default class DiscordApi {
     return this.client?.guilds.cache.get(guildId)?.channels.cache;
   }
 
+  /**
+   * Gets a Discord channel with enhanced voice state information for voice channels.
+   * For voice channels, each member will include a voiceState object with mute/deaf status.
+   * @param channelId The ID of the channel to retrieve
+   * @param guildId The ID of the guild the channel belongs to
+   * @returns Channel object with enhanced voice state information, or null if not found
+   */
   getChannel(channelId: string, guildId: string) {
-    return this.client?.guilds.cache.get(guildId)?.channels.cache.get(channelId);
+    const guild = this.client?.guilds.cache.get(guildId);
+    const channel = guild?.channels.cache.get(channelId);
+
+    if (!channel) {
+      return null;
+    }
+
+    // If it's a voice channel, enhance with voice state information
+    if (channel.type === ChannelType.GuildVoice) {
+      const membersObject: KeyedObject = {};
+
+      channel.members?.forEach((member) => {
+        const voiceState = member.voice;
+        membersObject[member.id] = {
+          ...member,
+          voiceState: {
+            muted: voiceState.mute || voiceState.selfMute,
+            deafened: voiceState.deaf || voiceState.selfDeaf,
+            serverMuted: voiceState.mute,
+            serverDeafened: voiceState.deaf,
+            selfMuted: voiceState.selfMute,
+            selfDeafened: voiceState.selfDeaf,
+            streaming: voiceState.streaming,
+            suppressed: voiceState.suppress,
+            channelId: voiceState.channelId,
+            sessionId: voiceState.sessionId,
+          },
+        };
+      });
+
+      return {
+        ...channel,
+        members: membersObject,
+      };
+    }
+
+    return channel;
   }
 
   getAvatar(userId: string, avatarId: string) {

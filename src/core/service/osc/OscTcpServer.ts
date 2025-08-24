@@ -5,10 +5,8 @@ import ConfigService from '../ConfigService';
 import ModuleService from '../ModuleService';
 import MonitorService, { MonitorDataType, MonitorDirection } from '../MonitorService';
 import PluginService from '../PluginService';
-import WebSocket, { WebSocketServer } from 'ws';
 
 import OSCService from '../OSCService';
-import { KeyedObject, SpooderOSCMessageOptions } from '../../../Types';
 import { isLocal, WebService } from '../WebService';
 import { validateUser } from '../../routes/ModerationRoutes';
 
