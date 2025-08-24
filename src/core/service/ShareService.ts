@@ -10,6 +10,7 @@ import { spooderLog, webLog } from '../Logging';
 import { WebService } from './WebService';
 import crypto from 'crypto';
 import { Request, Response } from 'express';
+import { v4 } from 'uuid';
 
 interface ShareUser {
   name: string;
@@ -168,6 +169,41 @@ export default class ShareService {
   static saveShares(newShares: KeyedObject) {
     ShareService.instance.shares = newShares;
     ShareService.instance.saveShares();
+  }
+
+  static saveShare(shareId: string, newShare: ShareUser) {
+    ShareService.instance.shares[shareId] = newShare;
+    ShareService.instance.saveShares();
+  }
+
+  static createShare(streamingPlatforms: KeyedObject) {
+    const firstStreamKey = Object.keys(streamingPlatforms)[0];
+    if (Object.keys(streamingPlatforms).length === 0) {
+      console.log('No streaming platforms provided');
+      return;
+    }
+    const newName = streamingPlatforms[firstStreamKey].displayName;
+    const newShare: ShareUser = {
+      name: newName,
+      joinMessage: '',
+      leaveMessage: '',
+      plugins: {},
+      commands: {},
+      streamPlatforms: streamingPlatforms,
+      notificationPlatforms: {},
+    };
+    const shareId = v4();
+    ShareService.instance.shares[shareId] = newShare;
+    ShareService.instance.saveShares();
+  }
+
+  static deleteShare(shareId: string) {
+    if (ShareService.instance.shares[shareId]) {
+      delete ShareService.instance.shares[shareId];
+      ShareService.instance.saveShares();
+    } else {
+      console.log('Share ID not found:', shareId);
+    }
   }
 
   static saveShareSettings(

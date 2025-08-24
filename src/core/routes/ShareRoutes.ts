@@ -59,25 +59,46 @@ export function ShareRoutes() {
     if (!streamModules[sharePlatform]) {
       return;
     }
-    const userInfo = await streamModules[sharePlatform].getUserInfo(shareUser);
-
-    if (userInfo != null) {
-      res.send({
-        status: 'ok',
-        info: userInfo,
+    streamModules[sharePlatform]
+      .verifyShareTarget(shareUser)
+      .then((userInfo) => {
+        if (userInfo != null) {
+          res.send({
+            status: 'ok',
+            info: userInfo,
+          });
+        } else {
+          res.send({
+            status: 'notfound',
+          });
+        }
+      })
+      .catch((e) => {
+        console.log('Error verifying share target', e);
+        res.send({
+          status: 'error',
+          message: 'Error verifying share target',
+        });
       });
-    } else {
-      res.send({
-        status: 'notfound',
-      });
-    }
   });
 
-  router.post('/save_shares', async (req: Request, res: Response) => {
-    const newShares = req.body;
-    ShareService.saveShares(newShares);
+  router.post('/save_share', async (req: Request, res: Response) => {
+    const { shareId, shareData } = req.body;
+    ShareService.saveShare(shareId, shareData);
     res.send({ status: 'ok' });
     webLog('SAVED THE SHARES');
+  });
+
+  router.post('/create_share', async (req: Request, res: Response) => {
+    const { streamingPlatforms } = req.body;
+    ShareService.createShare(streamingPlatforms);
+    res.send({ status: 'ok' });
+  });
+
+  router.post('/delete_share', async (req: Request, res: Response) => {
+    const { shareId } = req.body;
+    ShareService.deleteShare(shareId);
+    res.send({ status: 'ok' });
   });
 
   router.post('/set_share', (req: Request, res: Response) => {

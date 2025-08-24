@@ -594,4 +594,25 @@ export default class TwitchApi {
 
     return activeShares;
   };
+
+  verifyShareTarget = (target: string) => {
+    return new Promise<KeyedObject>((res, rej) => {
+      this.getUserInfo(target)
+        .then((userInfo) => {
+          if (userInfo.error) {
+            rej(userInfo.error);
+            return;
+          }
+          res({
+            username: userInfo.login,
+            userId: userInfo.id,
+            displayName: userInfo.display_name,
+            profilePic: userInfo.profile_image_url,
+          });
+        })
+        .catch((error) => {
+          rej(error);
+        });
+    });
+  };
 }
