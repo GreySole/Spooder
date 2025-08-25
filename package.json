@@ -28,6 +28,7 @@
     "eslint": "^9.33.0",
     "express": "^5.1.0",
     "fs-extra": "^11.3.1",
+    "googleapis": "^157.0.0",
     "multer": "^2.0.2",
     "obs-websocket-js": "^5.0.0",
     "prettier": "^3.3.2",
