@@ -6,7 +6,7 @@ Get the Manager app on <a href="https://github.com/GreySole/SpooderInstallerShar
 
 ## Manual (Command line)
 
-Requires Node v16.9.0 and up.
+Make sure you have the latest LTS version of Node.js installed.
 
 Use `npm install` to install Spooder's dependencies.
 
