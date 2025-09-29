@@ -38,7 +38,7 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.19.1",
     "typescript": "^5.9.2",
-    "uuid": "^11.1.0",
+    "uuid": "^13.0.0",
     "ws": "^8.18.1"
   },
   "devDependencies": {
