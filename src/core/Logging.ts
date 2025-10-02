@@ -52,7 +52,8 @@ export function logToFile(filename: string, message: string, maxlines: number) {
   if (logFile.split('\n').length >= maxlines) {
     logFile = logFile.substring(logFile.indexOf('\n', 1));
   }
-  logFile += message + '\n';
+  const timestamp = new Date().toISOString();
+  logFile += `[${timestamp}] ${message}\n`;
   fs.writeFileSync(filePath, logFile);
 }
 

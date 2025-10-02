@@ -12,6 +12,7 @@ import ShareService from '../../core/service/ShareService';
 import { userDir, KeyedObject } from '../../Types';
 import Discord from '../discord/main';
 import UserService from '../../core/service/UserService';
+import OnEventSubReceived from './OnEventSubReceived';
 
 export default function getTwitchRouters() {
   const sconfig = ConfigService.getConfig();
@@ -248,9 +249,18 @@ export default function getTwitchRouters() {
       res.send({ error: 'nologin' });
       return;
     }
-    const status = twitchModule.eventsub.testMode ? true : false;
-    const url = twitchModule.eventsub.websocketUrl;
+    const { status, url } = twitchModule.eventsub.getTestModeStatus();
+
     res.send({ status: 'ok', testMode: status, websocketUrl: url });
+  });
+
+  router.get('/set_eventsub_use_webhook', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+    const useWebhook = req.body.useWebhook;
+    twitchModule.oauth.useWebhookTransport = useWebhook;
   });
 
   router.get('/enable_test_eventsub', async (req, res) => {
@@ -386,7 +396,7 @@ export default function getTwitchRouters() {
     res.send(eventsubs);
   });
 
-  //Obsolete, but keeping for now
+  //Resurrected in case of using Spooder as a public server
   publicRouter.post('/webhooks/eventsub', async (req, res) => {
     const messageType = req.header('Twitch-Eventsub-Message-Type');
     if (messageType === 'webhook_callback_verification') {
@@ -400,6 +410,10 @@ export default function getTwitchRouters() {
     twitchLog(`Receiving ${type} request`, event);
 
     res.status(200).end();
+
+    OnEventSubReceived(type, event);
+
+    return;
 
     event.eventsubType = type;
 

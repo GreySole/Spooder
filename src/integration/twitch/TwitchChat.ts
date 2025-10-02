@@ -133,6 +133,7 @@ export default class TwitchChat {
           this.sayInChat(startCase);
         }
 
+        // Auto join shares
         let subs = await getEventSubs();
         let subtype = '';
 
