@@ -35,7 +35,9 @@ export default class OBS implements ControlModuleInterface {
   }
 
   getPluginFunctions = () => {
-    return {};
+    return {
+      call: this.call.bind(this),
+    };
   };
 
   getRouters() {
