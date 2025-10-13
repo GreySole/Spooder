@@ -266,7 +266,8 @@ export default class Plugin {
       };
 
       this.pluginModule.getAssetPath = (assetPath: string) => {
-        return path.resolve(userDir, 'web', 'assets', this.dirname, assetPath);
+        const realAssetPath = assetPath.startsWith('/') ? assetPath.substring(1) : assetPath;
+        return path.resolve(userDir, 'web', 'assets', this.dirname, realAssetPath);
       };
 
       const getLocalFilePath = (filePath: string) => {
