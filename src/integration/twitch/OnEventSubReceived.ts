@@ -7,11 +7,8 @@ import Twitch, { twitchLog } from './main';
 import { KeyedObject, StreamMessage } from '../../Types';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 
-export default async function OnEventSubReceived(data: KeyedObject) {
+export default async function OnEventSubReceived(type: string, event: KeyedObject) {
   const twitchModule = ModuleService.getStreamModule('twitch') as Twitch;
-
-  const type = data.payload.subscription.type;
-  const event = { ...data.payload.event };
 
   const broadcasterUserId = twitchModule.api.broadcasterUserID;
   if (event.broadcaster_user_name === 'testBroadcaster') {
@@ -139,7 +136,7 @@ export default async function OnEventSubReceived(data: KeyedObject) {
       if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
         continue;
       }
-      console.log(events[e].triggers.twitch, type);
+
       if (events[e].triggers.twitch.type == type) {
         EventService.runCommands(streamMessage, e, 'event');
       }

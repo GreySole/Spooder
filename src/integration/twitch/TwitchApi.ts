@@ -173,7 +173,7 @@ export default class TwitchApi {
     });
   }
 
-  getAppToken = async () => {
+  getAppToken = async (): Promise<string> => {
     const oauth = this.getModule().oauth;
     if (this.appToken == '') {
       const twitchScopes = scopes;
@@ -190,7 +190,7 @@ export default class TwitchApi {
         }
       }
 
-      var appParams =
+      const appParams =
         '?client_id=' +
         oauth['client-id'] +
         '&client_secret=' +
@@ -207,9 +207,10 @@ export default class TwitchApi {
         })
         .catch((error: Error) => {
           twitchLog('App token get error: ', error.message);
-          return;
+          throw error;
         });
     }
+    return this.appToken;
   };
 
   onAuthenticationFailure = () => {

@@ -10,6 +10,8 @@ import fs from 'fs';
 import getTwitchRouters from './TwitchRouter';
 import ShareService from '../../core/service/ShareService';
 import getResponseHandlers from './TwitchResponseHandlers';
+import WebSocket from 'ws';
+import TwitchCLI from './TwitchCLI';
 
 export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
@@ -122,13 +124,16 @@ export default class Twitch implements StreamModuleInterface {
   }
 
   onExternalNetworkChanged() {
-    //this.eventsub.refreshEventSubs();
+    if (this.oauth.useWebhookTransport) {
+      this.eventsub.refreshEventSubs();
+    }
   }
 
   oauth = {} as KeyedObject;
   api = new TwitchApi();
   eventsub = new TwitchEventSub();
   chat = new TwitchChat();
+  cli = new TwitchCLI();
   activeViewers = {} as KeyedObject;
 
   getPluginFunctions = () => {
