@@ -136,7 +136,7 @@ export default async function OnEventSubReceived(type: string, event: KeyedObjec
       if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
         continue;
       }
-      console.log(events[e].triggers.twitch, type);
+
       if (events[e].triggers.twitch.type == type) {
         EventService.runCommands(streamMessage, e, 'event');
       }

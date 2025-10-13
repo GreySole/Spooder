@@ -1,8 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
-import { exec } from 'child_process';
+import { exec, spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
+import ModuleService from '../../core/service/ModuleService';
+import Twitch from './main';
+import { findAvailablePort, WebService } from '../../core/service/WebService';
 
 //Twitch CLI Download: https://github.com/twitchdev/twitch-cli/releases/latest
 
@@ -18,21 +21,137 @@ interface PlatformInfo {
 export default class TwitchCLI {
   private cliPath: string;
   private platformInfo: PlatformInfo = {} as PlatformInfo;
+  private testServerProcess: ChildProcess | null = null;
+  private testServerTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.cliPath = path.resolve('user/twitch/cli'); // Path to the Twitch CLI executable
     console.log('Twitch CLI Path:', this.cliPath);
     this.platformInfo = this.detectPlatform();
+  }
 
-    if (!this.isInstalled()) {
-      fs.mkdirSync(this.cliPath, { recursive: true });
-      this.downloadTwitchCLI();
-    } else {
+  getModule = () => {
+    return ModuleService.getStreamModule('twitch') as Twitch;
+  };
+
+  private startTestServerTimer(): void {
+    // Clear existing timer if any
+    if (this.testServerTimer) {
+      clearTimeout(this.testServerTimer);
+    }
+
+    // Start 5-minute timer (300000 ms)
+    this.testServerTimer = setTimeout(() => {
+      console.log('Test server timeout reached (5 minutes), stopping server...');
+      this.stopTestServer();
+    }, 60000);
+  }
+
+  private resetTestServerTimer(): void {
+    if (this.isTestServerRunning()) {
+      this.startTestServerTimer();
     }
   }
 
-  public testEventCommand() {
-    this.executeCommand('event trigger follow -F https://lon.spooder.me/twitch/webhooks/eventsub');
+  public async testEventCommand(eventName: string, extraArgs: string = ''): Promise<void> {
+    const twitchModule = this.getModule();
+    if (twitchModule.loggedIn === false) {
+      return;
+    }
+
+    const useWebhook = twitchModule.oauth.useWebhookTransport;
+
+    try {
+      if (useWebhook) {
+        const publicUrl = WebService.getPublicHTTPUrl();
+        await this.executeCommand(
+          `event trigger ${eventName} -F ${publicUrl}/twitch/webhooks/eventsub ${extraArgs}`,
+        );
+      } else {
+        if (!this.isTestServerRunning()) {
+          const port = await findAvailablePort(8080);
+          await this.startTestServer(port);
+        }
+        await this.executeCommand(`event trigger ${eventName} ${extraArgs} --transport=websocket`);
+      }
+    } catch (e) {
+      console.error('Error testing event command:', e);
+    }
+  }
+
+  private startTestServer(port: number) {
+    return new Promise<void>((res, rej) => {
+      if (this.testServerProcess) {
+        console.log('Test server is already running');
+        return;
+      }
+
+      const executablePath = path.resolve(this.cliPath, this.platformInfo.executable);
+
+      if (!fs.existsSync(executablePath)) {
+        console.error('Twitch CLI not found. Please ensure it is downloaded and installed.');
+        return;
+      }
+
+      console.log('Starting Twitch CLI websocket test server...');
+
+      this.testServerProcess = spawn(
+        executablePath,
+        ['event', 'websocket', 'start-server', '-p', port.toString()],
+        {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        },
+      );
+
+      this.testServerProcess.stdout?.on('data', (data) => {
+        console.log('Twitch CLI Test Server:', data.toString());
+      });
+
+      this.testServerProcess.stderr?.on('data', (data) => {
+        console.error('Twitch CLI Test Server Error:', data.toString());
+      });
+
+      this.testServerProcess.on('close', (code) => {
+        console.log(`Twitch CLI test server exited with code ${code}`);
+        this.testServerProcess = null;
+      });
+
+      this.testServerProcess.on('error', (error) => {
+        console.error('Failed to start Twitch CLI test server:', error);
+        this.testServerProcess = null;
+      });
+
+      const twitchModule = this.getModule();
+
+      setTimeout(async () => {
+        await twitchModule.eventsub.enableTestMode('127.0.0.1', port);
+        // Start the 5-minute timer after test server is ready
+        this.startTestServerTimer();
+        res();
+      }, 1000);
+    });
+  }
+
+  public stopTestServer(): void {
+    if (this.testServerProcess) {
+      const twitchModule = this.getModule();
+      twitchModule.eventsub.disableTestMode();
+      console.log('Stopping Twitch CLI test server...');
+      this.testServerProcess.kill('SIGTERM');
+      this.testServerProcess = null;
+    } else {
+      console.log('No test server is currently running');
+    }
+
+    // Clear the timer when stopping the server
+    if (this.testServerTimer) {
+      clearTimeout(this.testServerTimer);
+      this.testServerTimer = null;
+    }
+  }
+
+  public isTestServerRunning(): boolean {
+    return this.testServerProcess !== null && !this.testServerProcess.killed;
   }
 
   private detectPlatform(): PlatformInfo {
@@ -230,6 +349,7 @@ export default class TwitchCLI {
   }
 
   async downloadTwitchCLI(): Promise<void> {
+    fs.mkdirSync(this.cliPath, { recursive: true });
     const cliPath = this.cliPath;
     try {
       const downloadUrl = `https://github.com/twitchdev/twitch-cli/releases/download/v1.1.24/${this.platformInfo.filename}`;
@@ -272,10 +392,20 @@ export default class TwitchCLI {
     const fullCommand = `"${executablePath}" ${command} ${args.join(' ')}`;
     console.log('Executing command:', fullCommand);
 
+    // Reset the test server timer whenever a command is executed
+    this.resetTestServerTimer();
+
     try {
       const result = await execAsync(fullCommand);
       return result;
     } catch (error: any) {
+      console.error('Error details:', error.message);
+      if (error.stderr) {
+        console.error('stderr:', error.stderr);
+      }
+      if (error.stdout) {
+        console.error('stdout:', error.stdout);
+      }
       throw new Error(`Twitch CLI command failed: ${error.message}`);
     }
   }

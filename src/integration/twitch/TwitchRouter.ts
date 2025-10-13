@@ -231,7 +231,7 @@ export default function getTwitchRouters() {
       res.send({ error: 'nologin' });
       return;
     }
-    await twitchModule.eventsub.refreshEventSubs();
+    await twitchModule.eventsub.refreshEventSubs(true);
     res.send({ status: 'SUCCESS' });
   });
 
@@ -254,13 +254,27 @@ export default function getTwitchRouters() {
     res.send({ status: 'ok', testMode: status, websocketUrl: url });
   });
 
-  router.get('/set_eventsub_use_webhook', async (req, res) => {
+  router.get('/get_eventsub_use_webhook', (req, res) => {
     if (twitchModule.loggedIn === false) {
       res.send({ error: 'nologin' });
       return;
     }
-    const useWebhook = req.body.useWebhook;
+    const useWebhookTransport = twitchModule.oauth.useWebhookTransport;
+    res.send({ status: 'ok', useWebhookTransport });
+  });
+
+  router.post('/set_eventsub_use_webhook', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+    const useWebhook = req.body.useWebhookTransport;
     twitchModule.oauth.useWebhookTransport = useWebhook;
+
+    fs.writeFileSync(userDir + '/settings/twitch.json', JSON.stringify(oauth), 'utf-8');
+
+    twitchModule.eventsub.switchTransportMethod(useWebhook);
+    res.send({ status: 'ok', useWebhookTransport: useWebhook });
   });
 
   router.get('/enable_test_eventsub', async (req, res) => {
@@ -286,6 +300,25 @@ export default function getTwitchRouters() {
 
     twitchModule.eventsub.disableTestMode();
     res.send({ status: 'ok' });
+  });
+
+  router.get('/is_cli_installed', async (req, res) => {
+    const isInstalled = twitchModule.cli.isInstalled();
+    res.send({ installed: isInstalled });
+  });
+
+  router.get('/install_cli', async (req, res) => {
+    const installResult = await twitchModule.cli.downloadTwitchCLI();
+    res.send({ installed: installResult });
+  });
+
+  router.post('/test_eventsub', async (req, res) => {
+    const { type, args } = req.body;
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+    twitchModule.eventsub.testEventSub(type, args);
   });
 
   router.get('/get_eventsubs_by_user', async (req, res) => {
@@ -407,148 +440,9 @@ export default function getTwitchRouters() {
     const { type } = req.body.subscription;
     const { event } = req.body;
 
-    twitchLog(`Receiving ${type} request`, event);
-
     res.status(200).end();
 
     OnEventSubReceived(type, event);
-
-    return;
-
-    event.eventsubType = type;
-
-    event.message = '';
-    event.platform = 'twitch';
-    event.respond = (responseTxt: string) => {
-      sayInChat(responseTxt, 'twitch', twitchModule.api.homeChannel);
-    };
-
-    if (event.broadcaster_user_id != twitchModule.api.broadcasterUserID && type != 'channel.raid') {
-      if (type == 'stream.online') {
-        await twitchModule.api.validateChatbot();
-        ShareService.setShare(event.broadcaster_user_login, true);
-        const discord = ModuleService.getCommunityModule('discord') as Discord;
-        if (!discord) {
-          return;
-        }
-        if (discord.loggedIn == true && discord.config.sharenotif == true) {
-          discord.api.findUser(discord.config.master).then((user) => {
-            let watchButton = discord.buttons.makeLinkButton(
-              'Watch',
-              'https://twitch.tv/' + event.broadcaster_user_login,
-            );
-            user.send({
-              content: event.broadcaster_user_name + " is live. I'm going in!",
-              components: [watchButton.toJSON()],
-            });
-          });
-        }
-      } else if (type == 'stream.offline') {
-        ShareService.setShare(event.broadcaster_user_login, false);
-      }
-      res.status(200).end();
-      return;
-    }
-
-    if (type == 'channel.raid') {
-      await twitchModule.api.getBroadcasterId();
-      if (event.to_broadcaster_user_id == twitchModule.api.broadcasterUserID) {
-        event.raidType = 'receive';
-        event.username = event.from_broadcaster_user_login;
-        event.displayName = event.from_broadcaster_user_name;
-      } else if (event.from_broadcaster_user_id == twitchModule.api.broadcasterUserID) {
-        event.raidType = 'send';
-        event.username = event.to_broadcaster_user_login;
-        event.displayName = event.to_broadcaster_user_name;
-      }
-    }
-
-    if (type == 'channel.channel_points_custom_reward_redemption.add') {
-      const modlocks = ModerationService.getModlocks();
-      event.userId = event.user_id;
-      event.username = event.user_login;
-      event.displayName = event.user_name;
-      event.message = event.user_input;
-      const events = EventService.getEvents();
-      for (let e in events) {
-        if (events[e].triggers.twitch == null) {
-          return;
-        }
-        if (
-          events[e].triggers.twitch.enabled &&
-          events[e].triggers.twitch.reward.id == event.reward.id
-        ) {
-          if (event.status == 'fulfilled' || events[e].triggers.twitch.reward.override == true) {
-            if (modlocks.events[e] != 1) {
-              event.eventType = 'twitch-redeem';
-              EventService.runCommands(event, e, 'event');
-            } else {
-              //rejectChannelPointReward(event.reward.id, event.id);
-              twitchModule.chat.sayInChat(event.reward.title + ' is locked on my end. Sorry.');
-              return;
-            }
-          } else if (
-            events[e].triggers.twitch.reward.override == false &&
-            modlocks.events[e] == 1
-          ) {
-            twitchModule.chat.sayInChat(
-              "MODS! This event is locked on my end. I can't reject it myself because I didn't create it :( please either lift the lock on " +
-                e +
-                ' or reject it.',
-            );
-          }
-        }
-      }
-    } else if (type == 'channel.channel_points_custom_reward_redemption.update') {
-      const events = EventService.getEvents();
-      const modlocks = ModerationService.getModlocks();
-      event.userId = event.user_id;
-      event.username = event.user_login;
-      event.displayName = event.user_name;
-      event.message = event.user_input;
-      for (let e in events) {
-        if (events[e].triggers.twitch == null) {
-          return;
-        }
-        if (
-          events[e].triggers.twitch.enabled &&
-          events[e].triggers.twitch.reward.id == event.reward.id &&
-          events[e].triggers.twitch.reward.override == false
-        ) {
-          if (event.status == 'fulfilled') {
-            if (modlocks.events[e] != 1) {
-              event.eventType = 'twitch-redeem';
-              EventService.runCommands(event, e, 'event');
-            } else {
-              //rejectChannelPointReward(event.reward.id, event.id);
-              twitchModule.chat.sayInChat(event.reward.title + ' is locked on my end. Sorry.');
-              return;
-            }
-          } else {
-            twitchModule.chat.sayInChat(
-              event.user_name + ' Sorry, the ' + event.reward.title + ' is a no go.',
-            );
-          }
-        }
-      }
-    } else {
-      const events = EventService.getEvents();
-      if (type != 'channel.raid') {
-        event.userId = event.user_id ?? event.broadcaster_user_id;
-        event.username = event.user_login ?? event.broadcaster_user_login;
-        event.displayName = event.user_name ?? event.broadcaster_user_name;
-      }
-      for (let e in events) {
-        if (events[e].triggers.twitch == null) {
-          return;
-        }
-        if (events[e].triggers.twitch?.enabled == true) {
-          if (events[e].triggers.twitch.type == type) {
-            EventService.runCommands(event, e, 'event');
-          }
-        }
-      }
-    }
   });
 
   return {

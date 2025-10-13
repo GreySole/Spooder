@@ -14,11 +14,9 @@ import TwitchEventSubWebsocket from './TwitchEventSubWebsocket';
 import TwitchEventSubWebhook from './TwitchEventSubWebhook';
 
 export default class TwitchEventSub {
-  eventSubModule: TwitchEventSubWebsocket | TwitchEventSubWebhook;
+  eventSubModule?: TwitchEventSubWebsocket | TwitchEventSubWebhook;
 
-  constructor() {
-    this.eventSubModule = new TwitchEventSubWebsocket();
-  }
+  constructor() {}
 
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
@@ -34,8 +32,23 @@ export default class TwitchEventSub {
     this.eventSubModule.initialize();
   };
 
+  switchTransportMethod = async (useWebhook: boolean) => {
+    twitchLog('Cleaning up existing module...');
+    await this.eventSubModule?.cleanup();
+    if (useWebhook) {
+      this.eventSubModule = new TwitchEventSubWebhook();
+      //Refreshing on initialize won't work because public hosting isn't ready when Spooder starts.
+      //Webhook refreshing is done in onExternalNetworkChange, so we'll have to do it manually here.
+      this.eventSubModule.refreshEventSubs();
+    } else {
+      this.eventSubModule = new TwitchEventSubWebsocket();
+    }
+    twitchLog(`Initializing ${useWebhook ? 'Webhook' : 'WebSocket'} module...`);
+    this.eventSubModule.initialize();
+  };
+
   getEventSubs = async () => {
-    return await this.eventSubModule.getEventSubs();
+    return await this.eventSubModule!.getEventSubs();
   };
 
   getTwitchTriggeredEvents = () => {
@@ -52,15 +65,20 @@ export default class TwitchEventSub {
 
   deleteEventSub = async (id: string) => {
     twitchLog('Deleting EventSub ID:', id);
-    await this.eventSubModule.deleteEventSub(id);
+    await this.eventSubModule!.deleteEventSub(id);
   };
 
   initEventSub = async (type: string, broadcasterId: string, botId?: string) => {
-    await this.eventSubModule.initEventSub(type, broadcasterId, botId);
+    await this.eventSubModule!.initEventSub(type, broadcasterId, botId);
   };
 
   refreshEventSubs = async (forceDeleteAll?: boolean) => {
-    await this.eventSubModule.refreshEventSubs(forceDeleteAll);
+    await this.eventSubModule!.refreshEventSubs(forceDeleteAll);
+  };
+
+  testEventSub = async (eventType: string, extraArgs?: string) => {
+    const twitch = this.getModule();
+    twitch.cli.testEventCommand(eventType, extraArgs);
   };
 
   getTestModeStatus = () => {
@@ -75,7 +93,7 @@ export default class TwitchEventSub {
 
   enableTestMode = async (host: string, port: number) => {
     const twitch = this.getModule();
-    if (twitch.oauth.useWebhookTransport) {
+    if (!twitch.oauth.useWebhookTransport) {
       const eSubModule = this.eventSubModule as TwitchEventSubWebsocket;
       return await eSubModule.enableTestMode(host, port);
     } else {
@@ -85,7 +103,7 @@ export default class TwitchEventSub {
 
   disableTestMode = () => {
     const twitch = this.getModule();
-    if (twitch.oauth.useWebhookTransport) {
+    if (!twitch.oauth.useWebhookTransport) {
       const eSubModule = this.eventSubModule as TwitchEventSubWebsocket;
       return eSubModule.disableTestMode();
     } else {

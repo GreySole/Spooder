@@ -27,6 +27,14 @@ export default class TwitchEventSubWebsocket {
     this.setupWebSocketHandlers();
   }
 
+  cleanup = async () => {
+    const subs = await this.getEventSubs();
+    for (let s in subs.data) {
+      twitchLog('Deleting ' + subs.data[s].type, subs.data[s].condition.broadcaster_user_id);
+      await this.deleteEventSub(subs.data[s].id);
+    }
+  };
+
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
   };
