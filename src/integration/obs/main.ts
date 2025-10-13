@@ -6,6 +6,7 @@ import ObsWebsocket from './ObsWebsocket';
 import fs from 'fs';
 import OSC from '@spooder/osc-js';
 import { websocketTest } from '../../core/util/NetUtil';
+import ObsStreamMonitor from './ObsStreamMonitor';
 
 export default class OBS implements ControlModuleInterface {
   constructor() {
@@ -22,6 +23,7 @@ export default class OBS implements ControlModuleInterface {
   }
 
   websocket = new ObsWebsocket();
+  monitor = new ObsStreamMonitor();
 
   onPluginsLoaded() {}
 
@@ -98,8 +100,4 @@ export default class OBS implements ControlModuleInterface {
   }
 
   deckClients = [] as any[];
-  streamReconnecting = false;
-  streamBleeding = false;
-  streamBleedCount = 0;
-  skippedFrames = 0;
 }

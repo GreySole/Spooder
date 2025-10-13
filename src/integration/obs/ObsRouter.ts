@@ -31,6 +31,7 @@ export default function getObsRouters() {
 
   router.post('/connect', async (req: Request, res: Response) => {
     const obsModule = ModuleService.getControlModule('obs') as OBS;
+    obsModule.monitor.startMonitoring();
     let connectObj = req.body;
     console.log('CONNECTING TO OBS...', req.body);
 
