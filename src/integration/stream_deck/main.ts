@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { KeyedObject, userDir } from 'src/Types';
+import { KeyedObject, userDir } from '../../Types';
 import { ControlModuleInterface } from '../interface/ControlModuleInterface';
 import fs from 'fs';
 

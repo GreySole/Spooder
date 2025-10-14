@@ -1,6 +1,6 @@
-import ModuleService from 'src/core/service/ModuleService';
+import ModuleService from '../../core/service/ModuleService';
 import OBS from './main';
-import { sayInChat } from 'src/core/service/EventService';
+import { sayInChat } from '../../core/service/EventService';
 
 export default class ObsStreamMonitor {
   streamReconnecting = false;
