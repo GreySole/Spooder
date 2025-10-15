@@ -11,12 +11,12 @@ export default async function onObsOscMessage(message: any) {
 
   let address = message.address.split('/');
 
-  if (obsModule.websocket.connected == false) {
-    sendToTCP('/obs/status/connection', 0);
-    return;
-  }
-
   if (address[1] == 'obs') {
+    if (obsModule.websocket.connected == false) {
+      sendToTCP('/obs/status/connection', 0);
+      return;
+    }
+
     if (address[2] == 'set') {
       if (address[3] == 'input') {
         if (address[4] == 'mute') {

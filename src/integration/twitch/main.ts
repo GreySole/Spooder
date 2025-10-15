@@ -64,6 +64,9 @@ export default class Twitch implements StreamModuleInterface {
   onPluginsLoaded() {}
 
   onSharesChanged() {
+    if (!this.loggedIn) {
+      return;
+    }
     const shares = ShareService.getShares();
     this.shareUsers = {};
     for (const s in shares) {
@@ -124,6 +127,9 @@ export default class Twitch implements StreamModuleInterface {
   }
 
   onExternalNetworkChanged() {
+    if (!this.loggedIn) {
+      return;
+    }
     if (this.oauth.useWebhookTransport) {
       this.eventsub.refreshEventSubs();
     }

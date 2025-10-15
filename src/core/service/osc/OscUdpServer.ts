@@ -291,7 +291,12 @@ export default class OscUdpServer {
       });
     }
 
-    MonitorService.addLog(MonitorDataType.UDP, MonitorDirection.Send, address, oscValue);
+    const oscValueLog = Array.isArray(oscValue) ? oscValue : [oscValue];
+
+    MonitorService.addLog(MonitorDataType.UDP, MonitorDirection.Send, address, [
+      dest,
+      ...oscValueLog,
+    ]);
   };
 
   public getUdpServer() {

@@ -197,13 +197,25 @@ export default class ModuleService {
 
   static async autoLoginModules() {
     for (let s in ModuleService.instance.activeStreams) {
-      await ModuleService.instance.activeStreams[s].autoLogin();
+      try {
+        await ModuleService.instance.activeStreams[s].autoLogin();
+      } catch (e) {
+        console.log('Stream module auto-login error', e);
+      }
     }
     for (let s in ModuleService.instance.activeCommunities) {
-      await ModuleService.instance.activeCommunities[s].autoLogin();
+      try {
+        await ModuleService.instance.activeCommunities[s].autoLogin();
+      } catch (e) {
+        console.log('Community module auto-login error', e);
+      }
     }
     for (let s in ModuleService.instance.activeControls) {
-      await ModuleService.instance.activeControls[s].autoLogin();
+      try {
+        await ModuleService.instance.activeControls[s].autoLogin();
+      } catch (e) {
+        console.log('Control module auto-login error', e);
+      }
     }
   }
 }

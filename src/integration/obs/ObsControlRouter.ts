@@ -28,14 +28,20 @@ export default function ObsControlRouter() {
   router.get('/start_stream', (req: Request, res: Response) => {
     obsWebsocket
       .call('StartStream')
-      .then((data) => obsSuccess(data, res))
+      .then((data) => {
+        obs.monitor.startMonitoring();
+        return obsSuccess(data, res);
+      })
       .catch(obsError);
   });
 
   router.get('/stop_stream', (req: Request, res: Response) => {
     obsWebsocket
       .call('StopStream')
-      .then((data) => obsSuccess(data, res))
+      .then((data) => {
+        obs.monitor.stopMonitoring();
+        return obsSuccess(data, res);
+      })
       .catch(obsError);
   });
 
