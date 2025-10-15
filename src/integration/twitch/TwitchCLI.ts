@@ -220,12 +220,14 @@ export default class TwitchCLI {
         .get(url, (response) => {
           // Handle redirects
           if (response.statusCode === 302 || response.statusCode === 301) {
+            file.destroy(); // Clean up the file stream
             return this.downloadFile(response.headers.location!, destPath)
               .then(resolve)
               .catch(reject);
           }
 
           if (response.statusCode !== 200) {
+            file.destroy(); // Clean up the file stream
             reject(new Error(`Failed to download: ${response.statusCode}`));
             return;
           }
@@ -233,16 +235,28 @@ export default class TwitchCLI {
           response.pipe(file);
 
           file.on('finish', () => {
-            file.close();
-            resolve();
+            file.close((err) => {
+              if (err) {
+                console.error('Error closing file:', err);
+                reject(err);
+              } else {
+                console.log('File download completed and closed successfully');
+                // Add a small delay to ensure file handle is fully released
+                setTimeout(() => resolve(), 500);
+              }
+            });
           });
 
           file.on('error', (err) => {
+            file.destroy(); // Clean up the file stream
             fs.unlink(destPath, () => {}); // Delete the file on error
             reject(err);
           });
         })
-        .on('error', reject);
+        .on('error', (err) => {
+          file.destroy(); // Clean up the file stream
+          reject(err);
+        });
     });
   }
 
@@ -258,9 +272,54 @@ export default class TwitchCLI {
       if (isZip) {
         // For ZIP files (Windows)
         if (isWindows) {
-          await execAsync(
-            `powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${tempExtractPath}' -Force"`,
-          );
+          console.log('Extracting ZIP on Windows:', path.basename(archivePath));
+
+          // Check if file exists and get its stats
+          if (fs.existsSync(archivePath)) {
+            const stats = fs.statSync(archivePath);
+            console.log(`Archive: ${stats.size} bytes`);
+          } else {
+            throw new Error(`Archive file does not exist: ${archivePath}`);
+          }
+
+          // Add a small delay to allow file handles to be released
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          let attempts = 0;
+          const maxAttempts = 3;
+
+          while (attempts < maxAttempts) {
+            try {
+              console.log(`Extraction attempt ${attempts + 1}/${maxAttempts}`);
+
+              const result = await execAsync(
+                `powershell -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '${archivePath}' -DestinationPath '${tempExtractPath}' -Force"`,
+              );
+              console.log('Extraction successful');
+              break; // Success, exit the retry loop
+            } catch (error: any) {
+              attempts++;
+              console.error(`Attempt ${attempts} failed:`, error.message);
+
+              if (attempts >= maxAttempts) {
+                console.log('Trying alternative method...');
+
+                // Try using cmd instead of direct PowerShell
+                try {
+                  await execAsync(
+                    `cmd /c "powershell.exe -ExecutionPolicy Bypass -Command \\"Expand-Archive -LiteralPath '${archivePath}' -DestinationPath '${tempExtractPath}' -Force\\""`,
+                  );
+                  console.log('Alternative extraction successful');
+                  break;
+                } catch (cmdError: any) {
+                  throw new Error(`All extraction methods failed: ${error.message}`);
+                }
+              } else {
+                console.log(`Retrying in 2 seconds...`);
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+              }
+            }
+          }
         } else {
           // Use unzip on Unix-like systems
           await execAsync(`unzip -o "${archivePath}" -d "${tempExtractPath}"`);
@@ -270,6 +329,7 @@ export default class TwitchCLI {
         await execAsync(`tar -xzf "${archivePath}" -C "${tempExtractPath}"`);
       }
 
+      console.log('Extraction complete. Moving executable to correct location...');
       // Find and move the executable to the correct location
       await this.moveExecutableToCorrectLocation(tempExtractPath, extractPath);
 
@@ -299,6 +359,7 @@ export default class TwitchCLI {
         if (stat.isFile() && item === executableName) {
           return fullPath;
         } else if (stat.isDirectory()) {
+          console.log(`Searching in directory: ${fullPath}`);
           const found = findExecutable(fullPath);
           if (found) return found;
         }
@@ -359,6 +420,8 @@ export default class TwitchCLI {
         `Downloading Twitch CLI for ${this.platformInfo.platform} ${this.platformInfo.arch}...`,
       );
       await this.downloadFile(downloadUrl, archivePath);
+
+      console.log(archivePath, cliPath);
 
       console.log('Extracting Twitch CLI...');
       await this.extractArchive(archivePath, cliPath);
