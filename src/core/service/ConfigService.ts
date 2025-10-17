@@ -52,9 +52,23 @@ interface ManualConfig {
   tcp_url: string;
 }
 
+interface BackupSection {
+  auto_backup: {
+    settings: {
+      enabled: boolean;
+      schedule: string;
+    };
+    plugins: {
+      enabled: boolean;
+      schedule: string;
+    };
+  };
+}
+
 export interface ConfigFile {
   bot: ConfigBotSection;
   network: ConfigNetworkSection;
+  backup: BackupSection;
 }
 
 export default class ConfigService {
@@ -90,6 +104,18 @@ export default class ConfigService {
       ngrok: { authtoken: '', subdomain: '' },
       motherwolf: { token: '', subdomain: '' },
       manual: { http_url: '', tcp_url: '' },
+    },
+    backup: {
+      auto_backup: {
+        settings: {
+          enabled: false,
+          schedule: '0 0 * * *',
+        },
+        plugins: {
+          enabled: false,
+          schedule: '0 0 * * *',
+        },
+      },
     },
   };
 
@@ -168,7 +194,7 @@ export default class ConfigService {
           },
           ngrok: {
             authtoken: configObj.network.ngrokauthtoken,
-            subdomain: configObj.network.mw_subdomain,
+            subdomain: configObj.network.ngroksubdomain,
           },
           motherwolf: {
             token: configObj.network.mw_token,
@@ -183,6 +209,7 @@ export default class ConfigService {
         const newConfig = {
           bot: configObj.bot as ConfigBotSection,
           network: newNetworkConfig as ConfigNetworkSection,
+          backup: configObj.backup as BackupSection,
         };
 
         ConfigService.instance.config = newConfig;

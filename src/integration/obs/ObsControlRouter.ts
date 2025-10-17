@@ -29,7 +29,6 @@ export default function ObsControlRouter() {
     obsWebsocket
       .call('StartStream')
       .then((data) => {
-        obs.monitor.startMonitoring();
         return obsSuccess(data, res);
       })
       .catch(obsError);
@@ -39,7 +38,6 @@ export default function ObsControlRouter() {
     obsWebsocket
       .call('StopStream')
       .then((data) => {
-        obs.monitor.stopMonitoring();
         return obsSuccess(data, res);
       })
       .catch(obsError);
