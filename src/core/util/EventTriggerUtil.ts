@@ -1,8 +1,12 @@
 import { KeyedObject } from '../../Types';
+import { EventService } from '../service/EventService';
 
-export function triggerExistsAndEnabled(triggers: KeyedObject, triggerType: string) {
-  if (triggers[triggerType]) {
-    if (triggers[triggerType].enabled) {
+export function triggerExistsAndEnabled(event: KeyedObject, triggerType: string) {
+  if (groupIsDisabled(event)) {
+    return false;
+  }
+  if (event.triggers[triggerType]) {
+    if (event.triggers[triggerType].enabled) {
       return true;
     } else {
       return false;
@@ -10,4 +14,13 @@ export function triggerExistsAndEnabled(triggers: KeyedObject, triggerType: stri
   } else {
     return false;
   }
+}
+
+export function groupIsDisabled(event: KeyedObject) {
+  EventService.getDisabledGroups().forEach((groupName: string) => {
+    if (event.group === groupName) {
+      return true;
+    }
+  });
+  return false;
 }

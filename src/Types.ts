@@ -164,6 +164,7 @@ export interface PluginModule {
   onOSC?: (message: OSC.Message) => void;
   onEvent?: (event: string, data: KeyedObject) => void;
   registerExtra: (key: string, value: any) => void;
+  pluginLog: (...content: any[]) => void;
 }
 
 export enum PluginMode {

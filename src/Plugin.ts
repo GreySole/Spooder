@@ -151,6 +151,7 @@ export default class Plugin {
       let requiredModule: any;
 
       this.require = createRequire(resolve(pluginPath)); // Adjust to the plugin's entry point
+
       if (fs.existsSync(tsConfigPath) && devMode) {
         this.require('ts-node').register({
           project: resolve(userDir, 'plugins', pluginDirName, 'tsconfig.json'),
@@ -358,6 +359,10 @@ export default class Plugin {
           return webJoin(publicHTTPUrl, 'utility', this.dirname) + `?key=${shareKey}`;
         }
         return '';
+      };
+
+      this.pluginModule.pluginLog = (content: any[]) => {
+        pluginLog(this.dirname, ...content);
       };
 
       const spooderConfig = ConfigService.getConfig();

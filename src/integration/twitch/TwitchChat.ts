@@ -2,11 +2,11 @@ import tmi from 'tmi.js';
 import Twitch, { twitchLog } from './main';
 import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
-import PluginService from '../../core/service/PluginService';
 import ShareService from '../../core/service/ShareService';
-import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types';
+import { KeyedObject, StreamMessage } from '../../Types';
 import { processStreamMessage } from '../../core/util/ChatUtil';
 import { processTwitchEvent, twitchEvents } from './functions/processTwitchMessage';
+import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 
 function stringifyArray(a: string[]) {
   return a.join(', ');
@@ -180,12 +180,13 @@ export default class TwitchChat {
     let commandsArray = [];
 
     for (let e in events) {
-      if (shareChannel != null && shareChannel != homeChannel) {
-        if (!Object.keys(shares[shareChannel].commands).includes(e)) {
-          continue;
+      if (triggerExistsAndEnabled(events[e], 'chat')) {
+        if (shareChannel != null && shareChannel != homeChannel) {
+          if (!Object.keys(shares[shareChannel].commands).includes(e)) {
+            continue;
+          }
         }
-      }
-      if (events[e].triggers.chat) {
+
         if (events[e].triggers.chat.command.startsWith('!')) {
           commandsArray.push(events[e].triggers.chat.command);
         }

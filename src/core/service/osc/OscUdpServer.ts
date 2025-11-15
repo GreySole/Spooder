@@ -37,7 +37,7 @@ export default class OscUdpServer {
       );
 
       for (const e of Object.keys(events)) {
-        if (triggerExistsAndEnabled(events[e].triggers, 'osc')) {
+        if (triggerExistsAndEnabled(events[e], 'osc')) {
           if (events[e].triggers.osc.handletype == 'search') {
             if (message.address == events[e].triggers.osc.address) {
               const searchArg = events[e].triggers.osc.search?.arg ?? 0;

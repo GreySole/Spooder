@@ -55,7 +55,7 @@ export default class TwitchEventSub {
     const events = EventService.getEvents();
     let twitchTriggeredEvents = {} as KeyedObject;
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
       twitchTriggeredEvents[e] = events[e];

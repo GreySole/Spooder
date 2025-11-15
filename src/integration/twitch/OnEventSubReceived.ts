@@ -111,7 +111,7 @@ export default async function OnEventSubReceived(type: string, event: KeyedObjec
     const modlocks = ModerationService.getModlocks();
     const events = EventService.getEvents();
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
       if (events[e].triggers.twitch.reward.id == event.reward.id) {
@@ -137,11 +137,8 @@ export default async function OnEventSubReceived(type: string, event: KeyedObjec
     const events = EventService.getEvents();
     const modlocks = ModerationService.getModlocks();
     for (let e in events) {
-      if (events[e].triggers.twitch == null) {
-        continue;
-      }
       if (
-        events[e].triggers.twitch.enabled &&
+        triggerExistsAndEnabled(events[e], 'twitch') &&
         events[e].triggers.twitch.reward.id == event.reward.id &&
         events[e].triggers.twitch.reward.override == false
       ) {
@@ -163,7 +160,7 @@ export default async function OnEventSubReceived(type: string, event: KeyedObjec
   } else {
     const events = EventService.getEvents();
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
 

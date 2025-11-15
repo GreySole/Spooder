@@ -189,7 +189,7 @@ export default class TwitchEventSubWebhook {
     }
 
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
 

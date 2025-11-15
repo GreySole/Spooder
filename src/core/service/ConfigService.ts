@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import { spooderLog } from '../Logging';
 import { userDir, KeyedObject } from '../../Types';
 import { sendToApp } from '../util/AppUtil';
+import BackupRestoreService from './BackupRestoreService';
 
 export interface ConfigBotSection {
   owner_name: string;
@@ -57,10 +58,12 @@ interface BackupSection {
     settings: {
       enabled: boolean;
       schedule: string;
+      max_backups: number;
     };
     plugins: {
       enabled: boolean;
       schedule: string;
+      max_backups: number;
     };
   };
 }
@@ -110,10 +113,12 @@ export default class ConfigService {
         settings: {
           enabled: false,
           schedule: '0 0 * * *',
+          max_backups: 5,
         },
         plugins: {
           enabled: false,
           schedule: '0 0 * * *',
+          max_backups: 5,
         },
       },
     },
@@ -216,6 +221,7 @@ export default class ConfigService {
       } else {
         ConfigService.instance.config = configObj;
       }
+      BackupRestoreService.InitSchedule();
     } catch (e) {
       console.error(e);
     }

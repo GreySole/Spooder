@@ -62,6 +62,7 @@ export class EventService {
       const eventsObj = JSON.parse(settingFile);
       this.events = eventsObj.events;
       this.eventGroups = eventsObj.groups;
+      this.disabledGroups = eventsObj.disabledGroups || [];
 
       if (fs.existsSync(userDir + '/settings/eventstorage.json')) {
         try {
@@ -89,6 +90,7 @@ export class EventService {
   modCommands = {} as KeyedObject;
   events = {} as KeyedObject;
   eventGroups = ['Default'];
+  disabledGroups = [] as string[];
   recurringMessages = {} as KeyedObject;
 
   static getActiveEventEndTime(eventName: string) {
@@ -240,23 +242,36 @@ export class EventService {
     return EventService.instance.eventGroups;
   }
 
+  static getDisabledGroups() {
+    return EventService.instance.disabledGroups;
+  }
+
   static getActiveEvents() {
     return EventService.instance.activeEvents;
   }
 
-  static getStreamChatCommands(
-    bangOnly: boolean = false,
-    sharePlatform?: string,
-    shareChannel?: string,
-  ) {
+  static getStreamChatCommands(bangOnly: boolean = false, shareId?: string) {
     const events = EventService.getEvents();
     const shares = ShareService.getShares();
+
     let chatCommands = [];
 
-    for (let e in events) {
-      if (sharePlatform && shareChannel) {
+    if (shareId && shares[shareId]) {
+      const share = shares[shareId];
+      const sharedCommands = Object.values(share.streamPlatforms)[0].commands;
+      for (let cmdEventName in sharedCommands) {
+        if (triggerExistsAndEnabled(events[cmdEventName], 'chat')) {
+          if (bangOnly && !events[cmdEventName].triggers.chat.command.startsWith('!')) {
+            continue;
+          }
+          chatCommands.push(events[cmdEventName].triggers.chat.command);
+        }
       }
-      if (triggerExistsAndEnabled(events[e].triggers, 'chat')) {
+      return chatCommands;
+    }
+
+    for (let e in events) {
+      if (triggerExistsAndEnabled(events[e], 'chat')) {
         if (bangOnly && !events[e].triggers.chat.command.startsWith('!')) {
           continue;
         }
@@ -276,15 +291,17 @@ export class EventService {
     );
   }
 
-  static saveEvents(newEvents: KeyedObject, newGroups: string[]) {
+  static saveEvents(newEvents: KeyedObject, newGroups: string[], newDisabledGroups: string[]) {
     EventService.instance.events = newEvents;
     EventService.instance.eventGroups = newGroups;
+    EventService.instance.disabledGroups = newDisabledGroups;
 
     fs.writeFileSync(
       userDir + '/settings/commands.json',
       JSON.stringify({
         events: newEvents,
         groups: newGroups,
+        disabledGroups: newDisabledGroups,
       }),
       'utf-8',
     );

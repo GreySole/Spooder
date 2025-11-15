@@ -3,7 +3,7 @@ import ModuleService from '../../core/service/ModuleService';
 import { websocketTest } from '../../core/util/NetUtil';
 import Twitch, { twitchLog } from './main';
 import OnEventSubReceived from './OnEventSubReceived';
-import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
+import { groupIsDisabled, triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 import Axios from 'axios';
 import { KeyedObject } from '../../Types';
 import WebSocket from 'ws';
@@ -213,7 +213,7 @@ export default class TwitchEventSubWebsocket {
     }
 
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
 
@@ -281,6 +281,7 @@ export default class TwitchEventSubWebsocket {
       if (data.metadata.message_type === 'session_welcome') {
         this.wsSessionId = data.payload.session.id;
         twitchLog('Eventsub session id:', this.wsSessionId);
+        this.refreshEventSubs();
       } else if (data.metadata.message_type === 'session_keepalive') {
         // Do nothing
       } else if (data.metadata.message_type === 'session_reconnect') {
@@ -316,8 +317,6 @@ export default class TwitchEventSubWebsocket {
       this.websocket = new WebSocket(this.websocketUrl);
       this.setupWebSocketHandlers();
     };
-
-    this.refreshEventSubs();
   }
 
   enableTestMode = (host: string, port: number) => {

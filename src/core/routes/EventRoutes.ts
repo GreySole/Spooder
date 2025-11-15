@@ -9,6 +9,7 @@ import {
   checkResponseTrigger,
   verifyResponseScript,
 } from '../util/ResponseUtil';
+import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
 
 export function EventRoutes() {
   const router = express.Router();
@@ -26,7 +27,7 @@ export function EventRoutes() {
     const events = EventService.getEvents();
     const chatCommands = {} as KeyedObject;
     for (let e in events) {
-      if (events[e].triggers.chat?.enabled) {
+      if (triggerExistsAndEnabled(events[e], 'chat')) {
         chatCommands[e] = { group: events[e].group, command: events[e].triggers.chat.command };
       }
     }
@@ -34,7 +35,7 @@ export function EventRoutes() {
   });
 
   router.post('/save_events', async (req: Request, res: Response) => {
-    EventService.saveEvents(req.body.events, req.body.groups);
+    EventService.saveEvents(req.body.events, req.body.groups, req.body.disabledGroups);
     res.send({ status: 'SAVE SUCCESS' });
     webLog('SAVED COMMANDS');
   });

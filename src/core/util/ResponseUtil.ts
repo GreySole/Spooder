@@ -41,12 +41,12 @@ function matchConditions(a: string, b: string) {
 
 export function checkResponseTrigger(eventData: KeyedObject, message: StreamMessage) {
   let searchMode = false;
-  if (triggerExistsAndEnabled(eventData.triggers, 'chat')) {
+  if (triggerExistsAndEnabled(eventData, 'chat')) {
     if (eventData.triggers.chat.search) {
       searchMode = true;
     }
   }
-  if (triggerExistsAndEnabled(eventData.triggers, 'osc')) {
+  if (triggerExistsAndEnabled(eventData, 'osc')) {
     if (eventData.triggers.osc.search) {
       searchMode = true;
     }

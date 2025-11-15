@@ -9,47 +9,137 @@ import PluginService from './PluginService';
 import nodeSchedule from 'node-schedule';
 
 export default class BackupRestoreService {
+  // Store references to scheduled jobs
+  private static settingsJob: any = null;
+  private static pluginsJob: any = null;
+  private static bothJob: any = null;
   static InitSchedule() {
+    // Cancel any previous jobs before scheduling new ones
+    if (BackupRestoreService.settingsJob) {
+      BackupRestoreService.settingsJob.cancel();
+      BackupRestoreService.settingsJob = null;
+    }
+    if (BackupRestoreService.pluginsJob) {
+      BackupRestoreService.pluginsJob.cancel();
+      BackupRestoreService.pluginsJob = null;
+    }
+    if (BackupRestoreService.bothJob) {
+      BackupRestoreService.bothJob.cancel();
+      BackupRestoreService.bothJob = null;
+    }
     const config = ConfigService.getConfig();
     if (config.backup?.auto_backup) {
+      const settingsBackupName = BackupRestoreService.generateBackupName(
+        'auto_' + config.bot.bot_name,
+        'settings',
+      );
+      const pluginsBackupName = BackupRestoreService.generateBackupName(
+        'auto_' + config.bot.bot_name,
+        'plugins',
+      );
+      const backupDir = path.join(userDir, 'backup');
+      const backupSettingsDir = path.join(backupDir, 'settings');
+      const backupPluginsDir = path.join(backupDir, 'plugins');
+
+      // Helper to prune old auto_ backups
+      function pruneAutoBackups(dir: string, maxCount: number) {
+        if (!fs.existsSync(dir)) return;
+        const files = fs
+          .readdirSync(dir)
+          .filter((f) => f.startsWith('auto_') && f.endsWith('.zip'))
+          .map((f) => ({
+            name: f,
+            time: fs.statSync(path.join(dir, f)).mtime.getTime(),
+          }))
+          .sort((a, b) => a.time - b.time); // oldest first
+        if (files.length > maxCount) {
+          const toDelete = files.slice(0, files.length - maxCount);
+          toDelete.forEach((f) => {
+            fs.rmSync(path.join(dir, f.name));
+            webLog(`Pruned old auto-backup: ${f.name}`);
+          });
+        }
+      }
+
+      // After each backup, prune excess auto_ backups
+      const pruneSettings = () => {
+        const max = config.backup?.auto_backup?.settings?.max_backups;
+        if (typeof max === 'number' && max > 0) {
+          pruneAutoBackups(backupSettingsDir, max);
+        }
+      };
+      const prunePlugins = () => {
+        const max = config.backup?.auto_backup?.plugins?.max_backups;
+        if (typeof max === 'number' && max > 0) {
+          pruneAutoBackups(backupPluginsDir, max);
+        }
+      };
+
       if (
         config.backup.auto_backup.settings.enabled &&
         config.backup.auto_backup.plugins.enabled &&
         config.backup.auto_backup.settings.schedule === config.backup.auto_backup.plugins.schedule
       ) {
         const schedule = config.backup.auto_backup.settings.schedule;
-        nodeSchedule.scheduleJob(schedule, async () => {
+        BackupRestoreService.bothJob = nodeSchedule.scheduleJob(schedule, async () => {
           webLog('AUTO BACKUP Start');
           webLog('Backing up settings...');
-          await BackupRestoreService.backupSettings('');
+
+          await BackupRestoreService.backupSettings(settingsBackupName);
+          pruneSettings();
           webLog('Backing up plugins...');
-          await BackupRestoreService.backupPlugins('');
+
+          await BackupRestoreService.backupPlugins(pluginsBackupName);
+          prunePlugins();
           webLog('AUTO BACKUP Complete');
         });
         webLog('Auto backup schedule set for both settings and plugins: ' + schedule);
       } else {
         if (config.backup.auto_backup.settings.enabled) {
           const schedule = config.backup.auto_backup.settings.schedule;
-          nodeSchedule.scheduleJob(schedule, async () => {
+          BackupRestoreService.settingsJob = nodeSchedule.scheduleJob(schedule, async () => {
             webLog('AUTO BACKUP Start - Settings');
             webLog('Backing up settings...');
-            await BackupRestoreService.backupSettings('');
+            await BackupRestoreService.backupSettings(settingsBackupName);
+            pruneSettings();
             webLog('AUTO BACKUP Complete - Settings');
           });
           webLog('Auto backup schedule set for settings: ' + schedule);
         }
         if (config.backup.auto_backup.plugins.enabled) {
           const schedule = config.backup.auto_backup.plugins.schedule;
-          nodeSchedule.scheduleJob(schedule, async () => {
+          BackupRestoreService.pluginsJob = nodeSchedule.scheduleJob(schedule, async () => {
             webLog('AUTO BACKUP Start - Plugins');
             webLog('Backing up plugins...');
-            await BackupRestoreService.backupPlugins('');
+            await BackupRestoreService.backupPlugins(pluginsBackupName);
+            prunePlugins();
             webLog('AUTO BACKUP Complete - Plugins');
           });
           webLog('Auto backup schedule set for plugins: ' + schedule);
         }
       }
     }
+  }
+
+  private static generateBackupName(prefix: string, type: 'settings' | 'plugins') {
+    let date = new Date();
+    return (
+      prefix +
+      '_' +
+      type +
+      '_' +
+      date.getFullYear() +
+      '_' +
+      (date.getMonth() + 1) +
+      '_' +
+      date.getDate() +
+      '_' +
+      date.getHours() +
+      '_' +
+      date.getMinutes() +
+      '_' +
+      date.getSeconds()
+    );
   }
 
   static backupSettings(rawBackupName: string) {
@@ -71,21 +161,7 @@ export default class BackupRestoreService {
       if (rawBackupName != null && rawBackupName != '') {
         backupName = rawBackupName;
       } else {
-        let date = new Date();
-        backupName =
-          sconfig.bot.bot_name +
-          '_settings_' +
-          date.getFullYear() +
-          '_' +
-          (date.getMonth() + 1) +
-          '_' +
-          date.getDate() +
-          '_' +
-          date.getHours() +
-          '_' +
-          date.getMinutes() +
-          '_' +
-          date.getSeconds();
+        backupName = BackupRestoreService.generateBackupName(sconfig.bot.bot_name, 'settings');
       }
       zip.writeZip(userDir + '/backup/settings/' + backupName + '.zip', (e) => {
         if (e) {
@@ -162,21 +238,7 @@ export default class BackupRestoreService {
       if (rawBackupName != null && rawBackupName != '') {
         backupName = rawBackupName;
       } else {
-        let date = new Date();
-        backupName =
-          sconfig.bot.bot_name +
-          '_plugins_' +
-          date.getFullYear() +
-          '_' +
-          (date.getMonth() + 1) +
-          '_' +
-          date.getDate() +
-          '_' +
-          date.getHours() +
-          '_' +
-          date.getMinutes() +
-          '_' +
-          date.getSeconds();
+        backupName = BackupRestoreService.generateBackupName(sconfig.bot.bot_name, 'plugins');
       }
 
       webLog(
