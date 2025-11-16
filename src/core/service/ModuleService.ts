@@ -37,7 +37,7 @@ export default class ModuleService {
       console.log('REGISTERING MODULES');
 
       Promise.all([
-        ModuleService.registerIntegrationModule('twitch', PlatformType.stream),
+        ModuleService.registerIntegrationModule('joystick', PlatformType.stream),
         ModuleService.registerIntegrationModule('discord', PlatformType.community),
         ModuleService.registerIntegrationModule('obs', PlatformType.control),
       ])

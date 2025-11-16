@@ -173,3 +173,39 @@ export enum PluginMode {
   ts = 'TS',
   none = 'None',
 }
+
+export interface JoystickWebSocketMessage {
+  event: string;
+  createdAt: string;
+  messageId: string;
+  type: string;
+  visibility: string;
+  text: string;
+  botCommand: null | string;
+  botCommandArg: null | string;
+  emotesUsed: Array<Record<string, any>>;
+  author: {
+    slug: string;
+    username: string;
+    usernameColor: string;
+    signedPhotoUrl: null | string;
+    signedPhotoThumbUrl: null | string;
+    isStreamer: boolean;
+    isModerator: boolean;
+    isSubscriber: boolean;
+    isVerified: boolean;
+    isContentCreator: boolean;
+    displayNameWithFlair?: string;
+  };
+  streamer: {
+    slug: string;
+    username: string;
+    usernameColor: string;
+    signedPhotoUrl: null | string;
+    signedPhotoThumbUrl: null | string;
+  };
+  channelId: string;
+  mention: boolean;
+  mentionedUsername: null | string;
+  highlight: boolean;
+}

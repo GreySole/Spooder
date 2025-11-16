@@ -17,6 +17,7 @@ import { buildMockStreamMessage } from '../util/ResponseUtil';
 
 export function sayInChat(message: string, platform?: string, channel?: string) {
   const activeStreams = ModuleService.getStreamModules();
+  console.log('ACTIVE STREAMS:', activeStreams);
   if (platform && activeStreams[platform]) {
     if (channel) {
       activeStreams[platform].sayInChat(message, channel);
