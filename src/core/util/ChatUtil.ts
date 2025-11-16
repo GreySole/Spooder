@@ -87,6 +87,7 @@ function checkForSpamming(viewername: string) {
 }
 
 export function processStreamMessage(streamMessage: StreamMessage) {
+  twitchLog('Processing stream message:', streamMessage);
   // Do something with the message
   const modlocks = ModerationService.getModlocks();
   const modEvents = EventService.getModCommandsAsEvents();
