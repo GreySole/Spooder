@@ -1,5 +1,5 @@
 import { KeyedObject, userDir } from '../../Types';
-import { StreamModuleInterface } from '../interface/StreamModuleInterface';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { Router } from 'express';
 import fs from 'fs';
 import getJoystickRouters from './JoystickRouter';

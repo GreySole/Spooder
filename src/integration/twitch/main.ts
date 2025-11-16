@@ -1,4 +1,4 @@
-import { StreamModuleInterface } from '../interface/StreamModuleInterface';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import TwitchApi from './TwitchApi';
 import TwitchChat from './TwitchChat';
 import TwitchEventSub from './TwitchEventSub';

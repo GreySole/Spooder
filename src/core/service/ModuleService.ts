@@ -1,9 +1,10 @@
-import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface';
-import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface';
-import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface';
+import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
+import { ControlModuleInterface } from '../../interface/ControlModuleInterface';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { CoreModule, KeyedObject, PlatformType } from '../../Types';
 import ConfigService from './ConfigService';
 import { WebService } from './WebService';
+import fs from 'fs';
 
 interface ModuleContainer {
   [key: string]: StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface;
@@ -36,11 +37,27 @@ export default class ModuleService {
     } else {
       console.log('REGISTERING MODULES');
 
-      Promise.all([
-        ModuleService.registerIntegrationModule('joystick', PlatformType.stream),
-        ModuleService.registerIntegrationModule('discord', PlatformType.community),
-        ModuleService.registerIntegrationModule('obs', PlatformType.control),
-      ])
+      const moduleFolders = fs.readdirSync('src/integration/');
+      const moduleManifests: KeyedObject[] = [];
+
+      moduleFolders.forEach(async (folder) => {
+        const manifest = JSON.parse(
+          fs.readFileSync(`src/integration/${folder}/manifest.json`, 'utf-8'),
+        ) as KeyedObject;
+        moduleManifests.push(manifest);
+      });
+
+      Promise.all(
+        moduleManifests.map((manifest) => {
+          if (!manifest.module_name || !manifest.module_type) {
+            return Promise.reject('Invalid module manifest');
+          }
+          return ModuleService.registerIntegrationModule(
+            manifest.module_name,
+            manifest.module_type,
+          );
+        }),
+      )
         .then(() => onAllModulesLoaded())
         .catch((e) => {
           console.log('Module load error', e);
@@ -175,6 +192,7 @@ export default class ModuleService {
     return new Promise(async (res, rej) => {
       console.log('REGISTERING MOD', name);
       const newModule = await import(`../../integration/${name}/main`);
+
       if (platformType === PlatformType.stream) {
         ModuleService.instance.activeStreams[name] =
           new newModule.default() as StreamModuleInterface;

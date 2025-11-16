@@ -5,7 +5,7 @@ import ConfigService from './ConfigService';
 import ModuleService from './ModuleService';
 import PluginService from './PluginService';
 import OSCService from './OSCService';
-import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { spooderLog, webLog } from '../Logging';
 import { WebService } from './WebService';
 import crypto from 'crypto';

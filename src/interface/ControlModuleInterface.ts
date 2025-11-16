@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { KeyedObject } from '../../Types';
+import { KeyedObject } from '../Types';
 
 export interface ControlModuleInterface {
   connected: boolean;
