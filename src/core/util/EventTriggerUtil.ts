@@ -5,6 +5,7 @@ export function triggerExistsAndEnabled(event: KeyedObject, triggerType: string)
   if (groupIsDisabled(event)) {
     return false;
   }
+  console.log('Checking trigger:', triggerType, event.triggers);
   if (event.triggers[triggerType]) {
     if (event.triggers[triggerType].enabled) {
       return true;
@@ -17,7 +18,11 @@ export function triggerExistsAndEnabled(event: KeyedObject, triggerType: string)
 }
 
 export function groupIsDisabled(event: KeyedObject) {
-  EventService.getDisabledGroups().forEach((groupName: string) => {
+  const disabledGroups = EventService.getDisabledGroups();
+  if (!disabledGroups) {
+    return false;
+  }
+  disabledGroups.forEach((groupName: string) => {
     if (event.group === groupName) {
       return true;
     }

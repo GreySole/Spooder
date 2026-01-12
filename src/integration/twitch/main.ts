@@ -1,17 +1,15 @@
-import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
-import TwitchApi from './TwitchApi';
-import TwitchChat from './TwitchChat';
-import TwitchEventSub from './TwitchEventSub';
+import fs from 'fs';
 import { logEffects } from '../../core/Logging';
 import { EventService } from '../../core/service/EventService';
-import { userDir, KeyedObject } from '../../Types';
-import UserService from '../../core/service/UserService';
-import fs from 'fs';
-import getTwitchRouters from './TwitchRouter';
 import ShareService from '../../core/service/ShareService';
-import getResponseHandlers from './TwitchResponseHandlers';
-import WebSocket from 'ws';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
+import { KeyedObject, userDir } from '../../Types';
+import TwitchApi from './TwitchApi';
+import TwitchChat from './TwitchChat';
 import TwitchCLI from './TwitchCLI';
+import TwitchEventSub from './TwitchEventSub';
+import getResponseHandlers from './TwitchResponseHandlers';
+import getTwitchRouters from './TwitchRouter';
 
 export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
@@ -272,6 +270,7 @@ export default class Twitch implements StreamModuleInterface {
   }
 
   async onEventFileSaved() {
+    if (!this.loggedIn) return;
     this.eventsub.refreshEventSubs();
   }
 }

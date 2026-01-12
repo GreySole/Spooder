@@ -1,7 +1,8 @@
-import Axios, { AxiosResponse, AxiosError } from 'axios';
+import Axios, { AxiosResponse } from 'axios';
 import fs from 'fs';
 import { userDir } from '../../Types';
 import { twitchLog } from '../twitch/main';
+import Joystick from './main';
 
 export interface JoystickTokenResponse {
   access_token: string;
@@ -18,7 +19,10 @@ export interface JoystickOAuthConfig {
 }
 
 export default class JoystickApi {
-  constructor() {}
+  private context: Joystick;
+  constructor(context: Joystick) {
+    this.context = context;
+  }
 
   async getAccessToken(
     code: string,
@@ -121,5 +125,27 @@ export default class JoystickApi {
         }
       });
     });
+  }
+
+  public async testApiCall(event: string, data: string) {
+    twitchLog(`Test API Call: Event - ${event}, Data - ${data}`);
+    const oauth = this.context.oauth;
+    const response: AxiosResponse = await Axios.post(
+      'https://joystick.tv/echo',
+      {
+        sample: {
+          event: event,
+          data: data,
+        },
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization:
+            'Basic ' + Buffer.from(oauth.client_id + ':' + oauth.client_secret).toString('base64'),
+          Accept: 'application/json',
+        },
+      },
+    );
   }
 }

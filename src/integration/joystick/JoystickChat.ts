@@ -1,14 +1,11 @@
 import console from 'console';
-import ModuleService from 'src/core/service/ModuleService';
 import WebSocket from 'ws';
-import Joystick from './main';
-import { processStreamMessage } from 'src/core/util/ChatUtil';
-import { JoystickWebSocketMessage, KeyedObject, StreamMessage } from 'src/Types';
-import { processTwitchEvent } from '../twitch/functions/processTwitchMessage';
+import { EventService, sayInChat } from '../../core/service/EventService';
+import { processStreamMessage } from '../../core/util/ChatUtil';
+import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
+import { JoystickWebSocketMessage, KeyedObject, StreamMessage } from '../../Types';
 import { twitchLog } from '../twitch/main';
-import { EventService, sayInChat } from 'src/core/service/EventService';
-import { type } from 'os';
-import { triggerExistsAndEnabled } from 'src/core/util/EventTriggerUtil';
+import Joystick from './main';
 
 interface JoystickEmote {
   code: string;
@@ -185,10 +182,14 @@ export default class JoystickChat {
   //StreamResuming
 
   processStreamEvent = (eventData: KeyedObject) => {
+    if (eventData.metadata) {
+      eventData.metadata = JSON.parse(eventData.metadata);
+    }
+
     const streamMessage = {
       userId: '',
-      username: 'lanathedeaver',
-      displayName: 'LanaTheDeaver',
+      username: eventData.metadata.who ?? 'lanathedeaver',
+      displayName: eventData.metadata.who ?? 'LanaTheDeaver',
       platform: 'joystick',
       channel: eventData.channelId,
       message: eventData.text,
@@ -210,14 +211,111 @@ export default class JoystickChat {
       },
     } as StreamMessage;
 
+    console.log('Processing Joystick event:', eventData);
     const events = EventService.getEvents();
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'joystick')) {
+      if (!triggerExistsAndEnabled(events[e], 'joystick')) {
         continue;
       }
 
-      if (events[e].triggers.joystick.type == eventData.type) {
+      if (events[e].triggers.joystick.type.toLowerCase() == eventData.type.toLowerCase()) {
+        const eventType = eventData.type.toLowerCase();
+        const triggeredEventData = events[e].triggers.joystick;
+        if (eventType == 'tipped') {
+          if (triggeredEventData.condition) {
+            const mode = triggeredEventData.condition.mode;
+
+            if (mode == 'item') {
+              const tipMenuItem = eventData.metadata?.tip_menu_item ?? '';
+              const itemName = triggeredEventData.condition.item;
+              if (tipMenuItem == itemName) {
+                EventService.runCommands(streamMessage, e, 'event');
+                continue;
+              }
+            } else {
+              const operator = triggeredEventData.condition.operator;
+              const conditionAmount = triggeredEventData.condition.amount;
+              const conditionAmount2 = triggeredEventData.condition.amount2;
+              const amountTipped = eventData.metadata?.how_much ?? 0;
+              if (
+                this.processAmountCondition(
+                  operator,
+                  conditionAmount,
+                  conditionAmount2,
+                  amountTipped,
+                )
+              ) {
+                EventService.runCommands(streamMessage, e, 'event');
+                continue;
+              } else {
+                continue;
+              }
+            }
+          } else {
+            continue;
+          }
+        } else if (eventType == 'wheelspinclaimed') {
+          if (triggeredEventData.condition) {
+            const mode = triggeredEventData.condition.mode;
+
+            if (mode == 'item') {
+              const prize = eventData.metadata?.prize ?? '';
+              const itemName = triggeredEventData.condition.item;
+              if (prize == itemName) {
+                EventService.runCommands(streamMessage, e, 'event');
+                continue;
+              }
+            } else {
+              const operator = triggeredEventData.condition.operator;
+              const conditionAmount = triggeredEventData.condition.amount;
+              const conditionAmount2 = triggeredEventData.condition.amount2;
+              const amountTipped = eventData.metadata?.how_much ?? 0;
+              if (
+                this.processAmountCondition(
+                  operator,
+                  conditionAmount,
+                  conditionAmount2,
+                  amountTipped,
+                )
+              ) {
+                EventService.runCommands(streamMessage, e, 'event');
+                continue;
+              } else {
+                continue;
+              }
+            }
+          }
+        }
         EventService.runCommands(streamMessage, e, 'event');
+      }
+    }
+  };
+
+  processAmountCondition = (
+    operator: string,
+    amount1: number,
+    amount2: number,
+    amountTipped: number,
+  ) => {
+    if (operator != '<>' && operator != '><') {
+      if (eval(`${amountTipped} ${operator} ${amount1}`)) {
+        return true;
+      } else {
+        return false;
+      }
+    } else {
+      if (operator == '<>') {
+        if (amountTipped < amount1 || amountTipped > amount2) {
+          return true;
+        } else {
+          return false;
+        }
+      } else {
+        if (amountTipped > amount1 && amountTipped < amount2) {
+          return true;
+        } else {
+          return false;
+        }
       }
     }
   };
