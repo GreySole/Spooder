@@ -1,7 +1,7 @@
 import PluginService from '../../../core/service/PluginService';
 import ShareService from '../../../core/service/ShareService';
 import { KeyedObject } from '../../../Types';
-import { twitchLog } from '../main';
+import { twitchLog } from '../twitch';
 import TwitchChat from '../TwitchChat';
 
 export const twitchEvents = [

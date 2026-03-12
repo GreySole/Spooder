@@ -1,19 +1,10 @@
-import {
-  ActionRowBuilder,
-  AnyComponentBuilder,
-  ChannelType,
-  Client,
-  Events,
-  Message,
-  TextChannel,
-} from 'discord.js';
+import { ChannelType, Client, Events, Message, TextChannel } from 'discord.js';
+import fs from 'fs';
 import ModuleService from '../../core/service/ModuleService';
 import { KeyedObject, userDir } from '../../Types';
-import Discord, { discordLog } from './main';
-import fs from 'fs';
-import { client } from 'tmi.js';
-import DiscordVoice from './DiscordVoice';
+import Discord, { discordLog } from './discord';
 import DiscordApi from './DiscordApi';
+import DiscordVoice from './DiscordVoice';
 
 export default class DiscordChat {
   private discordModule: Discord;

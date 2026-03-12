@@ -13,7 +13,7 @@ import {
   ApplicationCommandOptionType,
   ChannelType,
 } from 'discord.js';
-import { CommunityModuleInterface } from '../interface/CommunityModuleInterface';
+import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
 import { logEffects } from '../../core/Logging';
 import PluginService from '../../core/service/PluginService';
 import { userDir, KeyedObject } from '../../Types';

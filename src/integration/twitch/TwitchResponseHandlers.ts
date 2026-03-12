@@ -1,6 +1,6 @@
 import ModuleService from '../../core/service/ModuleService';
-import Twitch from './main';
 import { KeyedObject } from '../../Types';
+import Twitch from './twitch';
 
 export default function getResponseHandlers() {
   const twitchModule = ModuleService.getStreamModule('twitch') as Twitch;

@@ -1,9 +1,9 @@
+import OSC from '@spooder/osc-js';
 import OBSWebSocket, { EventSubscription, OBSRequestTypes } from 'obs-websocket-js';
 import ModuleService from '../../core/service/ModuleService';
 import OSCService from '../../core/service/OSCService';
 import { KeyedObject } from '../../Types';
-import OBS from './main';
-import OSC from '@spooder/osc-js';
+import OBS from './obs';
 import onObsOscMessage from './onObsOscMessage';
 
 export default class ObsWebsocket {

@@ -1,18 +1,13 @@
-import { Request, Response, Router } from 'express';
 import Axios, { AxiosError, AxiosResponse } from 'axios';
-import path from 'path';
+import { Request, Response, Router } from 'express';
 import fs from 'fs';
-import Twitch, { twitchLog } from './main';
-import { eventsubs, scopes } from './TwitchConstants';
 import ConfigService from '../../core/service/ConfigService';
-import { EventService, sayInChat } from '../../core/service/EventService';
-import { ModerationService } from '../../core/service/ModerationService';
 import ModuleService from '../../core/service/ModuleService';
-import ShareService from '../../core/service/ShareService';
-import { userDir, KeyedObject } from '../../Types';
-import Discord from '../discord/main';
 import UserService from '../../core/service/UserService';
+import { userDir } from '../../Types';
 import OnEventSubReceived from './OnEventSubReceived';
+import Twitch, { twitchLog } from './twitch';
+import { eventsubs, scopes } from './TwitchConstants';
 
 export default function getTwitchRouters() {
   const sconfig = ConfigService.getConfig();

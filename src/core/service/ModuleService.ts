@@ -1,6 +1,8 @@
-import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface';
-import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface';
-import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface';
+import fs from 'fs';
+import path from 'path';
+import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
+import { ControlModuleInterface } from '../../interface/ControlModuleInterface';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { CoreModule, KeyedObject, PlatformType } from '../../Types';
 import ConfigService from './ConfigService';
 import { WebService } from './WebService';
@@ -36,15 +38,46 @@ export default class ModuleService {
     } else {
       console.log('REGISTERING MODULES');
 
-      Promise.all([
-        ModuleService.registerIntegrationModule('twitch', PlatformType.stream),
-        ModuleService.registerIntegrationModule('discord', PlatformType.community),
-        ModuleService.registerIntegrationModule('obs', PlatformType.control),
-      ])
-        .then(() => onAllModulesLoaded())
-        .catch((e) => {
-          console.log('Module load error', e);
-        });
+      (async () => {
+        const integrationPath = path.join(__dirname, '../../integration');
+        const files = await fs.promises.readdir(integrationPath);
+        await Promise.all(
+          files.map(async (file) => {
+            const filePath = path.join(integrationPath, file);
+            const stat = await fs.promises.stat(filePath);
+            if (stat.isDirectory()) {
+              const packageJsonPath = path.join(filePath, 'package.json');
+              if (await fs.promises.stat(packageJsonPath).catch(() => false)) {
+                const packageJson = JSON.parse(
+                  await fs.promises.readFile(packageJsonPath, 'utf-8'),
+                );
+                if (packageJson.spooder_module) {
+                  const modInfo = packageJson.spooder_module;
+                  if (
+                    modInfo.type !== PlatformType.stream &&
+                    modInfo.type !== PlatformType.community &&
+                    modInfo.type !== PlatformType.control
+                  ) {
+                    console.log(
+                      `Module ${modInfo.name} has invalid platform type ${modInfo.type}. Skipping module load.`,
+                    );
+                    return null;
+                  }
+                  return {
+                    name: modInfo.name,
+                    type: modInfo.type,
+                  };
+                }
+              }
+            }
+            return null;
+          }),
+        )
+          .then(() => onAllModulesLoaded())
+          .catch((e) => {
+            console.log('Module load error', e);
+          });
+      })();
     }
   }
 

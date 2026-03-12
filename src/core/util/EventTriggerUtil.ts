@@ -17,7 +17,7 @@ export function triggerExistsAndEnabled(event: KeyedObject, triggerType: string)
 }
 
 export function groupIsDisabled(event: KeyedObject) {
-  EventService.getDisabledGroups().forEach((groupName: string) => {
+  EventService.getDisabledGroups()?.forEach((groupName: string) => {
     if (event.group === groupName) {
       return true;
     }

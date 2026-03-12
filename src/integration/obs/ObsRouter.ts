@@ -1,8 +1,8 @@
-import { Router, Request, Response, json } from 'express';
-import ModuleService from '../../core/service/ModuleService';
-import { userDir, KeyedObject } from '../../Types';
-import OBS from './main';
+import { Request, Response, Router } from 'express';
 import fs from 'fs';
+import ModuleService from '../../core/service/ModuleService';
+import { KeyedObject, userDir } from '../../Types';
+import OBS from './obs';
 import ObsControlRouter from './ObsControlRouter';
 import ObsFetchRouter from './ObsFetchRouter';
 

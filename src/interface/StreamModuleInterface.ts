@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { KeyedObject } from '../../Types';
+import { KeyedObject } from '../Types';
 
 export interface StreamModuleInterface {
+  api: any;
+  oauth: any;
   getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
   autoLogin: () => Promise<boolean>;
   sayInChat: (message: string, channel: string) => void;

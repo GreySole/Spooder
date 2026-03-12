@@ -1,10 +1,10 @@
 import Axios, { AxiosError, AxiosResponse } from 'axios';
 import fs from 'fs';
-import { scopes } from './TwitchConstants';
 import ModuleService from '../../core/service/ModuleService';
-import { KeyedObject, userDir } from '../../Types';
-import Twitch, { twitchLog } from './main';
 import ShareService from '../../core/service/ShareService';
+import { KeyedObject, userDir } from '../../Types';
+import Twitch, { twitchLog } from './twitch';
+import { scopes } from './TwitchConstants';
 
 export default class TwitchApi {
   appToken = '';

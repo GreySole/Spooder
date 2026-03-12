@@ -1,9 +1,9 @@
 import Axios from 'axios';
 import ModuleService from '../../core/service/ModuleService';
-import { KeyedObject } from '../../Types';
-import Twitch, { twitchLog } from './main';
 import { WebService } from '../../core/service/WebService';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
+import { KeyedObject } from '../../Types';
+import Twitch, { twitchLog } from './twitch';
 
 export default class TwitchEventSubWebhook {
   initialize = async () => {

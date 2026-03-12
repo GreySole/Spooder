@@ -1,17 +1,17 @@
 import {
-  joinVoiceChannel,
-  VoiceConnectionStatus,
-  createAudioPlayer,
-  NoSubscriberBehavior,
-  createAudioResource,
   AudioPlayer,
-  VoiceConnection,
-  EndBehaviorType,
   AudioPlayerStatus,
+  createAudioPlayer,
+  createAudioResource,
+  EndBehaviorType,
+  joinVoiceChannel,
+  NoSubscriberBehavior,
+  VoiceConnection,
+  VoiceConnectionStatus,
 } from '@discordjs/voice';
-import Discord, { discordLog } from './main';
+import Prism from 'prism-media';
 import ModuleService from '../../core/service/ModuleService';
-import { url } from 'inspector';
+import Discord, { discordLog } from './discord';
 
 export default class DiscordVoice {
   voiceChannel: VoiceConnection | undefined = undefined;
@@ -79,6 +79,20 @@ export default class DiscordVoice {
     }
   }
 
+  getCurrentVoiceChannel() {
+    const discordModule = this.getModule();
+    const channelId = this.voiceChannel?.joinConfig.channelId;
+    const guildId = this.voiceChannel?.joinConfig.guildId;
+    if (!channelId || !guildId) {
+      return null;
+    }
+    return {
+      guildId: guildId,
+      channelId: channelId,
+      members: discordModule.api.getChannel(channelId, guildId)?.members,
+    };
+  }
+
   joinVoiceChannel(guildId: string, channelId: string) {
     const discordModule = this.getModule();
     let targetServer = discordModule.client?.guilds.cache.get(guildId);
@@ -99,10 +113,12 @@ export default class DiscordVoice {
     });
 
     this.voiceChannel.receiver.speaking.on('start', (userId) => {
+      discordLog(`User ${userId} started speaking`);
       discordModule.api.callPlugins('voice', { event: 'speaking-start', userId: userId });
     });
 
     this.voiceChannel.receiver.speaking.on('end', (userId) => {
+      discordLog(`User ${userId} stopped speaking`);
       discordModule.api.callPlugins('voice', { event: 'speaking-end', userId: userId });
     });
 
@@ -331,7 +347,7 @@ export default class DiscordVoice {
     this.isListening = false;
   }
 
-  startListening() {
+  startListening(options?: { pcmFormat?: boolean }) {
     if (!this.voiceChannel) {
       discordLog('No voice connection available for listening');
       return;
@@ -347,12 +363,28 @@ export default class DiscordVoice {
     // Listen for when users start speaking
     this.voiceChannel.receiver.speaking.on('start', (userId) => {
       // Create an audio stream for this specific user
-      const audioStream = this.voiceChannel?.receiver.subscribe(userId, {
+      const rawAudioStream = this.voiceChannel?.receiver.subscribe(userId, {
         end: {
           behavior: EndBehaviorType.AfterSilence,
           duration: 100, // Stop recording after 100ms of silence
         },
       });
+
+      if (!rawAudioStream) {
+        discordLog(`Failed to create audio stream for user ${userId}`);
+        return;
+      }
+
+      let audioStream = null;
+
+      if (options?.pcmFormat) {
+        audioStream = rawAudioStream.pipe(
+          new Prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 }),
+        );
+      } else {
+        audioStream = rawAudioStream;
+      }
+
       if (audioStream) {
         discordLog(`Started receiving audio from user: ${userId}`);
 
@@ -379,7 +411,7 @@ export default class DiscordVoice {
           });
         });
 
-        audioStream.on('error', (error) => {
+        audioStream.on('error', (error: any) => {
           discordLog(`Audio stream error for user ${userId}: ${error.message}`);
         });
       }

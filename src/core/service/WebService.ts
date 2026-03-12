@@ -1,32 +1,31 @@
-import { json, NextFunction, Request, Response, Router } from 'express';
-import express from 'express';
 import cookieParser from 'cookie-parser';
-import path from 'path';
-import { userDir, frontendDir } from '../../Types';
-import { logToFile, spooderLog, webLog } from '../Logging';
-import ConfigService from './ConfigService';
-import { ConfigRoutes } from '../routes/ConfigRoutes';
-import { PluginRoutes } from '../routes/PluginRoutes';
+import express, { json, NextFunction, Request, Response, Router } from 'express';
 import fs from 'fs-extra';
-import { networkInterfaces } from 'os';
-import { StreamModuleInterface } from '../../integration/interface/StreamModuleInterface';
-import { CommunityModuleInterface } from '../../integration/interface/CommunityModuleInterface';
-import { BackupRestoreRoutes } from '../routes/BackupRestoreRoutes';
-import { EventRoutes } from '../routes/EventRoutes';
-import { UserRoutes } from '../routes/UserRoutes';
-import { ShareRoutes } from '../routes/ShareRoutes';
-import { PublicRoutes } from '../routes/PublicRoutes';
-import { ControlModuleInterface } from '../../integration/interface/ControlModuleInterface';
-import { ServerRoutes } from '../routes/ServerRoutes';
-import Ngrok from './webui/Ngrok';
-import MotherwolfTunnel from './webui/Motherwolf';
-import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes';
-import { ThemeRoutes } from '../routes/ThemeRoutes';
+import http from 'http';
 import multer from 'multer';
 import net from 'net';
-import http from 'http';
-import ShareService from './ShareService';
+import { networkInterfaces } from 'os';
+import path from 'path';
+import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
+import { ControlModuleInterface } from '../../interface/ControlModuleInterface';
+import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
+import { frontendDir, userDir } from '../../Types';
+import { logToFile, spooderLog, webLog } from '../Logging';
+import { BackupRestoreRoutes } from '../routes/BackupRestoreRoutes';
+import { ConfigRoutes } from '../routes/ConfigRoutes';
+import { EventRoutes } from '../routes/EventRoutes';
+import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes';
 import ModuleRoutes from '../routes/ModuleRoutes';
+import { PluginRoutes } from '../routes/PluginRoutes';
+import { PublicRoutes } from '../routes/PublicRoutes';
+import { ServerRoutes } from '../routes/ServerRoutes';
+import { ShareRoutes } from '../routes/ShareRoutes';
+import { ThemeRoutes } from '../routes/ThemeRoutes';
+import { UserRoutes } from '../routes/UserRoutes';
+import ConfigService from './ConfigService';
+import ShareService from './ShareService';
+import MotherwolfTunnel from './webui/Motherwolf';
+import Ngrok from './webui/Ngrok';
 
 export function isLocal(req: Request) {
   if (req.headers['x-forwarded-for'] === undefined) {
@@ -181,7 +180,16 @@ export class WebService {
       router.use('/mod', express.static(frontendDir + '/mod/build'));
       router.use('/public', express.static(frontendDir + '/public/build'));
 
-      router.use('/overlay', express.static(userDir + '/web/overlay'));
+      router.use(
+        '/overlay',
+        express.static(userDir + '/web/overlay', {
+          setHeaders: (res, path) => {
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+          },
+        }),
+      );
       router.use('/utility', express.static(userDir + '/web/utility'));
       router.use('/plugin', express.static(userDir + '/web/public'));
       router.use('/assets', express.static(userDir + '/web/assets'));

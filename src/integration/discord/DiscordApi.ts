@@ -1,9 +1,8 @@
-import { Client, TextChannel, User, ChannelType } from 'discord.js';
-import Module from 'module';
+import { ChannelType, Client, TextChannel, User } from 'discord.js';
 import ModuleService from '../../core/service/ModuleService';
-import Discord from './main';
 import PluginService from '../../core/service/PluginService';
 import { KeyedObject } from '../../Types';
+import Discord from './discord';
 
 export default class DiscordApi {
   private module = ModuleService.getCommunityModule('discord') as Discord;

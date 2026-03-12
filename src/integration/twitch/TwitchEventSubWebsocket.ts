@@ -1,12 +1,12 @@
+import Axios from 'axios';
+import WebSocket from 'ws';
 import { logToFile } from '../../core/Logging';
 import ModuleService from '../../core/service/ModuleService';
+import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 import { websocketTest } from '../../core/util/NetUtil';
-import Twitch, { twitchLog } from './main';
-import OnEventSubReceived from './OnEventSubReceived';
-import { groupIsDisabled, triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
-import Axios from 'axios';
 import { KeyedObject } from '../../Types';
-import WebSocket from 'ws';
+import OnEventSubReceived from './OnEventSubReceived';
+import Twitch, { twitchLog } from './twitch';
 
 export default class TwitchEventSubWebsocket {
   websocket: WebSocket | undefined = undefined;

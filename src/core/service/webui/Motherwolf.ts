@@ -1,9 +1,9 @@
-import WebSocket from 'ws';
 import http from 'http';
-import ConfigService from '../ConfigService';
-import { WebService } from '../WebService';
-import ModuleService from '../ModuleService';
+import WebSocket from 'ws';
 import { webLog } from '../../Logging';
+import ConfigService from '../ConfigService';
+import ModuleService from '../ModuleService';
+import { WebService } from '../WebService';
 
 export default class MotherwolfTunnel {
   private socket!: WebSocket;
@@ -20,6 +20,7 @@ export default class MotherwolfTunnel {
   private isHTTPConnected: boolean = false;
   private isOSCReceiverConnected: boolean = false;
   private isOSCSenderConnected: boolean = false;
+  private reconnectAttempts: number = 0;
 
   constructor() {}
 
@@ -47,13 +48,14 @@ export default class MotherwolfTunnel {
     this.host = 'localhost';
     this.host_port = hostPort;
     this.osc_tcp_port = tcpPort;
+    this.reconnectAttempts = 0;
 
     this.connectSockets();
-
     this.interval = setInterval(() => {
       if (this.socket.readyState === WebSocket.OPEN) {
         this.socket.ping();
       } else {
+        console.log('HTTP socket not open, reconnecting...', this.socket.readyState);
         this.reconnect();
         return;
       }
@@ -124,7 +126,15 @@ export default class MotherwolfTunnel {
     });
 
     this.socket.on('pong', () => {
-      //console.log('Received pong from client');
+      //console.log('Received pong from HTTP socket');
+    });
+
+    this.oscReceiver.on('pong', () => {
+      //console.log('Received pong from OSC Cloud socket');
+    });
+
+    this.oscSender.on('pong', () => {
+      //console.log('Received pong from OSC Local socket');
     });
 
     this.socket.on('message', async (data) => {
@@ -229,6 +239,13 @@ export default class MotherwolfTunnel {
 
   reconnect() {
     if (this.isRunning) {
+      this.reconnectAttempts++;
+      if (this.reconnectAttempts > 5) {
+        console.log('Maximum reconnect attempts reached. Stopping reconnection attempts.');
+        this.stopTunnels();
+        this.isRunning = false;
+        return;
+      }
       console.log('Attempting to reconnect...');
       setTimeout(() => {
         this.connectSockets();

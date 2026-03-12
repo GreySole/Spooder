@@ -1,11 +1,11 @@
-import { sayInChat, EventService } from '../../core/service/EventService';
+import { KeyedObject, StreamMessage } from '../../Types';
+import { EventService, sayInChat } from '../../core/service/EventService';
 import { ModerationService } from '../../core/service/ModerationService';
 import ModuleService from '../../core/service/ModuleService';
 import ShareService from '../../core/service/ShareService';
-import Discord from '../discord/main';
-import Twitch, { twitchLog } from './main';
-import { KeyedObject, StreamMessage } from '../../Types';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
+import Discord from '../discord/discord';
+import Twitch, { twitchLog } from './twitch';
 
 export default async function OnEventSubReceived(type: string, event: KeyedObject) {
   const twitchModule = ModuleService.getStreamModule('twitch') as Twitch;

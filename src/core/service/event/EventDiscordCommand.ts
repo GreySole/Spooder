@@ -1,7 +1,7 @@
+import Discord from '../../../integration/discord/discord';
 import { spooderLog } from '../../Logging';
-import ModuleService from '../ModuleService';
-import Discord from '../../../integration/discord/main';
 import { runResponseScript } from '../../util/ResponseUtil';
+import ModuleService from '../ModuleService';
 
 export default function EventDiscordCommand(
   eCommand: any,

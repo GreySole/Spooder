@@ -1,11 +1,11 @@
+import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
-import path from 'path';
 import https from 'https';
-import { exec, spawn, ChildProcess } from 'child_process';
+import path from 'path';
 import { promisify } from 'util';
 import ModuleService from '../../core/service/ModuleService';
-import Twitch from './main';
 import { findAvailablePort, WebService } from '../../core/service/WebService';
+import Twitch from './twitch';
 
 //Twitch CLI Download: https://github.com/twitchdev/twitch-cli/releases/latest
 

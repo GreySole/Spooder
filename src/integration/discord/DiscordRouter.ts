@@ -1,8 +1,8 @@
 import { Request, Response, Router } from 'express';
-import Discord from './main';
+import fs from 'fs';
 import ModuleService from '../../core/service/ModuleService';
 import { userDir } from '../../Types';
-import fs from 'fs';
+import Discord from './discord';
 
 export default function getDiscordRouters() {
   const router = Router();

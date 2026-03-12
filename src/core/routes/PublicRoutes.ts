@@ -1,9 +1,8 @@
-import Twitch from '../../integration/twitch/main';
+import express, { Request, Response } from 'express';
 import { KeyedObject } from '../../Types';
 import ConfigService from '../service/ConfigService';
 import ModuleService from '../service/ModuleService';
 import PluginService from '../service/PluginService';
-import express, { Request, Response } from 'express';
 
 export function PublicRoutes() {
   const router = express.Router();
@@ -20,7 +19,7 @@ export function PublicRoutes() {
 
     //Only Twitch supported currently
     //TODO: Make this work on an Interface level
-    const twitch = ModuleService.getStreamModule('twitch') as Twitch;
+    const twitch = ModuleService.getStreamModule('twitch');
     res.send({
       botName: twitch.api.botUsername,
       homeChannel: twitch.api.homeChannel,

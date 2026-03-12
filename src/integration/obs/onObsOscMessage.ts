@@ -1,8 +1,6 @@
 import ModuleService from '../../core/service/ModuleService';
-import { userDir, KeyedObject } from '../../Types';
 import OSCService from '../../core/service/OSCService';
-import fs from 'fs';
-import OBS from './main';
+import OBS from './obs';
 
 export default async function onObsOscMessage(message: any) {
   const sendToTCP = OSCService.sendToTCP;
