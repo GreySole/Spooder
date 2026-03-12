@@ -1,11 +1,11 @@
 import express from 'express';
+import multer from 'multer';
 import path from 'path';
 import { userDir } from '../../Types';
-import multer from 'multer';
+import { registerApiRoutes, registerPluginApi } from './pluginRoutes/PluginApiRoutes';
+import { registerAssetRoutes } from './pluginRoutes/PluginAssetRoutes';
 import { registerGetRoutes } from './pluginRoutes/PluginGetRoutes';
 import { registerManageRoutes } from './pluginRoutes/PluginManageRoutes';
-import { registerAssetRoutes } from './pluginRoutes/PluginAssetRoutes';
-import { registerApiRoutes, registerPluginApi } from './pluginRoutes/PluginApiRoutes';
 
 export { registerPluginApi };
 
