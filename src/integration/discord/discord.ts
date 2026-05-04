@@ -1,29 +1,24 @@
-import { Request, Response, Router } from 'express';
 import {
-  Collection,
-  REST,
-  Routes,
+  ApplicationCommandOptionType,
+  ChannelType,
   Client,
+  Collection,
   Events,
   GatewayIntentBits,
   Partials,
-  Message,
-  User,
-  TextChannel,
-  ApplicationCommandOptionType,
-  ChannelType,
+  REST,
+  Routes,
 } from 'discord.js';
-import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
+import fs from 'fs';
 import { logEffects } from '../../core/Logging';
 import PluginService from '../../core/service/PluginService';
-import { userDir, KeyedObject } from '../../Types';
-import UserService from '../../core/service/UserService';
-import fs from 'fs';
-import getDiscordRouters from './DiscordRouter';
-import DiscordVoice from './DiscordVoice';
-import DiscordChat from './DiscordChat';
+import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
+import { KeyedObject, userDir } from '../../Types';
 import DiscordApi from './DiscordApi';
 import DiscordButtons from './DiscordButtons';
+import DiscordChat from './DiscordChat';
+import getDiscordRouters from './DiscordRouter';
+import DiscordVoice from './DiscordVoice';
 
 export function discordLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgCyan'), ...content, logEffects('Reset'));

@@ -183,10 +183,13 @@ export class WebService {
       router.use(
         '/overlay',
         express.static(userDir + '/web/overlay', {
+          etag: false,
+          lastModified: false,
           setHeaders: (res, path) => {
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
             res.set('Pragma', 'no-cache');
             res.set('Expires', '0');
+            res.set('Surrogate-Control', 'no-store');
           },
         }),
       );
@@ -227,7 +230,20 @@ export class WebService {
         res.status(403).send('<h1>Access denied: Unauthorized</h1>');
       }
 
-      publicRouter.use('/overlay', validatePageAccess, express.static(userDir + '/web/overlay'));
+      publicRouter.use(
+        '/overlay',
+        validatePageAccess,
+        express.static(userDir + '/web/overlay', {
+          etag: false,
+          lastModified: false,
+          setHeaders: (res, path) => {
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+            res.set('Surrogate-Control', 'no-store');
+          },
+        }),
+      );
       publicRouter.use('/utility', validatePageAccess, express.static(userDir + '/web/utility'));
       publicRouter.use('/plugin', express.static(userDir + '/web/public'));
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));

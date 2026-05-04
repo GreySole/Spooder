@@ -41,42 +41,56 @@ export default class ModuleService {
       (async () => {
         const integrationPath = path.join(__dirname, '../../integration');
         const files = await fs.promises.readdir(integrationPath);
-        await Promise.all(
+        console.log('Found integration files', files);
+        await Promise.allSettled(
           files.map(async (file) => {
-            const filePath = path.join(integrationPath, file);
-            const stat = await fs.promises.stat(filePath);
-            if (stat.isDirectory()) {
-              const packageJsonPath = path.join(filePath, 'package.json');
-              if (await fs.promises.stat(packageJsonPath).catch(() => false)) {
-                const packageJson = JSON.parse(
-                  await fs.promises.readFile(packageJsonPath, 'utf-8'),
-                );
-                if (packageJson.spooder_module) {
-                  const modInfo = packageJson.spooder_module;
-                  if (
-                    modInfo.type !== PlatformType.stream &&
-                    modInfo.type !== PlatformType.community &&
-                    modInfo.type !== PlatformType.control
-                  ) {
-                    console.log(
-                      `Module ${modInfo.name} has invalid platform type ${modInfo.type}. Skipping module load.`,
+            try {
+              const filePath = path.join(integrationPath, file);
+              const stat = await fs.promises.stat(filePath);
+              if (stat.isDirectory()) {
+                const packageJsonPath = path.join(filePath, 'package.json');
+                if (await fs.promises.stat(packageJsonPath).catch(() => false)) {
+                  const packageJson = JSON.parse(
+                    await fs.promises.readFile(packageJsonPath, 'utf-8'),
+                  );
+                  if (packageJson.spooder_module) {
+                    const modInfo = packageJson.spooder_module;
+                    const fileName = modInfo.file
+                      ? modInfo.file.includes('.')
+                        ? modInfo.file.substring(0, modInfo.file.lastIndexOf('.'))
+                        : `${modInfo.file}`
+                      : 'main';
+                    if (
+                      modInfo.type !== PlatformType.stream &&
+                      modInfo.type !== PlatformType.community &&
+                      modInfo.type !== PlatformType.control
+                    ) {
+                      console.log(
+                        `Module ${modInfo.name} has invalid platform type ${modInfo.type}. Skipping module load.`,
+                      );
+                      return null;
+                    }
+                    return ModuleService.registerIntegrationModule(
+                      modInfo.name,
+                      modInfo.type,
+                      fileName,
                     );
-                    return null;
                   }
-                  return {
-                    name: modInfo.name,
-                    type: modInfo.type,
-                  };
                 }
               }
+            } catch (e) {
+              console.log(`Module load error for ${file}`, e);
             }
             return null;
           }),
-        )
-          .then(() => onAllModulesLoaded())
-          .catch((e) => {
-            console.log('Module load error', e);
+        ).then((results) => {
+          results.forEach((result) => {
+            if (result.status === 'rejected') {
+              console.log('Module load error', result.reason);
+            }
           });
+          onAllModulesLoaded();
+        });
       })();
     }
   }
@@ -204,10 +218,14 @@ export default class ModuleService {
     this.coreModules[coreModule] = new newModule.default();
   }
 
-  static async registerIntegrationModule(name: string, platformType: PlatformType) {
+  static async registerIntegrationModule(
+    name: string,
+    platformType: PlatformType,
+    fileName: string,
+  ) {
     return new Promise(async (res, rej) => {
       console.log('REGISTERING MOD', name);
-      const newModule = await import(`../../integration/${name}/main`);
+      const newModule = await import(`../../integration/${name}/${fileName}`);
       if (platformType === PlatformType.stream) {
         ModuleService.instance.activeStreams[name] =
           new newModule.default() as StreamModuleInterface;

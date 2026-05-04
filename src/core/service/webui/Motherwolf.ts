@@ -5,11 +5,16 @@ import ConfigService from '../ConfigService';
 import ModuleService from '../ModuleService';
 import { WebService } from '../WebService';
 
+const BASE_RECONNECT_DELAY = 2000;
+const MAX_RECONNECT_DELAY = 60000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+
 export default class MotherwolfTunnel {
   private socket!: WebSocket;
   private oscReceiver!: WebSocket;
   private oscSender!: WebSocket;
   private interval!: NodeJS.Timeout;
+  private reconnectTimer?: NodeJS.Timeout;
   private subdomain!: string;
   private token!: string;
   private host!: string;
@@ -21,19 +26,30 @@ export default class MotherwolfTunnel {
   private isOSCReceiverConnected: boolean = false;
   private isOSCSenderConnected: boolean = false;
   private reconnectAttempts: number = 0;
+  private isReconnecting: boolean = false;
 
   constructor() {}
 
+  private safeClose(ws: WebSocket | undefined) {
+    if (!ws) return;
+    ws.removeAllListeners();
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      ws.close();
+    }
+  }
+
   stopTunnels() {
     clearInterval(this.interval);
-    this.socket.close();
-    this.oscReceiver.close();
-    this.oscSender.close();
+    clearTimeout(this.reconnectTimer);
+    this.safeClose(this.socket);
+    this.safeClose(this.oscReceiver);
+    this.safeClose(this.oscSender);
     this.isRunning = false;
     this.isReady = false;
     this.isHTTPConnected = false;
     this.isOSCReceiverConnected = false;
     this.isOSCSenderConnected = false;
+    this.isReconnecting = false;
     webLog('Motherwolf Tunnels Stopped');
   }
 
@@ -49,28 +65,18 @@ export default class MotherwolfTunnel {
     this.host_port = hostPort;
     this.osc_tcp_port = tcpPort;
     this.reconnectAttempts = 0;
+    this.isReconnecting = false;
 
     this.connectSockets();
     this.interval = setInterval(() => {
-      if (this.socket.readyState === WebSocket.OPEN) {
+      if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.ping();
-      } else {
-        console.log('HTTP socket not open, reconnecting...', this.socket.readyState);
-        this.reconnect();
-        return;
       }
-      if (this.oscReceiver.readyState === WebSocket.OPEN) {
+      if (this.oscReceiver?.readyState === WebSocket.OPEN) {
         this.oscReceiver.ping();
-      } else {
-        this.reconnect();
-        return;
       }
-
-      if (this.oscSender.readyState === WebSocket.OPEN) {
+      if (this.oscSender?.readyState === WebSocket.OPEN) {
         this.oscSender.ping();
-      } else {
-        this.reconnect();
-        return;
       }
     }, 30000); // Send a ping every 30 seconds
 
@@ -78,20 +84,16 @@ export default class MotherwolfTunnel {
   }
 
   connectSockets() {
-    if (this.socket && this.oscSender.readyState === WebSocket.OPEN) {
-      this.socket.close();
-      this.isHTTPConnected = false;
-    }
-    if (this.oscReceiver && this.oscSender.readyState === WebSocket.OPEN) {
-      this.oscReceiver.close();
-      this.isOSCReceiverConnected = false;
-    }
-    if (this.oscSender && this.oscSender.readyState === WebSocket.OPEN) {
-      this.oscSender.close();
-      this.isOSCSenderConnected = false;
-    }
+    this.safeClose(this.socket);
+    this.safeClose(this.oscReceiver);
+    this.safeClose(this.oscSender);
 
     this.isReady = false;
+    this.isHTTPConnected = false;
+    this.isOSCReceiverConnected = false;
+    this.isOSCSenderConnected = false;
+    this.isReconnecting = false;
+
     this.socket = new WebSocket(`wss://${this.subdomain}.spooder.me?token=${this.token}`);
     this.oscReceiver = new WebSocket(`wss://${this.subdomain}.spooder.me/osc?token=${this.token}`);
     this.oscSender = new WebSocket(`ws://localhost:${this.host_port}/osc`);
@@ -100,6 +102,7 @@ export default class MotherwolfTunnel {
     const checkIfReady = () => {
       if (this.isHTTPConnected && this.isOSCReceiverConnected && this.isOSCSenderConnected) {
         this.isReady = true;
+        this.reconnectAttempts = 0;
         WebService.setPublicHTTPUrl(`https://${this.subdomain}.spooder.me`);
         WebService.setPublicOSCUrl(`${this.subdomain}.spooder.me/osc`);
         ModuleService.onExternalNetworkChanged();
@@ -211,45 +214,58 @@ export default class MotherwolfTunnel {
 
     this.socket.on('close', () => {
       console.log('HTTP Socket Disconnected');
+      this.isHTTPConnected = false;
+      this.isReady = false;
+      this.reconnect();
     });
 
     this.oscReceiver.on('close', () => {
       console.log('OSC Cloud Socket Disconnected');
+      this.isOSCReceiverConnected = false;
+      this.isReady = false;
+      this.reconnect();
     });
 
     this.oscSender.on('close', () => {
       console.log('OSC Local Socket Disconnected');
+      this.isOSCSenderConnected = false;
+      this.isReady = false;
+      this.reconnect();
     });
 
     this.socket.on('error', (error) => {
-      console.error('Error:', error);
-      this.reconnect();
+      console.error('HTTP Socket Error:', error);
     });
 
     this.oscReceiver.on('error', (error) => {
-      console.error('Error:', error);
-      this.reconnect();
+      console.error('OSC Cloud Socket Error:', error);
     });
 
     this.oscSender.on('error', (error) => {
-      console.error('Error:', error);
-      this.reconnect();
+      console.error('OSC Local Socket Error:', error);
     });
   }
 
   reconnect() {
-    if (this.isRunning) {
-      this.reconnectAttempts++;
-      if (this.reconnectAttempts > 5) {
-        console.log('Maximum reconnect attempts reached. Stopping reconnection attempts.');
-        this.stopTunnels();
-        this.isRunning = false;
-        return;
-      }
-      console.log('Attempting to reconnect...');
-      setTimeout(() => {
-        this.connectSockets();
-      }, 5000); // Attempt to reconnect after 5 seconds
+    if (!this.isRunning || this.isReconnecting) {
+      return;
     }
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+    if (this.reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+      console.log('Maximum reconnect attempts reached. Stopping reconnection attempts.');
+      this.stopTunnels();
+      return;
+    }
+    const delay = Math.min(
+      BASE_RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts - 1),
+      MAX_RECONNECT_DELAY,
+    );
+    console.log(
+      `Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
+    );
+    this.reconnectTimer = setTimeout(() => {
+      this.connectSockets();
+    }, delay);
   }
 }

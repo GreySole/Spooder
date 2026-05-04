@@ -8,7 +8,7 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "isolatedModules": true,
     "noEmit": true,
     "allowImportingTsExtensions": false,
@@ -16,21 +16,11 @@
     "inlineSources": true,
     "baseUrl": "./",
     "paths": {
-      "src/*": [
-        "src/*"
-      ],
-      "@frontend/*": [
-        "webui"
-      ],
-      "@backend/*": [
-        "backend"
-      ]
+      "src/*": ["src/*"],
+      "@frontend/*": ["webui"],
+      "@backend/*": ["backend"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-  ], // Specify files to include in compilation
-  "exclude": [
-    "node_modules"
-  ] // Specify files to exclude from compilation
+  "include": ["src/**/*.ts"], // Specify files to include in compilation
+  "exclude": ["node_modules"] // Specify files to exclude from compilation
 }

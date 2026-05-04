@@ -1,14 +1,13 @@
 import OSC from '@spooder/osc-js';
-import http from 'http';
 import { oscLog } from '../../Logging';
 import ConfigService from '../ConfigService';
 import ModuleService from '../ModuleService';
 import MonitorService, { MonitorDataType, MonitorDirection } from '../MonitorService';
 import PluginService from '../PluginService';
 
+import { validateUser } from '../../routes/ModerationRoutes';
 import OSCService from '../OSCService';
 import { isLocal, WebService } from '../WebService';
-import { validateUser } from '../../routes/ModerationRoutes';
 
 export default class OscTcpServer {
   public oscTcp: OSC;

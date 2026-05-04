@@ -5,7 +5,7 @@
         "allowImportingTsExtensions": false,
         "outDir": "./dist",
         "rootDir": "./src",
-        "moduleResolution": "node",
+        "moduleResolution": "node10",
         "module": "CommonJS",
         "target": "ES2021",
         "baseUrl": "./src"

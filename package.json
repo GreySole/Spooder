@@ -13,7 +13,7 @@
     "dev": "tsx --enable-source-maps src/spooder.ts",
     "init": "tsx --enable-source-maps src/spooder.ts -i",
     "safe": "tsx --enable-source-maps src/spooder.ts -s",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json && node buildScripts/copy-integration-manifests.js"
   },
   "author": "Grey Sole",
   "license": "GPL-3.0",
