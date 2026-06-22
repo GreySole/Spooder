@@ -1,8 +1,11 @@
+import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { KeyedObject, userDir, StreamMessage } from '../../Types';
+import { KeyedObject, StreamMessage, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
+import { buildMockStreamMessage } from '../util/ResponseUtil';
 import ConfigService from './ConfigService';
+import EventDiscordCommand from './event/EventDiscordCommand';
 import EventModCommand from './event/EventModCommand';
 import EventOBSCommand from './event/EventOBSCommand';
 import EventPluginCommand from './event/EventPluginCommand';
@@ -10,10 +13,7 @@ import EventResponseCommand from './event/EventResponseCommand';
 import EventSoftwareCommand from './event/EventSoftwareCommand';
 import ModuleService from './ModuleService';
 import OSCService from './OSCService';
-import fs from 'fs';
 import ShareService from './ShareService';
-import EventDiscordCommand from './event/EventDiscordCommand';
-import { buildMockStreamMessage } from '../util/ResponseUtil';
 
 export function sayInChat(message: string, platform?: string, channel?: string) {
   const activeStreams = ModuleService.getStreamModules();
@@ -362,7 +362,7 @@ export class EventService {
     if (isOSC) {
       streamMessage.username = sconfig.bot.bot_name;
       streamMessage.displayName = sconfig.bot.bot_name;
-      streamMessage.message ?? '';
+      streamMessage.message = streamMessage.message ?? '';
     }
 
     const modCommands = EventService.getModCommandsAsEvents();

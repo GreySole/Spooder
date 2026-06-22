@@ -4,6 +4,7 @@
   "description": "A LAN hosted Twitch companion that emits OSC from chat commands and Twitch events",
   "main": "spooder.ts",
   "workspaces": [
+    "plugin-sdk",
     "src/integration/twitch",
     "src/integration/discord",
     "src/integration/obs"

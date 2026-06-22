@@ -1,7 +1,7 @@
 import { KeyedObject, StreamMessage } from '../../Types';
 import { EventService, sayInChat } from '../service/EventService';
-import { triggerExistsAndEnabled } from './EventTriggerUtil';
 import ModuleService from '../service/ModuleService';
+import { triggerExistsAndEnabled } from './EventTriggerUtil';
 
 function matchConditions(a: string, b: string) {
   if (a.includes('|')) {
@@ -168,6 +168,7 @@ export async function runResponseScript(
   script: string,
   useFakeStorage = false,
 ) {
+  console.log("Processing message", message);
   const responseScript = String.raw`
     async (runCommands, sayInChat, modules, activeVars, _eventStorage, _saveEventStorage) => {
       const event = ${JSON.stringify(message)};
@@ -175,8 +176,8 @@ export async function runResponseScript(
       function say(txt) {
         sayInChat(txt, ${JSON.stringify(message.platform)}, ${JSON.stringify(message.channel)});
       }
-      const toUser = ${JSON.stringify(message.message.split(' ')[1])};
-      const command = ${JSON.stringify(message.message.toLowerCase().split(' '))};
+      const toUser = ${JSON.stringify(message?.message?.split(' ')[1])};
+      const command = ${JSON.stringify(message?.message?.toLowerCase().split(' '))};
       function getVar(key, defaultVal = 0) {
         return _eventStorage[${JSON.stringify(eventName)}]?.[key] ?? defaultVal;
       }
