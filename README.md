@@ -60,4 +60,4 @@ Feel free to contribute by code, feedback, or support!
 
 # Have Questions?
 
-Join my Discord at https://discord.gg/CPpcxHpDpe and I'll help you with your setup :)
+Join my Discord at https://discord.gg/YvuUqVaXRf and I'll help you with your setup :)
