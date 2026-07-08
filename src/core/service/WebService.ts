@@ -16,6 +16,7 @@ import { ConfigRoutes } from '../routes/ConfigRoutes';
 import { EventRoutes } from '../routes/EventRoutes';
 import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes';
 import ModuleRoutes from '../routes/ModuleRoutes';
+import { OverlayContainerRoutes } from '../routes/OverlayContainerRoutes';
 import { PluginRoutes } from '../routes/PluginRoutes';
 import { PublicRoutes } from '../routes/PublicRoutes';
 import { ServerRoutes } from '../routes/ServerRoutes';
@@ -197,6 +198,20 @@ export class WebService {
       router.use('/plugin', express.static(userDir + '/web/public'));
       router.use('/assets', express.static(userDir + '/web/assets'));
       router.use('/icons', express.static(userDir + '/web/icons'));
+      router.use(
+        '/shared',
+        express.static(frontendDir + '/overlay', {
+          etag: false,
+          lastModified: false,
+          setHeaders: (res) => {
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+            res.set('Surrogate-Control', 'no-store');
+          },
+        }),
+      );
+      router.use('/overlays', express.static(frontendDir + '/overlay'));
 
       publicRouter.use(json());
       publicRouter.use(cookieParser());
@@ -248,6 +263,20 @@ export class WebService {
       publicRouter.use('/plugin', express.static(userDir + '/web/public'));
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));
       publicRouter.use('/icons', express.static(userDir + '/web/icons'));
+      publicRouter.use(
+        '/shared',
+        express.static(frontendDir + '/overlay', {
+          etag: false,
+          lastModified: false,
+          setHeaders: (res) => {
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.set('Pragma', 'no-cache');
+            res.set('Expires', '0');
+            res.set('Surrogate-Control', 'no-store');
+          },
+        }),
+      );
+      publicRouter.use('/overlays', express.static(frontendDir + '/overlay'));
 
       const systemRoutes = ServerRoutes();
       router.use('/server', systemRoutes.local);
@@ -279,6 +308,10 @@ export class WebService {
       const themeRoutes = ThemeRoutes();
       router.use('/theme', themeRoutes.local);
       publicRouter.use('/theme', themeRoutes.public);
+
+      const overlayContainerRoutes = OverlayContainerRoutes();
+      router.use('/overlay_container', overlayContainerRoutes.local);
+      publicRouter.use('/overlay_container', overlayContainerRoutes.public);
 
       const shareRoutes = ShareRoutes();
       router.use('/shares', shareRoutes.local);
