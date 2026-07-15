@@ -1,4 +1,7 @@
 import { EventService } from '../service/EventService';
+import ModuleService from '../service/ModuleService';
+import NodeRegistryService from '../service/NodeRegistryService';
+import OperationNodeService from '../service/OperationNodeService';
 import PluginService from '../service/PluginService';
 import { json, Request, Response } from 'express';
 import express from 'express';
@@ -21,6 +24,54 @@ export function EventRoutes() {
       groups: EventService.getGroups(),
       plugins: Object.keys(PluginService.getActivePlugins()),
     });
+  });
+
+  router.get('/event_graphs', async (req: Request, res: Response) => {
+    res.send({
+      graphs: EventService.getGraphs(),
+      groups: EventService.getGroups(),
+      disabledGroups: EventService.getDisabledGroups(),
+      plugins: Object.keys(PluginService.getActivePlugins()),
+    });
+  });
+
+  router.post('/save_event_graphs', async (req: Request, res: Response) => {
+    EventService.saveEventGraphs(req.body.graphs, req.body.groups, req.body.disabledGroups);
+    res.send({ status: 'SAVE SUCCESS' });
+    webLog('SAVED EVENT GRAPHS');
+  });
+
+  router.get('/node_manifest', async (req: Request, res: Response) => {
+    res.send(NodeRegistryService.getAllManifests());
+  });
+
+  router.get('/node_manifest/:moduleName', async (req: Request, res: Response) => {
+    const moduleName = req.params.moduleName as string;
+    const streamModule = ModuleService.getStreamModule(moduleName);
+    const communityModule = ModuleService.getCommunityModule(moduleName);
+    const controlModule = ModuleService.getControlModule(moduleName);
+    const mod = streamModule ?? communityModule ?? controlModule;
+
+    if (mod) {
+      res.send({
+        moduleName,
+        triggers: mod.getTriggerNodes(),
+        actions: mod.getActionNodes(),
+      });
+      return;
+    }
+
+    const pluginManifest = NodeRegistryService.getPluginManifest(moduleName);
+    if (pluginManifest) {
+      res.send(pluginManifest);
+      return;
+    }
+
+    res.status(404).send({ status: 'error', message: `Module '${moduleName}' not found` });
+  });
+
+  router.get('/operation_nodes', async (req: Request, res: Response) => {
+    res.send(OperationNodeService.getOperationNodes());
   });
 
   router.get('/chat_commands', (req: Request, res: Response) => {

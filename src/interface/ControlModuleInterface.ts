@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { KeyedObject } from '../Types';
+import { ActionExecutionContext, ActionNodeDef, KeyedObject, TriggerNodeDef } from '../Types';
 
 export interface ControlModuleInterface {
   connected: boolean;
@@ -10,4 +10,11 @@ export interface ControlModuleInterface {
   onPluginsLoaded: () => void;
   getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
   onOSC: (message: any) => void;
+  getTriggerNodes: () => TriggerNodeDef[];
+  getActionNodes: () => ActionNodeDef[];
+  executeActionNode: (
+    nodeId: string,
+    values: KeyedObject,
+    ctx: ActionExecutionContext,
+  ) => () => void | Promise<void>;
 }

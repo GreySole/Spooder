@@ -1,7 +1,9 @@
 import OSC from '@spooder/osc-js';
 import OBSWebSocket, { EventSubscription, OBSRequestTypes } from 'obs-websocket-js';
+import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
 import OSCService from '../../core/service/OSCService';
+import { buildMockStreamMessage } from '../../core/util/ResponseUtil';
 import { KeyedObject } from '../../Types';
 import OBS from './obs';
 import onObsOscMessage from './onObsOscMessage';
@@ -57,6 +59,15 @@ export default class ObsWebsocket {
           obsModule.monitor.stopMonitoring();
         }
         sendToTCP('/obs/event/StreamStateChanged', JSON.stringify(data));
+
+        const streamMessage = buildMockStreamMessage('');
+        streamMessage.platformEventData = { outputActive: data.outputActive, outputState: data.outputState };
+        EventService.emitTrigger(
+          'obs',
+          'stream_state_changed',
+          { state: data.outputActive ? 'started' : 'stopped' },
+          streamMessage,
+        );
       });
       obsClient.on('RecordStateChanged', (data: KeyedObject) => {
         sendToTCP('/obs/event/RecordStateChanged', JSON.stringify(data));
@@ -73,6 +84,10 @@ export default class ObsWebsocket {
       });
       obsClient.on('CurrentProgramSceneChanged', (data: KeyedObject) => {
         sendToTCP('/obs/event/CurrentProgramSceneChanged', data.sceneName);
+
+        const streamMessage = buildMockStreamMessage('');
+        streamMessage.platformEventData = { sceneName: data.sceneName };
+        EventService.emitTrigger('obs', 'scene_changed', { sceneName: data.sceneName }, streamMessage);
       });
       obsClient.on('CurrentPreviewSceneChanged', (data: KeyedObject) => {
         sendToTCP('/obs/event/CurrentPreviewSceneChanged', data.sceneName);

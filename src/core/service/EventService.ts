@@ -1,16 +1,16 @@
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { KeyedObject, StreamMessage, userDir } from '../../Types';
+import { EventGraph, KeyedObject, StreamMessage, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
-import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
+import {
+  migrateEventsFileToGraphs,
+  reconstructFlatEventFromGraph,
+} from '../util/EventGraphMigration';
+import { matchesTriggerValues, triggerExistsAndEnabled } from '../util/EventTriggerUtil';
 import { buildMockStreamMessage } from '../util/ResponseUtil';
 import ConfigService from './ConfigService';
-import EventDiscordCommand from './event/EventDiscordCommand';
-import EventModCommand from './event/EventModCommand';
-import EventOBSCommand from './event/EventOBSCommand';
-import EventPluginCommand from './event/EventPluginCommand';
 import EventResponseCommand from './event/EventResponseCommand';
-import EventSoftwareCommand from './event/EventSoftwareCommand';
+import { walkEventGraph } from './event/EventGraphExecutor';
 import ModuleService from './ModuleService';
 import OSCService from './OSCService';
 import ShareService from './ShareService';
@@ -55,14 +55,25 @@ export class EventService {
     }
 
     try {
-      const settingFile = fs.readFileSync(userDir + '/settings/commands.json', {
+      const settingFile = fs.readFileSync(userDir + '/settings/events.json', {
         encoding: 'utf8',
       });
 
       const eventsObj = JSON.parse(settingFile);
-      this.events = eventsObj.events;
-      this.eventGroups = eventsObj.groups;
-      this.disabledGroups = eventsObj.disabledGroups || [];
+
+      if (eventsObj.graphs) {
+        this.graphs = eventsObj.graphs;
+        this.eventGroups = eventsObj.groups;
+        this.disabledGroups = eventsObj.disabledGroups || [];
+      } else {
+        spooderLog('Migrating events.json from the legacy flat format to the node graph format');
+        const migrated = migrateEventsFileToGraphs(eventsObj);
+        this.graphs = migrated.graphs;
+        this.eventGroups = migrated.groups;
+        this.disabledGroups = migrated.disabledGroups;
+        fs.writeFileSync(userDir + '/settings/events.json', JSON.stringify(migrated), 'utf-8');
+        spooderLog(`Migrated ${Object.keys(this.graphs).length} events to the node graph format`);
+      }
 
       if (fs.existsSync(userDir + '/settings/eventstorage.json')) {
         try {
@@ -76,7 +87,7 @@ export class EventService {
 
       spooderLog('Got events');
     } catch (e: any) {
-      this.events = {};
+      this.graphs = {};
       this.eventGroups = ['Default'];
     }
   }
@@ -88,7 +99,7 @@ export class EventService {
   eventstorage = {} as KeyedObject;
 
   modCommands = {} as KeyedObject;
-  events = {} as KeyedObject;
+  graphs = {} as { [eventId: string]: EventGraph };
   eventGroups = ['Default'];
   disabledGroups = [] as string[];
   recurringMessages = {} as KeyedObject;
@@ -226,8 +237,18 @@ export class EventService {
     );
   }
 
+  // Derived, backward-compatible flat view for the existing chat/OSC/twitch trigger-matching
+  // and response-script call sites that expect `{ triggers: {...}, commands: [...] }`.
   static getEvents() {
-    return EventService.instance.events;
+    const flatEvents: KeyedObject = {};
+    for (const id in EventService.instance.graphs) {
+      flatEvents[id] = reconstructFlatEventFromGraph(EventService.instance.graphs[id]);
+    }
+    return flatEvents;
+  }
+
+  static getGraphs() {
+    return EventService.instance.graphs;
   }
 
   static getEventStorage() {
@@ -291,15 +312,30 @@ export class EventService {
     );
   }
 
+  // Accepts the legacy flat shape (for any caller still posting it) and converts to graphs
+  // before persisting, since events.json only ever stores the graph format on disk.
   static saveEvents(newEvents: KeyedObject, newGroups: string[], newDisabledGroups: string[]) {
-    EventService.instance.events = newEvents;
+    const migrated = migrateEventsFileToGraphs({
+      events: newEvents,
+      groups: newGroups,
+      disabledGroups: newDisabledGroups,
+    });
+    EventService.saveEventGraphs(migrated.graphs, migrated.groups, migrated.disabledGroups);
+  }
+
+  static saveEventGraphs(
+    newGraphs: { [eventId: string]: EventGraph },
+    newGroups: string[],
+    newDisabledGroups: string[],
+  ) {
+    EventService.instance.graphs = newGraphs;
     EventService.instance.eventGroups = newGroups;
     EventService.instance.disabledGroups = newDisabledGroups;
 
     fs.writeFileSync(
-      userDir + '/settings/commands.json',
+      userDir + '/settings/events.json',
       JSON.stringify({
-        events: newEvents,
+        graphs: newGraphs,
         groups: newGroups,
         disabledGroups: newDisabledGroups,
       }),
@@ -346,6 +382,25 @@ export class EventService {
         }
       }
       delete EventService.instance.activeEvents[cEvent];
+    }
+  }
+
+  static emitTrigger(
+    moduleName: string,
+    triggerNodeId: string,
+    payload: KeyedObject,
+    streamMessage: StreamMessage,
+  ) {
+    const events = EventService.getEvents();
+    for (let e in events) {
+      const event = events[e];
+      if (!triggerExistsAndEnabled(event, moduleName)) {
+        continue;
+      }
+      if (!matchesTriggerValues(triggerNodeId, event.triggers[moduleName], payload)) {
+        continue;
+      }
+      EventService.runCommands(streamMessage, e, 'event');
     }
   }
 
@@ -438,75 +493,18 @@ export class EventService {
       }
     }
 
-    for (let c in event.commands) {
-      let eCommand = event.commands[c];
-
-      let thisCommand = null;
-      switch (eCommand.type) {
-        case 'response':
-          thisCommand = EventResponseCommand(eCommand, eventName, streamMessage, extra);
-          if (eCommand.delay == 0) {
-            thisCommand();
-          } else {
-            setTimeout(thisCommand, eCommand.delay);
-          }
-
-          break;
-        case 'plugin':
-          thisCommand = EventPluginCommand(eCommand, eventName, streamMessage, extra);
-
-          if (eCommand.delay == 0) {
-            thisCommand();
-          } else {
-            setTimeout(thisCommand, eCommand.delay);
-          }
-
-          break;
-        case 'software':
-          thisCommand = EventSoftwareCommand(
-            eCommand,
-            isChat,
-            isOSC,
-            event,
-            activeEvents,
-            streamMessage,
-            eventName,
-          );
-          if (eCommand.delay == 0) {
-            thisCommand();
-          } else {
-            setTimeout(thisCommand, eCommand.delay);
-          }
-          break;
-        case 'obs':
-          if (ModuleService.getControlModule('obs') != null) {
-            thisCommand = EventOBSCommand(eCommand, eventName);
-            if (eCommand.delay == 0) {
-              thisCommand();
-            } else {
-              setTimeout(thisCommand, eCommand.delay);
-            }
-          } else {
-            spooderLog(`Attempted command for the event '${eventName}' OBS module not found`);
-          }
-
-          break;
-        case 'mod':
-          thisCommand = EventModCommand(eCommand, eventName, streamMessage, extra);
-          if (eCommand.delay == 0) {
-            thisCommand();
-          } else {
-            setTimeout(thisCommand, eCommand.delay);
-          }
-          break;
-        case 'discord':
-          thisCommand = EventDiscordCommand(eCommand, eventName, streamMessage, extra);
-          if (eCommand.delay == 0) {
-            thisCommand();
-          } else {
-            setTimeout(thisCommand, eCommand.delay);
-          }
-          break;
+    const graph = EventService.getGraphs()[eventName];
+    if (graph) {
+      walkEventGraph(graph, { eventName, streamMessage, extra, isChat, isOSC, event, activeEvents });
+    } else if (event.commands) {
+      // Mod-command virtual events aren't backed by a graph (they live in mod_commands.json)
+      // and are always exactly one 'response' command - handled directly.
+      const eCommand = event.commands[0];
+      const thisCommand = EventResponseCommand(eCommand, eventName, streamMessage, extra);
+      if (eCommand.delay == 0) {
+        thisCommand();
+      } else {
+        setTimeout(thisCommand, eCommand.delay);
       }
     }
   };

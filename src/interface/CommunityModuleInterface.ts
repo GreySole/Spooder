@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { KeyedObject } from '../Types';
+import { ActionExecutionContext, ActionNodeDef, KeyedObject, TriggerNodeDef } from '../Types';
 
 export interface CommunityModuleInterface {
   getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
@@ -10,4 +10,11 @@ export interface CommunityModuleInterface {
   getResponseHandlers: () => KeyedObject;
   lastMessage: KeyedObject;
   onExternalNetworkChanged: () => void;
+  getTriggerNodes: () => TriggerNodeDef[];
+  getActionNodes: () => ActionNodeDef[];
+  executeActionNode: (
+    nodeId: string,
+    values: KeyedObject,
+    ctx: ActionExecutionContext,
+  ) => () => void | Promise<void>;
 }

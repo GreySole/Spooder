@@ -10,10 +10,17 @@ import {
   Routes,
 } from 'discord.js';
 import fs from 'fs';
-import { logEffects } from '../../core/Logging';
+import { logEffects, spooderLog } from '../../core/Logging';
 import PluginService from '../../core/service/PluginService';
+import { runResponseScript } from '../../core/util/ResponseUtil';
 import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
-import { KeyedObject, userDir } from '../../Types';
+import {
+  ActionExecutionContext,
+  ActionNodeDef,
+  KeyedObject,
+  TriggerNodeDef,
+  userDir,
+} from '../../Types';
 import DiscordApi from './DiscordApi';
 import DiscordButtons from './DiscordButtons';
 import DiscordChat from './DiscordChat';
@@ -139,6 +146,172 @@ export default class Discord implements CommunityModuleInterface {
         startListening: this.voice.startListening.bind(this.voice),
         stopListening: this.voice.stopListening.bind(this.voice),
       },
+    };
+  };
+
+  getTriggerNodes = (): TriggerNodeDef[] => {
+    return [
+      {
+        id: 'message_received',
+        label: 'Message Received',
+        description: 'Fires when a message is posted in a server channel or DM.',
+        form: {
+          guildId: { label: 'Guild ID (optional filter)', type: 'text' },
+          channelId: { label: 'Channel ID (optional filter)', type: 'text' },
+          requireMention: { label: 'Require Bot Mention', type: 'boolean' },
+        },
+        defaults: { guildId: '', channelId: '', requireMention: false },
+        outputs: [
+          { id: 'username', label: 'Username', dataType: 'string' },
+          { id: 'content', label: 'Message Content', dataType: 'string' },
+          { id: 'guildId', label: 'Guild ID', dataType: 'string' },
+          { id: 'channelId', label: 'Channel ID', dataType: 'string' },
+        ],
+      },
+      {
+        id: 'button_clicked',
+        label: 'Button Clicked',
+        description: 'Fires when a user clicks a message button.',
+        form: {
+          customIdPrefix: { label: 'Custom ID Prefix (optional filter)', type: 'text' },
+        },
+        defaults: { customIdPrefix: '' },
+        outputs: [
+          { id: 'customId', label: 'Custom ID', dataType: 'string' },
+          { id: 'userId', label: 'User ID', dataType: 'string' },
+          { id: 'guildId', label: 'Guild ID', dataType: 'string' },
+          { id: 'channelId', label: 'Channel ID', dataType: 'string' },
+        ],
+      },
+    ];
+  };
+
+  getActionNodes = (): ActionNodeDef[] => {
+    return [
+      {
+        id: 'send_dm',
+        label: 'Send Direct Message',
+        form: {
+          userId: { label: 'User ID', type: 'text', portType: 'string' },
+          message: { label: 'Message', type: 'code', options: { use_response_processor: true }, portType: 'string' },
+        },
+        defaults: { userId: '', message: '' },
+      },
+      {
+        id: 'message',
+        label: 'Send To Channel',
+        form: {
+          guild: { label: 'Guild ID', type: 'text', portType: 'string' },
+          channel: { label: 'Channel ID', type: 'text', portType: 'string' },
+          message: { label: 'Message', type: 'code', options: { use_response_processor: true }, portType: 'string' },
+          role: { label: 'Role To Tag', type: 'text', portType: 'string' },
+          use_link_button: { label: 'Include Link Button', type: 'boolean' },
+          link_url: {
+            label: 'Link URL',
+            type: 'text',
+            portType: 'string',
+            showif: { variable: 'use_link_button', condition: 'equals', value: true },
+          },
+          link_label: {
+            label: 'Link Button Label',
+            type: 'text',
+            portType: 'string',
+            showif: { variable: 'use_link_button', condition: 'equals', value: true },
+          },
+        },
+        defaults: {
+          guild: '',
+          channel: '',
+          message: '',
+          role: '',
+          use_link_button: false,
+          link_url: '',
+          link_label: '',
+        },
+      },
+      {
+        id: 'voice_join',
+        label: 'Join Voice Channel',
+        form: {
+          guildId: { label: 'Guild ID', type: 'text', portType: 'string' },
+          channelId: { label: 'Channel ID', type: 'text', portType: 'string' },
+        },
+        defaults: { guildId: '', channelId: '' },
+      },
+      {
+        id: 'voice_leave',
+        label: 'Leave Voice Channel',
+        form: {},
+        defaults: {},
+      },
+      {
+        id: 'voice_play_sound',
+        label: 'Play Sound In Voice Channel',
+        form: {
+          sound: { label: 'Sound', type: 'asset', options: { assetType: 'sound', folder: 'sound', required: true } },
+        },
+        defaults: { sound: '' },
+      },
+    ];
+  };
+
+  executeActionNode = (nodeId: string, values: KeyedObject, ctx: ActionExecutionContext) => {
+    return async () => {
+      try {
+        switch (nodeId) {
+          case 'send_dm': {
+            const response = await runResponseScript(
+              ctx.eventName,
+              ctx.streamMessage,
+              ctx.extra,
+              values.message,
+              false,
+            );
+            this.chat.sendDM(values.userId, response.response);
+            break;
+          }
+          case 'message': {
+            const response = await runResponseScript(
+              ctx.eventName,
+              ctx.streamMessage,
+              ctx.extra,
+              values.message,
+              false,
+            );
+
+            const components = [];
+            if (values.use_link_button) {
+              components.push(this.buttons.makeLinkButton(values.link_label || 'Button', values.link_url));
+            }
+
+            const roleTag = values.role ? this.chat.makeRoleTag(values.role) : null;
+
+            this.chat.sendToChannel(
+              values.guild,
+              values.channel,
+              `${roleTag ? roleTag + ' ' : ''}${response.response}`,
+              components,
+            );
+            break;
+          }
+          case 'voice_join':
+            this.voice.joinVoiceChannel(values.guildId, values.channelId);
+            break;
+          case 'voice_leave':
+            this.voice.leaveVoiceChannel();
+            break;
+          case 'voice_play_sound':
+            this.voice.playAudio(values.sound);
+            break;
+          default:
+            spooderLog(`Unknown discord action node '${nodeId}' for event ${ctx.eventName}`);
+        }
+      } catch (e) {
+        spooderLog(
+          `Failed to execute discord action '${nodeId}' for ${ctx.eventName}. Check the event settings to verify it.`,
+          e,
+        );
+      }
     };
   };
 

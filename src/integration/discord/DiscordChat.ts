@@ -1,7 +1,8 @@
 import { ChannelType, Client, Events, Message, TextChannel } from 'discord.js';
 import fs from 'fs';
+import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
-import { KeyedObject, userDir } from '../../Types';
+import { KeyedObject, StreamMessage, userDir } from '../../Types';
 import Discord, { discordLog } from './discord';
 import DiscordApi from './DiscordApi';
 import DiscordVoice from './DiscordVoice';
@@ -23,6 +24,24 @@ export default class DiscordChat {
     this.client = this.discordModule.client;
     this.client?.on(Events.InteractionCreate, async (interaction) => {
       //discordLog("DISCORD INTERACTION", interaction);
+      if (interaction.isButton()) {
+        const streamMessage = this.buildDiscordStreamMessage(
+          interaction.user.id,
+          interaction.user.username,
+          interaction.guildId,
+          interaction.channelId,
+          '',
+          { platformEventData: { customId: interaction.customId } },
+        );
+        EventService.emitTrigger(
+          'discord',
+          'button_clicked',
+          { customIdPrefix: interaction.customId },
+          streamMessage,
+        );
+        return;
+      }
+
       if (!interaction.isChatInputCommand()) {
         return;
       }
@@ -60,6 +79,30 @@ export default class DiscordChat {
         },
         content: message.content,
       };
+
+      const wasMentioned =
+        message.mentions.users.has(this.client?.user?.id ?? '') ||
+        message.mentions.roles.some((role) => role.tags?.botId === this.client?.user?.id);
+
+      const messageStreamMessage = this.buildDiscordStreamMessage(
+        message.author.id,
+        message.author.username,
+        message.guildId,
+        message.channelId,
+        message.content,
+        { respond: (txt: string) => message.reply(txt) },
+      );
+
+      EventService.emitTrigger(
+        'discord',
+        'message_received',
+        {
+          guildId: message.guildId ?? '',
+          channelId: message.channelId,
+          requireMention: wasMentioned,
+        },
+        messageStreamMessage,
+      );
 
       if (message.guildId == null) {
         discordLog('Discord PM', message.author.username, message.content, message.attachments);
@@ -117,6 +160,36 @@ export default class DiscordChat {
 
   makeUserMentionString(id: string) {
     return '<@' + id + '> ';
+  }
+
+  buildDiscordStreamMessage(
+    userId: string,
+    username: string,
+    guildId: string | null,
+    channelId: string,
+    content: string,
+    overrides: Partial<StreamMessage> = {},
+  ): StreamMessage {
+    return {
+      userId,
+      username,
+      displayName: username,
+      platform: 'discord',
+      channel: channelId,
+      message: content,
+      messageType: 'discord-message',
+      respond: () => {},
+      emotes: [],
+      tags: {},
+      isBroadcaster: false,
+      isMod: false,
+      isSubscriber: false,
+      isVIP: false,
+      isFirstMessage: false,
+      isReturningChatter: false,
+      platformEventData: { guildId, channelId, userId },
+      ...overrides,
+    };
   }
 
   makeRoleTag(roleId: string) {

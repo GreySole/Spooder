@@ -1,9 +1,15 @@
 import fs from 'fs';
-import { logEffects } from '../../core/Logging';
+import { logEffects, spooderLog } from '../../core/Logging';
 import { EventService } from '../../core/service/EventService';
 import ShareService from '../../core/service/ShareService';
 import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
-import { KeyedObject, userDir } from '../../Types';
+import {
+  ActionExecutionContext,
+  ActionNodeDef,
+  KeyedObject,
+  TriggerNodeDef,
+  userDir,
+} from '../../Types';
 import TwitchApi from './TwitchApi';
 import TwitchChat from './TwitchChat';
 import TwitchCLI from './TwitchCLI';
@@ -156,6 +162,79 @@ export default class Twitch implements StreamModuleInterface {
       getChannelInfo: this.api.getChannelInfo.bind(this.api),
       broadcasterUsername: this.api.homeChannel,
       botUsername: this.api.botUsername,
+    };
+  };
+
+  getTriggerNodes = (): TriggerNodeDef[] => {
+    return [
+      {
+        id: 'chat_command',
+        label: 'Chat Command',
+        description: 'Fires when a chat message matches a command.',
+        form: {
+          command: { label: 'Command', type: 'text' },
+          search: { label: 'Match Anywhere In Message', type: 'boolean' },
+          vip: { label: 'Require VIP', type: 'boolean' },
+          mod: { label: 'Require Mod', type: 'boolean' },
+          sub: { label: 'Require Subscriber', type: 'boolean' },
+          broadcaster: { label: 'Require Broadcaster', type: 'boolean' },
+        },
+        defaults: { command: '', search: false, vip: false, mod: false, sub: false, broadcaster: false },
+        outputs: [
+          { id: 'username', label: 'Username', dataType: 'string' },
+          { id: 'message', label: 'Message', dataType: 'string' },
+        ],
+      },
+      {
+        id: 'channel_point_redeem',
+        label: 'Channel Point Redeem',
+        description: 'Fires when a channel point reward is redeemed.',
+        form: {
+          rewardId: { label: 'Reward ID', type: 'text' },
+          overrideAutoFulfill: { label: 'Override Auto-Fulfill', type: 'boolean' },
+        },
+        defaults: { rewardId: '', overrideAutoFulfill: false },
+        outputs: [
+          { id: 'rewardTitle', label: 'Reward Title', dataType: 'string' },
+          { id: 'status', label: 'Status', dataType: 'string' },
+          { id: 'username', label: 'Username', dataType: 'string' },
+        ],
+      },
+      {
+        id: 'eventsub_event',
+        label: 'EventSub Event',
+        description: 'Fires on a Twitch EventSub notification (raid, follow, sub, etc).',
+        form: {
+          type: {
+            label: 'Event Type',
+            type: 'select',
+            options: {
+              selections: {
+                'channel.raid': 'Raid',
+                'channel.follow': 'Follow',
+                'channel.subscribe': 'Subscribe',
+                'stream.online': 'Stream Online',
+                'stream.offline': 'Stream Offline',
+              },
+            },
+          },
+        },
+        defaults: { type: 'channel.follow' },
+        outputs: [
+          { id: 'type', label: 'Event Type', dataType: 'string' },
+          { id: 'username', label: 'Username', dataType: 'string' },
+        ],
+      },
+    ];
+  };
+
+  getActionNodes = (): ActionNodeDef[] => {
+    return [];
+  };
+
+  executeActionNode = (nodeId: string, _values: KeyedObject, ctx: ActionExecutionContext) => {
+    return () => {
+      spooderLog(`Unknown twitch action node '${nodeId}' for event ${ctx.eventName}`);
     };
   };
 

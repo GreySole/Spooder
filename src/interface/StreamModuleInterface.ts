@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { KeyedObject } from '../Types';
+import { ActionExecutionContext, ActionNodeDef, KeyedObject, TriggerNodeDef } from '../Types';
 
 export interface StreamModuleInterface {
   api: any;
@@ -8,6 +8,13 @@ export interface StreamModuleInterface {
   autoLogin: () => Promise<boolean>;
   sayInChat: (message: string, channel: string) => void;
   onEventFileSaved: () => void;
+  getTriggerNodes: () => TriggerNodeDef[];
+  getActionNodes: () => ActionNodeDef[];
+  executeActionNode: (
+    nodeId: string,
+    values: KeyedObject,
+    ctx: ActionExecutionContext,
+  ) => () => void | Promise<void>;
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;
   getActiveShares: () => Promise<KeyedObject>;
   getUserInfo: (user?: string) => Promise<KeyedObject>;
