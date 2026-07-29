@@ -11,6 +11,7 @@ import { buildMockStreamMessage } from '../util/ResponseUtil';
 import ConfigService from './ConfigService';
 import EventResponseCommand from './event/EventResponseCommand';
 import { walkEventGraph } from './event/EventGraphExecutor';
+import EventStorageService from './EventStorageService';
 import ModuleService from './ModuleService';
 import OSCService from './OSCService';
 import ShareService from './ShareService';
@@ -75,28 +76,19 @@ export class EventService {
         spooderLog(`Migrated ${Object.keys(this.graphs).length} events to the node graph format`);
       }
 
-      if (fs.existsSync(userDir + '/settings/eventstorage.json')) {
-        try {
-          this.eventstorage = JSON.parse(
-            fs.readFileSync(userDir + '/settings/eventstorage.json', { encoding: 'utf-8' }),
-          );
-        } catch (e) {
-          spooderLog('Error accessing Event Storage. Event Storage remains empty.');
-        }
-      }
-
       spooderLog('Got events');
     } catch (e: any) {
       this.graphs = {};
       this.eventGroups = ['Default'];
     }
+
+    EventStorageService.initialize();
   }
 
   uptime = 0;
 
   activeEvents = {} as KeyedObject;
   activeResponseVariables = {} as KeyedObject;
-  eventstorage = {} as KeyedObject;
 
   modCommands = {} as KeyedObject;
   graphs = {} as { [eventId: string]: EventGraph };
@@ -251,10 +243,6 @@ export class EventService {
     return EventService.instance.graphs;
   }
 
-  static getEventStorage() {
-    return EventService.instance.eventstorage;
-  }
-
   static getActiveResponseVariables() {
     return EventService.instance.activeResponseVariables;
   }
@@ -301,15 +289,6 @@ export class EventService {
     }
 
     return chatCommands;
-  }
-
-  static saveEventStorage(newEventStorage: KeyedObject) {
-    EventService.instance.eventstorage = newEventStorage;
-    fs.writeFileSync(
-      userDir + '/settings/eventstorage.json',
-      JSON.stringify(EventService.instance.eventstorage),
-      'utf-8',
-    );
   }
 
   // Accepts the legacy flat shape (for any caller still posting it) and converts to graphs

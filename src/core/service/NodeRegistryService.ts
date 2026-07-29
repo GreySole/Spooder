@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ActionExecutionContext, ActionNodeDef, KeyedObject, NodeManifest, userDir } from '../../Types';
+import { getCoreActionNodes } from './CoreNodeManifest';
 import ModuleService from './ModuleService';
 import PluginService from './PluginService';
 
@@ -32,7 +33,9 @@ export default class NodeRegistryService {
   }
 
   static getAllManifests(): NodeManifest[] {
-    const manifests: NodeManifest[] = [];
+    const manifests: NodeManifest[] = [
+      { moduleName: 'core', triggers: [], actions: getCoreActionNodes() },
+    ];
 
     const streamModules = ModuleService.getStreamModules();
     for (const name in streamModules) {

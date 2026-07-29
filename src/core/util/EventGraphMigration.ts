@@ -5,16 +5,21 @@ function execEdge(fromNode: string, toNode: string): EventGraphEdge {
   return { id: uuidv4(), fromNode, fromPort: 'exec', toNode, toPort: 'exec' };
 }
 
+// Keyed by `${fromNode}::${fromPort}`, not just fromNode, so a node can fan out through
+// several named exec ports (e.g. an 'if' node's 'then'/'else') instead of one generic
+// 'exec' port. Every existing graph only ever uses fromPort:'exec', so every key becomes
+// `${id}::exec` - identical partitioning to before this supported named ports.
 export function buildExecAdjacency(graph: EventGraph): Map<string, string[]> {
   const outgoing = new Map<string, string[]>();
   for (const edge of graph.edges) {
-    if (edge.fromPort !== 'exec' || edge.toPort !== 'exec') {
+    if (edge.toPort !== 'exec') {
       continue;
     }
-    if (!outgoing.has(edge.fromNode)) {
-      outgoing.set(edge.fromNode, []);
+    const key = `${edge.fromNode}::${edge.fromPort}`;
+    if (!outgoing.has(key)) {
+      outgoing.set(key, []);
     }
-    outgoing.get(edge.fromNode)!.push(edge.toNode);
+    outgoing.get(key)!.push(edge.toNode);
   }
   return outgoing;
 }
@@ -26,7 +31,7 @@ export function findEntryNodeIds(graph: EventGraph): string[] {
   const outgoing = buildExecAdjacency(graph);
   const hasIncoming = new Set<string>();
   for (const edge of graph.edges) {
-    if (edge.fromPort === 'exec' && edge.toPort === 'exec') {
+    if (edge.toPort === 'exec') {
       hasIncoming.add(edge.toNode);
     }
   }
@@ -34,7 +39,7 @@ export function findEntryNodeIds(graph: EventGraph): string[] {
   const entries = new Set<string>();
   for (const node of graph.nodes) {
     if (node.kind === 'callback') {
-      for (const target of outgoing.get(node.id) ?? []) {
+      for (const target of outgoing.get(`${node.id}::exec`) ?? []) {
         entries.add(target);
       }
     } else if (node.kind === 'action' && !hasIncoming.has(node.id)) {
@@ -199,7 +204,7 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
       command.function = node.nodeTypeId;
     }
     commands.push(command);
-    cursor.push(...(outgoing.get(nodeId) ?? []));
+    cursor.push(...(outgoing.get(`${nodeId}::exec`) ?? []));
   }
 
   return {

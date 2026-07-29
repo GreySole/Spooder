@@ -163,7 +163,7 @@ export default class Discord implements CommunityModuleInterface {
         defaults: { guildId: '', channelId: '', requireMention: false },
         outputs: [
           { id: 'username', label: 'Username', dataType: 'string' },
-          { id: 'content', label: 'Message Content', dataType: 'string' },
+          { id: 'message', label: 'Message Content', dataType: 'string' },
           { id: 'guildId', label: 'Guild ID', dataType: 'string' },
           { id: 'channelId', label: 'Channel ID', dataType: 'string' },
         ],

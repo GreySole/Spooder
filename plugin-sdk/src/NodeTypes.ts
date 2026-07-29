@@ -42,6 +42,10 @@ export interface ActionNodeDef {
   defaults: KeyedObject;
   // Rarely used: reserved for actions that hand a result back into the graph.
   outputs?: NodePortDef[];
+  // Named execution-flow output ports for branching actions (e.g. an 'if' node's
+  // 'then'/'else'). Omitted/empty => the node has the usual single unlabeled 'exec' output.
+  // Which port(s) actually fire for a given run is decided by the node's own executor logic.
+  execOutputs?: { id: string; label: string }[];
   supportsTimed?: boolean;
 }
 
@@ -51,7 +55,7 @@ export interface OperationNodeDef {
   id: string;
   label: string;
   description?: string;
-  category: 'math' | 'string';
+  category: 'math' | 'string' | 'logic' | 'random' | 'storage';
   form: NodeForm;
   defaults: KeyedObject;
   outputs: NodePortDef[];

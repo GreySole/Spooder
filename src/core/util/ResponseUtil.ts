@@ -1,4 +1,5 @@
 import { KeyedObject, StreamMessage } from '../../Types';
+import EventStorageService from '../service/EventStorageService';
 import { EventService, sayInChat } from '../service/EventService';
 import ModuleService from '../service/ModuleService';
 import { triggerExistsAndEnabled } from './EventTriggerUtil';
@@ -169,8 +170,29 @@ export async function runResponseScript(
   useFakeStorage = false,
 ) {
   console.log("Processing message", message);
+
+  // In fake/test mode (verifyResponseScript), reads/writes are shadowed by a local overlay
+  // so a script preview never touches the real database - only visible within this one call.
+  const fakeOverlay = useFakeStorage ? new Map<string, any>() : null;
+  const overlayKey = (evName: string, key: string) => `${evName}::${key}`;
+
+  function getStorageValue(evName: string, key: string, defaultVal: any) {
+    if (fakeOverlay?.has(overlayKey(evName, key))) {
+      return fakeOverlay.get(overlayKey(evName, key));
+    }
+    return EventStorageService.getRawValue(evName, key, defaultVal);
+  }
+
+  function setStorageValue(evName: string, key: string, value: any) {
+    if (fakeOverlay) {
+      fakeOverlay.set(overlayKey(evName, key), value);
+      return;
+    }
+    EventStorageService.setRawValue(evName, key, value);
+  }
+
   const responseScript = String.raw`
-    async (runCommands, sayInChat, modules, activeVars, _eventStorage, _saveEventStorage) => {
+    async (runCommands, sayInChat, modules, activeVars, _getStorageValue, _setStorageValue) => {
       const event = ${JSON.stringify(message)};
       const extra = ${JSON.stringify(extra)};
       function say(txt) {
@@ -179,23 +201,19 @@ export async function runResponseScript(
       const toUser = ${JSON.stringify(message?.message?.split(' ')[1])};
       const command = ${JSON.stringify(message?.message?.toLowerCase().split(' '))};
       function getVar(key, defaultVal = 0) {
-        return _eventStorage[${JSON.stringify(eventName)}]?.[key] ?? defaultVal;
+        return _getStorageValue(${JSON.stringify(eventName)}, key, defaultVal);
       }
       function setVar(key, value, save = true) {
-        _eventStorage[${JSON.stringify(eventName)}] ??= {};
-        _eventStorage[${JSON.stringify(eventName)}][key] = value;
-        if (save == true && ${!useFakeStorage}) {
-          _saveEventStorage(_eventStorage);
+        if (save == true) {
+          _setStorageValue(${JSON.stringify(eventName)}, key, value);
         }
       }
       function getSharedVar(eventname, key, defaultVal = 0) {
-        return _eventStorage[eventname]?.[key] ?? defaultVal;
+        return _getStorageValue(eventname, key, defaultVal);
       }
       function setSharedVar(eventname, key, value, save = true) {
-        _eventStorage[eventname] ??= {};
-        _eventStorage[eventname][key] = value;
-        if (save == true && ${!useFakeStorage}) {
-          _saveEventStorage(_eventStorage);
+        if (save == true) {
+          _setStorageValue(eventname, key, value);
         }
       }
       function getTimer(name){
@@ -258,8 +276,8 @@ export async function runResponseScript(
       sayInChat,
       responseHandlerFunctions,
       EventService.getActiveResponseVariables(),
-      EventService.getEventStorage(),
-      EventService.saveEventStorage,
+      getStorageValue,
+      setStorageValue,
     );
     return { status: 'ok', response };
   } catch (e: any) {

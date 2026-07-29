@@ -1,5 +1,6 @@
 import { EventService } from '../service/EventService';
 import ModuleService from '../service/ModuleService';
+import { getCoreOperationNodes } from '../service/CoreNodeManifest';
 import NodeRegistryService from '../service/NodeRegistryService';
 import OperationNodeService from '../service/OperationNodeService';
 import PluginService from '../service/PluginService';
@@ -71,7 +72,7 @@ export function EventRoutes() {
   });
 
   router.get('/operation_nodes', async (req: Request, res: Response) => {
-    res.send(OperationNodeService.getOperationNodes());
+    res.send([...OperationNodeService.getOperationNodes(), ...getCoreOperationNodes()]);
   });
 
   router.get('/chat_commands', (req: Request, res: Response) => {
