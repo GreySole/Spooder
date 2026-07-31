@@ -235,6 +235,7 @@ export default class Twitch implements StreamModuleInterface {
         this.oauth['token'] = botStatus.newtoken;
       } else if (botStatus.status == 'error') {
         twitchLog('CHATBOT ERROR', botStatus.error);
+        res(false);
         return;
       }
 
@@ -247,6 +248,7 @@ export default class Twitch implements StreamModuleInterface {
           this.oauth['broadcaster_token'] = broadcasterStatus.newtoken;
         } else if (broadcasterStatus.status == 'error') {
           twitchLog('BROADCASTER ERROR', broadcasterStatus.error);
+          res(false);
           return;
         }
       }

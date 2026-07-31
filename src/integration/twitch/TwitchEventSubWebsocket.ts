@@ -8,10 +8,21 @@ import Axios from 'axios';
 import { KeyedObject } from '../../Types';
 import WebSocket from 'ws';
 
+const BASE_RECONNECT_DELAY = 2000;
+const MAX_RECONNECT_DELAY = 60000;
+
 export default class TwitchEventSubWebsocket {
   websocket: WebSocket | undefined = undefined;
+  // Holds the new socket opened for a Twitch-initiated `session_reconnect` handoff. Twitch's
+  // protocol requires keeping the old connection alive until this one sends `session_welcome`,
+  // so it's tracked separately from `websocket` until the handoff completes.
+  private pendingReconnectSocket: WebSocket | undefined = undefined;
   wsSessionId: string | undefined = undefined;
   wsKeepAliveInterval: NodeJS.Timeout | undefined = undefined;
+  private keepAliveTimeoutMs: number = 15000;
+  private reconnectTimer: NodeJS.Timeout | undefined = undefined;
+  private reconnectAttempts: number = 0;
+  private shuttingDown: boolean = false;
   testMode: boolean = false;
   websocketUrl = 'wss://eventsub.wss.twitch.tv/ws';
 
@@ -22,12 +33,83 @@ export default class TwitchEventSubWebsocket {
       twitchLog('No Twitch triggered events found, skipping EventSub initialization');
       return;
     }
+    this.shuttingDown = false;
     //this.enableTestMode('localhost', 8080);
-    this.websocket = new WebSocket(this.websocketUrl);
-    this.setupWebSocketHandlers();
+    this.connect(this.websocketUrl);
+  }
+
+  // Every reconnect path (initial connect, error/close recovery, test mode) funnels through
+  // here so there's exactly one place that owns `this.websocket` and clears stale timers/sockets.
+  private connect(url: string) {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+    if (this.pendingReconnectSocket) {
+      this.pendingReconnectSocket.removeAllListeners();
+      if (
+        this.pendingReconnectSocket.readyState === WebSocket.OPEN ||
+        this.pendingReconnectSocket.readyState === WebSocket.CONNECTING
+      ) {
+        this.pendingReconnectSocket.close();
+      }
+      this.pendingReconnectSocket = undefined;
+    }
+    this.clearKeepAliveWatchdog();
+    const socket = new WebSocket(url);
+    this.websocket = socket;
+    this.setupWebSocketHandlers(socket);
+  }
+
+  private clearKeepAliveWatchdog() {
+    if (this.wsKeepAliveInterval) {
+      clearTimeout(this.wsKeepAliveInterval);
+      this.wsKeepAliveInterval = undefined;
+    }
+  }
+
+  // Twitch sends a keepalive (or an actual notification) at least every keepalive_timeout_seconds.
+  // If nothing arrives in time the connection is dead in a way `close`/`error` won't always catch.
+  private resetKeepAliveWatchdog(socket: WebSocket) {
+    this.clearKeepAliveWatchdog();
+    this.wsKeepAliveInterval = setTimeout(() => {
+      if (this.websocket !== socket) return;
+      twitchLog('Eventsub keepalive timeout, reconnecting...');
+      socket.removeAllListeners();
+      socket.terminate();
+      this.reconnect(socket);
+    }, this.keepAliveTimeoutMs);
+  }
+
+  private reconnect(socket: WebSocket) {
+    if (this.shuttingDown || this.websocket !== socket || this.reconnectTimer) return;
+    this.reconnectAttempts++;
+    const delay = Math.min(
+      BASE_RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts - 1),
+      MAX_RECONNECT_DELAY,
+    );
+    twitchLog(`Eventsub reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      this.connect(this.websocketUrl);
+    }, delay);
   }
 
   cleanup = async () => {
+    this.shuttingDown = true;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+    this.clearKeepAliveWatchdog();
+    [this.websocket, this.pendingReconnectSocket].forEach((socket) => {
+      if (!socket) return;
+      socket.removeAllListeners();
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    });
+    this.websocket = undefined;
+    this.pendingReconnectSocket = undefined;
+
     const subs = await this.getEventSubs();
     for (let s in subs.data) {
       twitchLog('Deleting ' + subs.data[s].type, subs.data[s].condition.broadcaster_user_id);
@@ -264,14 +346,17 @@ export default class TwitchEventSubWebsocket {
     });
   };
 
-  setupWebSocketHandlers() {
-    if (!this.websocket) return;
-
-    this.websocket.onopen = () => {
+  // `socket` is the specific instance these handlers belong to. Every handler re-checks that
+  // `socket` is still the one `this.websocket` (or `this.pendingReconnectSocket`) points at
+  // before acting, so a stale/replaced socket's trailing events can't stomp on the live one.
+  setupWebSocketHandlers(socket: WebSocket) {
+    socket.onopen = () => {
+      if (this.websocket !== socket && this.pendingReconnectSocket !== socket) return;
       twitchLog('Eventsub connection opened');
+      this.reconnectAttempts = 0;
     };
 
-    this.websocket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       if (!event.data) {
         twitchLog('Eventsub received empty message', event);
         return;
@@ -279,43 +364,83 @@ export default class TwitchEventSubWebsocket {
       const data = JSON.parse(event.data.toString());
 
       if (data.metadata.message_type === 'session_welcome') {
+        if (this.pendingReconnectSocket === socket) {
+          // Handoff: this socket has taken over from `this.websocket`. Twitch's protocol says
+          // to keep the old connection open until this point, then close it now that the new
+          // one is confirmed.
+          const oldSocket = this.websocket;
+          this.websocket = socket;
+          this.pendingReconnectSocket = undefined;
+          if (oldSocket && oldSocket !== socket) {
+            oldSocket.removeAllListeners();
+            if (oldSocket.readyState === WebSocket.OPEN || oldSocket.readyState === WebSocket.CONNECTING) {
+              oldSocket.close();
+            }
+          }
+        }
+        if (this.websocket !== socket) return;
         this.wsSessionId = data.payload.session.id;
+        const keepAliveSeconds = data.payload.session.keepalive_timeout_seconds;
+        if (keepAliveSeconds) {
+          this.keepAliveTimeoutMs = (keepAliveSeconds + 10) * 1000;
+        }
+        this.resetKeepAliveWatchdog(socket);
         twitchLog('Eventsub session id:', this.wsSessionId);
         this.refreshEventSubs();
-      } else if (data.metadata.message_type === 'session_keepalive') {
-        // Do nothing
+        return;
+      }
+
+      if (this.websocket !== socket) return;
+      this.resetKeepAliveWatchdog(socket);
+
+      if (data.metadata.message_type === 'session_keepalive') {
+        // Do nothing further, watchdog already reset above
       } else if (data.metadata.message_type === 'session_reconnect') {
         twitchLog('Eventsub reconnect requested', data.payload);
-        this.websocket?.close();
-        this.websocket = new WebSocket(data.payload.session.reconnect_url);
-        this.setupWebSocketHandlers();
+        const reconnectSocket = new WebSocket(data.payload.session.reconnect_url);
+        this.pendingReconnectSocket = reconnectSocket;
+        this.setupWebSocketHandlers(reconnectSocket);
       } else {
         const type = data.payload.subscription.type;
-        const event = { ...data.payload.event };
-        OnEventSubReceived(type, event);
+        const eventPayload = { ...data.payload.event };
+        OnEventSubReceived(type, eventPayload);
       }
     };
 
-    this.websocket.on('ping', () => {
-      this.websocket?.pong(); // Respond to ping with pong
+    socket.on('ping', () => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.pong(); // Respond to ping with pong
+      }
     });
 
-    this.websocket.onerror = (error) => {
+    socket.onerror = (error) => {
+      if (this.websocket !== socket && this.pendingReconnectSocket !== socket) return;
       twitchLog('Eventsub error:', error);
       logToFile('twitch-eventsub-error', 'Eventsub error: ' + error.message, 100);
-      this.websocket = new WebSocket(this.websocketUrl);
-      this.setupWebSocketHandlers();
+      // `close` always follows `error` for this same socket - let onclose own reconnection
+      // so a single failure doesn't spawn two competing replacement sockets.
     };
 
-    this.websocket.onclose = (event) => {
+    socket.onclose = (event) => {
       logToFile(
         'twitch-eventsub-close',
         'Eventsub connection closed: ' + event.code + ' ' + event.reason,
         100,
       );
       twitchLog('Eventsub connection closed:', event.code, event.reason);
-      this.websocket = new WebSocket(this.websocketUrl);
-      this.setupWebSocketHandlers();
+
+      if (this.pendingReconnectSocket === socket) {
+        this.pendingReconnectSocket = undefined;
+        // The old (still-primary) connection is untouched, so it keeps running - nothing else to do.
+        return;
+      }
+
+      if (this.shuttingDown || this.websocket !== socket) {
+        return;
+      }
+
+      this.clearKeepAliveWatchdog();
+      this.reconnect(socket);
     };
   }
 
@@ -326,8 +451,7 @@ export default class TwitchEventSubWebsocket {
           if (isAlive) {
             this.testMode = true;
             this.websocketUrl = `ws://${host}:${port}/ws`;
-            this.websocket = new WebSocket(this.websocketUrl);
-            this.setupWebSocketHandlers();
+            this.connect(this.websocketUrl);
             res(true);
           } else {
             twitchLog(`Test mode failed: ${host}:${port} is not reachable`);
@@ -344,7 +468,6 @@ export default class TwitchEventSubWebsocket {
   disableTestMode = () => {
     this.testMode = false;
     this.websocketUrl = 'wss://eventsub.wss.twitch.tv/ws';
-    this.websocket = new WebSocket(this.websocketUrl);
-    this.setupWebSocketHandlers();
+    this.connect(this.websocketUrl);
   };
 }

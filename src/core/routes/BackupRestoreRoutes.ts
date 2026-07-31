@@ -37,14 +37,14 @@ export function BackupRestoreRoutes() {
   });
 
   router.get('/checkout_settings/:filename', async (req: Request, res: Response) => {
-    let backupName = req.params.filename;
+    let backupName = req.params.filename as string;
     webLog('DOWNLOADING SETTINGS', path.join(userDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
     res.download(path.join(userDir, 'backup', 'settings', backupName));
   });
 
   router.get('/checkout_plugins/:filename', async (req: Request, res: Response) => {
-    let backupName = req.params.filename;
+    let backupName = req.params.filename as string;
     webLog('DOWNLOADING PLUGINS', path.join(userDir, 'backup', 'settings', backupName));
     res.setHeader('Content-disposition', backupName);
     res.download(path.join(userDir, 'backup', 'plugins', backupName));

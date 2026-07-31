@@ -175,8 +175,8 @@ export async function runResponseScript(
       function say(txt) {
         sayInChat(txt, ${JSON.stringify(message.platform)}, ${JSON.stringify(message.channel)});
       }
-      const toUser = ${JSON.stringify(message.message.split(' ')[1])};
-      const command = ${JSON.stringify(message.message.toLowerCase().split(' '))};
+      const toUser = ${JSON.stringify(message?.message?.split(' ')[1])};
+      const command = ${JSON.stringify(message?.message?.toLowerCase().split(' '))};
       function getVar(key, defaultVal = 0) {
         return _eventStorage[${JSON.stringify(eventName)}]?.[key] ?? defaultVal;
       }

@@ -362,7 +362,7 @@ export class EventService {
     if (isOSC) {
       streamMessage.username = sconfig.bot.bot_name;
       streamMessage.displayName = sconfig.bot.bot_name;
-      streamMessage.message ?? '';
+      streamMessage.message = streamMessage.message ?? '';
     }
 
     const modCommands = EventService.getModCommandsAsEvents();

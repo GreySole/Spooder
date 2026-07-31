@@ -16,6 +16,8 @@ export default class TwitchChat {
   lastMessage: KeyedObject = {};
   chat: tmi.Client | undefined = undefined;
   activeChannels: string[] = [];
+  reconnecting: boolean = false;
+  intentionalDisconnect: boolean = false;
 
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
@@ -102,15 +104,19 @@ export default class TwitchChat {
     const isStreamerLive = this.getModule().api.isStreamerLive;
 
     twitchLog('Running chat...');
+    this.intentionalDisconnect = false;
+    this.reconnecting = false;
     if (this.chat != null) {
       if (this.chat.readyState() == 'OPEN' || this.chat.readyState() == 'CONNECTING') {
+        this.intentionalDisconnect = true;
         await this.chat.disconnect();
       }
-      this.chat.removeListener('message', this.processMessage.bind(this));
+      this.chat.removeAllListeners();
     }
 
     this.chat = new tmi.Client({
       options: { debug: true },
+      connection: { reconnect: true, maxReconnectAttempts: 5 },
       identity: {
         username: botUsername,
         password: oauth.token,
@@ -120,6 +126,7 @@ export default class TwitchChat {
     await this.chat.connect().catch((error) => {
       onAuthenticationFailure();
     });
+
     this.chat
       .join(homeChannel)
       .then(async () => {
@@ -166,6 +173,20 @@ export default class TwitchChat {
       this.chat?.on(event as any, (...args: any[]) => {
         processTwitchEvent.call(this, event, ...args);
       });
+    });
+
+    this.chat.on('disconnected', async (reason: string) => {
+      twitchLog('Chat disconnected:', reason);
+      if (this.intentionalDisconnect || this.reconnecting) {
+        return;
+      }
+      this.reconnecting = true;
+      twitchLog('Unexpected disconnect — reconnecting in 5s...');
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      if (!this.intentionalDisconnect) {
+        this.reconnecting = false;
+        this.runChat('reconnect');
+      }
     });
   };
 
@@ -248,6 +269,7 @@ export default class TwitchChat {
     if (loggedIn == false) {
       return;
     }
+    this.intentionalDisconnect = true;
     this.chat?.disconnect();
   };
 
