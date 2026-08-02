@@ -74,6 +74,19 @@ export interface ConfigFile {
   backup: BackupSection;
 }
 
+export interface OverlayContainerEntry {
+  pluginName: string;
+  enabled: boolean;
+  x: number; // percent of container width, 0-100
+  y: number; // percent of container height, 0-100
+  width: number; // percent of container width, 0-100
+  height: number; // percent of container height, 0-100
+}
+
+export interface OverlayContainerConfig {
+  order: OverlayContainerEntry[];
+}
+
 export default class ConfigService {
   private static instance: ConfigService;
 
@@ -144,6 +157,8 @@ export default class ConfigService {
     ],
   } as KeyedObject;
 
+  private overlayContainer: OverlayContainerConfig = { order: [] };
+
   static getConfig(): ConfigFile {
     return ConfigService.instance.config;
   }
@@ -177,6 +192,21 @@ export default class ConfigService {
 
   static getFlags() {
     return ConfigService.instance.flags;
+  }
+
+  static getOverlayContainer(): OverlayContainerConfig {
+    return ConfigService.instance.overlayContainer;
+  }
+
+  static saveOverlayContainer(newConfig: OverlayContainerConfig) {
+    fs.writeFileSync(
+      userDir + '/settings/overlay_container.json',
+      JSON.stringify(newConfig),
+      'utf-8',
+    );
+
+    ConfigService.refreshOverlayContainer();
+    sendToApp({ action: 'refresh_info' });
   }
 
   static refreshConfig() {
@@ -280,6 +310,18 @@ export default class ConfigService {
         themesObj.spooderpet = parts;
       }
       ConfigService.instance.themes = themesObj;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  static refreshOverlayContainer() {
+    try {
+      const overlayContainerFile = fs.readFileSync(
+        userDir + '/settings/overlay_container.json',
+        { encoding: 'utf8' },
+      );
+      ConfigService.instance.overlayContainer = JSON.parse(overlayContainerFile);
     } catch (e) {
       console.error(e);
     }
