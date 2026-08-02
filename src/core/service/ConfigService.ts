@@ -1,7 +1,7 @@
-import path from 'path';
 import fs from 'fs-extra';
+import path from 'path';
+import { KeyedObject, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
-import { userDir, KeyedObject } from '../../Types';
 import { sendToApp } from '../util/AppUtil';
 import BackupRestoreService from './BackupRestoreService';
 
@@ -316,7 +316,9 @@ export default class ConfigService {
   }
 
   static refreshOverlayContainer() {
-    try {
+    const overlayContainerPath = userDir + '/settings/overlay_container.json';
+    if(fs.existsSync(overlayContainerPath)){
+      try {
       const overlayContainerFile = fs.readFileSync(
         userDir + '/settings/overlay_container.json',
         { encoding: 'utf8' },
@@ -324,6 +326,9 @@ export default class ConfigService {
       ConfigService.instance.overlayContainer = JSON.parse(overlayContainerFile);
     } catch (e) {
       console.error(e);
+    }
+    }else{
+      spooderLog("overlay_container.json not found");
     }
   }
 }
