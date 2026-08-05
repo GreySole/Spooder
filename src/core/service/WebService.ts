@@ -5,6 +5,7 @@ import path from 'path';
 import { userDir, frontendDir } from '../../Types';
 import { logToFile, spooderLog, webLog } from '../Logging';
 import ConfigService from './ConfigService';
+import { ChangelogRoutes } from '../routes/ChangelogRoutes';
 import { ConfigRoutes } from '../routes/ConfigRoutes';
 import { OverlayContainerRoutes } from '../routes/OverlayContainerRoutes';
 import { PluginRoutes } from '../routes/PluginRoutes';
@@ -313,6 +314,10 @@ export class WebService {
       const overlayContainerRoutes = OverlayContainerRoutes();
       router.use('/overlay_container', overlayContainerRoutes.local);
       publicRouter.use('/overlay_container', overlayContainerRoutes.public);
+
+      const changelogRoutes = ChangelogRoutes();
+      router.use('/changelog', changelogRoutes.local);
+      publicRouter.use('/changelog', changelogRoutes.public);
 
       const shareRoutes = ShareRoutes();
       router.use('/shares', shareRoutes.local);

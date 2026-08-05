@@ -4,6 +4,7 @@ import { KeyedObject, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import { sendToApp } from '../util/AppUtil';
 import BackupRestoreService from './BackupRestoreService';
+import WebUIUpdateService from './WebUIUpdateService';
 
 export interface ConfigBotSection {
   owner_name: string;
@@ -68,10 +69,16 @@ interface BackupSection {
   };
 }
 
+interface WebUIUpdateSection {
+  enabled: boolean;
+  schedule: string;
+}
+
 export interface ConfigFile {
   bot: ConfigBotSection;
   network: ConfigNetworkSection;
   backup: BackupSection;
+  webui_update: WebUIUpdateSection;
 }
 
 export interface OverlayContainerEntry {
@@ -134,6 +141,10 @@ export default class ConfigService {
           max_backups: 5,
         },
       },
+    },
+    webui_update: {
+      enabled: false,
+      schedule: '0 0 * * *',
     },
   };
 
@@ -245,13 +256,20 @@ export default class ConfigService {
           bot: configObj.bot as ConfigBotSection,
           network: newNetworkConfig as ConfigNetworkSection,
           backup: configObj.backup as BackupSection,
+          webui_update:
+            (configObj.webui_update as WebUIUpdateSection) ||
+            ConfigService.instance.config.webui_update,
         };
 
         ConfigService.instance.config = newConfig;
       } else {
+        if (!configObj.webui_update) {
+          configObj.webui_update = ConfigService.instance.config.webui_update;
+        }
         ConfigService.instance.config = configObj;
       }
       BackupRestoreService.InitSchedule();
+      WebUIUpdateService.InitSchedule();
     } catch (e) {
       console.error(e);
     }
