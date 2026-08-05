@@ -2,11 +2,11 @@ import tmi from 'tmi.js';
 import Twitch, { twitchLog } from './main';
 import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
-import PluginService from '../../core/service/PluginService';
 import ShareService from '../../core/service/ShareService';
-import { CoreModule, KeyedObject, StreamMessage, userDir } from '../../Types';
+import { KeyedObject, StreamMessage } from '../../Types';
 import { processStreamMessage } from '../../core/util/ChatUtil';
 import { processTwitchEvent, twitchEvents } from './functions/processTwitchMessage';
+import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 
 function stringifyArray(a: string[]) {
   return a.join(', ');
@@ -16,6 +16,8 @@ export default class TwitchChat {
   lastMessage: KeyedObject = {};
   chat: tmi.Client | undefined = undefined;
   activeChannels: string[] = [];
+  reconnecting: boolean = false;
+  intentionalDisconnect: boolean = false;
 
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
@@ -102,15 +104,19 @@ export default class TwitchChat {
     const isStreamerLive = this.getModule().api.isStreamerLive;
 
     twitchLog('Running chat...');
+    this.intentionalDisconnect = false;
+    this.reconnecting = false;
     if (this.chat != null) {
       if (this.chat.readyState() == 'OPEN' || this.chat.readyState() == 'CONNECTING') {
+        this.intentionalDisconnect = true;
         await this.chat.disconnect();
       }
-      this.chat.removeListener('message', this.processMessage.bind(this));
+      this.chat.removeAllListeners();
     }
 
     this.chat = new tmi.Client({
       options: { debug: true },
+      connection: { reconnect: true, maxReconnectAttempts: 5 },
       identity: {
         username: botUsername,
         password: oauth.token,
@@ -120,6 +126,7 @@ export default class TwitchChat {
     await this.chat.connect().catch((error) => {
       onAuthenticationFailure();
     });
+
     this.chat
       .join(homeChannel)
       .then(async () => {
@@ -133,6 +140,7 @@ export default class TwitchChat {
           this.sayInChat(startCase);
         }
 
+        // Auto join shares
         let subs = await getEventSubs();
         let subtype = '';
 
@@ -166,6 +174,20 @@ export default class TwitchChat {
         processTwitchEvent.call(this, event, ...args);
       });
     });
+
+    this.chat.on('disconnected', async (reason: string) => {
+      twitchLog('Chat disconnected:', reason);
+      if (this.intentionalDisconnect || this.reconnecting) {
+        return;
+      }
+      this.reconnecting = true;
+      twitchLog('Unexpected disconnect — reconnecting in 5s...');
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      if (!this.intentionalDisconnect) {
+        this.reconnecting = false;
+        this.runChat('reconnect');
+      }
+    });
   };
 
   getChatCommands = (shareChannel: string) => {
@@ -179,12 +201,13 @@ export default class TwitchChat {
     let commandsArray = [];
 
     for (let e in events) {
-      if (shareChannel != null && shareChannel != homeChannel) {
-        if (!Object.keys(shares[shareChannel].commands).includes(e)) {
-          continue;
+      if (triggerExistsAndEnabled(events[e], 'chat')) {
+        if (shareChannel != null && shareChannel != homeChannel) {
+          if (!Object.keys(shares[shareChannel].commands).includes(e)) {
+            continue;
+          }
         }
-      }
-      if (events[e].triggers.chat) {
+
         if (events[e].triggers.chat.command.startsWith('!')) {
           commandsArray.push(events[e].triggers.chat.command);
         }
@@ -246,6 +269,7 @@ export default class TwitchChat {
     if (loggedIn == false) {
       return;
     }
+    this.intentionalDisconnect = true;
     this.chat?.disconnect();
   };
 

@@ -61,6 +61,7 @@ if (initMode) {
 } else {
   ConfigService.refreshConfig();
   ConfigService.refreshThemes();
+  ConfigService.refreshOverlayContainer();
   new ShareService();
 
   new WebService();

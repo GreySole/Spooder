@@ -1,17 +1,17 @@
-import express, { json, Request, Response } from 'express';
 import AdmZip from 'adm-zip';
 import chmodr from 'chmodr';
-import path from 'path';
+import express, { Request, Response } from 'express';
 import fs from 'fs-extra';
+import multer from 'multer';
+import path from 'path';
 import { KeyedObject, userDir } from '../../Types';
-import { logToFile, webLog } from '../Logging';
+import { webLog } from '../Logging';
 import ConfigService from '../service/ConfigService';
 import OSCService from '../service/OSCService';
 import PluginService from '../service/PluginService';
-import multer from 'multer';
+import ShareService from '../service/ShareService';
 import { isLocal, WebService } from '../service/WebService';
 import { webJoin } from '../util/PathUtil';
-import ShareService from '../service/ShareService';
 
 const pluginApi = {
   local: {
@@ -699,7 +699,7 @@ export function PluginRoutes() {
 
   router.get('/get_plugin/:pluginName', async (req: Request, res: Response) => {
     let plugin = {};
-    let a = req.params.pluginName;
+    let a = req.params.pluginName as string;
     let thisPlugin = fs.readFileSync(userDir + 's/' + a + '/settings.json', {
       encoding: 'utf8',
     });

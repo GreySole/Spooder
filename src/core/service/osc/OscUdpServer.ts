@@ -1,5 +1,5 @@
 import OSC from '@spooder/osc-js';
-import { oscLog } from '../../Logging';
+import { oscLog, spooderLog } from '../../Logging';
 import { triggerExistsAndEnabled } from '../../util/EventTriggerUtil';
 import { checkResponseTrigger } from '../../util/ResponseUtil';
 import { StreamMessage, OSCConditionGroup } from '../../../Types';
@@ -37,7 +37,7 @@ export default class OscUdpServer {
       );
 
       for (const e of Object.keys(events)) {
-        if (triggerExistsAndEnabled(events[e].triggers, 'osc')) {
+        if (triggerExistsAndEnabled(events[e], 'osc')) {
           if (events[e].triggers.osc.handletype == 'search') {
             if (message.address == events[e].triggers.osc.address) {
               const searchArg = events[e].triggers.osc.search?.arg ?? 0;
@@ -47,7 +47,7 @@ export default class OscUdpServer {
                 displayName: '',
                 platform: 'osc',
                 channel: 'udp',
-                message: message.args[searchArg],
+                message: `${message.args[searchArg]}`,
                 messageType: 'osc',
                 respond: () => {},
                 emotes: [],
@@ -136,7 +136,7 @@ export default class OscUdpServer {
                   displayName: '',
                   platform: 'osc',
                   channel: 'udp',
-                  message: message.args[0],
+                  message: `${message.args[0]}`,
                   messageType: 'osc',
                   respond: () => {},
                   emotes: [],
@@ -220,78 +220,84 @@ export default class OscUdpServer {
   public sendToUDP = (dest: string, address: string, oscValue: any) => {
     const udpServers = OSCService.getUdpServers();
 
-    let valueType = 'i';
-    if (typeof oscValue == 'string') {
-      if (oscValue.includes(',')) {
-        valueType = 'array';
-        oscValue = oscValue.split(',');
-        for (let o in oscValue) {
-          if (!isNaN(oscValue[o])) {
-            if (oscValue[o].includes('.')) {
-              oscValue[o] = parseFloat(oscValue[o]);
-            } else {
-              oscValue[o] = parseInt(oscValue[o]);
-            }
-          } else {
-            if (oscValue[o].toLowerCase() == 'true') {
-              oscValue[o] = true;
-            } else if (oscValue[o].toLowerCase() == 'false') {
-              oscValue[o] = false;
-            }
-          }
+    type OSCArgType = 'i' | 'f' | 's' | 'b' | 'h' | 't' | 'd' | 'T' | 'F' | 'N' | 'I';
+    let valueType: OSCArgType = 'i';
+    spooderLog('Sending OSC UDP to ', dest, address, oscValue);
+    function getValueType(value: any): { valueType: OSCArgType; value: any } {
+      spooderLog('Determining OSC Value Type for: ', value);
+      if (!isNaN(Number(value))) {
+        if (String(value).includes('.')) {
+          spooderLog('OSC Value is float');
+          valueType = 'f';
+          value = parseFloat(value);
+        } else {
+          spooderLog('OSC Value is integer');
+          valueType = 'i';
+          value = parseInt(value);
         }
       } else {
-        if (parseInt(oscValue) || parseFloat(oscValue)) {
-          if (oscValue.includes('.')) {
-            valueType = 'f';
-            oscValue = parseFloat(oscValue);
-          } else {
-            valueType = 'i';
-            oscValue = parseInt(oscValue);
-          }
+        if (String(value).toLowerCase() == 'true') {
+          valueType = 'b';
+          value = true;
+        } else if (String(value).toLowerCase() == 'false') {
+          valueType = 'b';
+          value = false;
         } else {
-          if (oscValue.toLowerCase() == 'true') {
-            valueType = 'b';
-            oscValue = true;
-          } else if (oscValue.toLowerCase() == 'false') {
-            valueType = 'b';
-            oscValue = false;
-          }
+          valueType = 's';
+          value = `${value}`;
         }
       }
-    } else if (Array.isArray(oscValue)) {
-      valueType = 'array';
+      return { valueType, value };
     }
 
     if (dest == '-1') {
       return;
-    } else if (dest == '-2') {
-      let allMessage = null;
-      if (valueType.length > 1) {
-        allMessage = new OSC.Message(address, ...oscValue);
+    }
+
+    const message = new OSC.TypedMessage(address, []);
+
+    if (typeof oscValue == 'string') {
+      spooderLog('OSC Value is string');
+      if (oscValue.includes(',')) {
+        oscValue = oscValue.split(',');
+        for (let o in oscValue) {
+          const val = getValueType(oscValue[o]);
+          message.add(val.valueType, val.value);
+        }
       } else {
-        allMessage = new OSC.Message(address, oscValue);
+        const val = getValueType(oscValue);
+        message.add(val.valueType, val.value);
       }
+    } else if (Array.isArray(oscValue)) {
+      for (let o in oscValue) {
+        const val = getValueType(oscValue[o]);
+        message.add(val.valueType, val.value);
+      }
+    } else {
+      const val = getValueType(oscValue);
+      message.add(val.valueType, val.value);
+    }
+
+    if (dest == '-2') {
       for (let u in udpServers) {
-        this.oscUdp.send(allMessage, {
+        this.oscUdp.send(message, {
           host: udpServers[u].ip,
           port: udpServers[u].port,
         });
       }
     } else {
-      let message = null;
-      if (valueType.length > 1) {
-        message = new OSC.Message(address, ...oscValue);
-      } else {
-        message = new OSC.Message(address, oscValue);
-      }
       this.oscUdp.send(message, {
         host: udpServers[dest].ip,
         port: udpServers[dest].port,
       });
     }
 
-    MonitorService.addLog(MonitorDataType.UDP, MonitorDirection.Send, address, oscValue);
+    const oscValueLog = Array.isArray(oscValue) ? oscValue : [oscValue];
+
+    MonitorService.addLog(MonitorDataType.UDP, MonitorDirection.Send, address, [
+      dest,
+      ...oscValueLog,
+    ]);
   };
 
   public getUdpServer() {

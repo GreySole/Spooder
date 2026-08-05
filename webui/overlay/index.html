@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Spooder Overlay Container</title>
+    <script src="/shared/osc-bundle.js"></script>
+    <script src="container.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+      }
+      #stack {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+      #stack iframe {
+        border: none;
+        background: transparent;
+      }
+      #editPanel {
+        display: none;
+        position: relative;
+        min-height: 100vh;
+        box-sizing: border-box;
+        padding: 16px;
+        background: #1e1e1e;
+        color: #fff;
+        font-family: sans-serif;
+      }
+      #editCanvasWrap {
+        display: flex;
+        justify-content: center;
+        margin: 16px 0;
+      }
+      #editCanvas {
+        position: relative;
+        width: min(900px, 90vw);
+        aspect-ratio: 16 / 9;
+        background: #111 repeating-conic-gradient(#181818 0% 25%, #111 0% 50%) 0 0 / 24px 24px;
+        border: 1px solid #444;
+        overflow: hidden;
+      }
+      .safe-area-guide {
+        position: absolute;
+        border: 1px dashed rgba(255, 255, 255, 0.3);
+        pointer-events: none;
+      }
+      .smart-guide {
+        position: absolute;
+        display: none;
+        background: #ff3b8d;
+        pointer-events: none;
+        z-index: 10;
+      }
+      .smart-guide-v {
+        top: 0;
+        bottom: 0;
+        width: 1px;
+      }
+      .smart-guide-h {
+        left: 0;
+        right: 0;
+        height: 1px;
+      }
+      .overlay-box {
+        position: absolute;
+        box-sizing: border-box;
+        border: 2px solid #4da6ff;
+        background: rgba(77, 166, 255, 0.18);
+        color: #fff;
+        font-size: 12px;
+        padding: 4px;
+        overflow: hidden;
+        cursor: move;
+        user-select: none;
+        touch-action: none;
+      }
+      .overlay-box.disabled {
+        opacity: 0.4;
+        border-style: dashed;
+      }
+      .resize-handle {
+        position: absolute;
+        right: -6px;
+        bottom: -6px;
+        width: 12px;
+        height: 12px;
+        background: #4da6ff;
+        border: 1px solid #1e1e1e;
+        border-radius: 2px;
+        cursor: nwse-resize;
+        touch-action: none;
+      }
+      #editPanel ul {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 16px 0;
+      }
+      #editPanel li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid #333;
+      }
+      #editPanel li span {
+        flex: 1;
+      }
+      #editPanel button {
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stack"></div>
+    <div id="editPanel"></div>
+  </body>
+</html>

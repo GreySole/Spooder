@@ -1,5 +1,4 @@
 import { spooderLog } from '../../Logging';
-import { EventService, sayInChat } from '../EventService';
 import ModuleService from '../ModuleService';
 import Discord from '../../../integration/discord/main';
 import { runResponseScript } from '../../util/ResponseUtil';

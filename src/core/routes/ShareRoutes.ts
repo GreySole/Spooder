@@ -24,7 +24,7 @@ export function ShareRoutes() {
     const shares = ShareService.getShares();
 
     for (let e in events) {
-      if (triggerExistsAndEnabled(events[e].triggers, 'chat')) {
+      if (triggerExistsAndEnabled(events[e], 'chat')) {
         chatCommands[e] = events[e].triggers.chat.command;
       }
     }

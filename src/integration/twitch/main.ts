@@ -10,6 +10,8 @@ import fs from 'fs';
 import getTwitchRouters from './TwitchRouter';
 import ShareService from '../../core/service/ShareService';
 import getResponseHandlers from './TwitchResponseHandlers';
+import WebSocket from 'ws';
+import TwitchCLI from './TwitchCLI';
 
 export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
@@ -62,6 +64,9 @@ export default class Twitch implements StreamModuleInterface {
   onPluginsLoaded() {}
 
   onSharesChanged() {
+    if (!this.loggedIn) {
+      return;
+    }
     const shares = ShareService.getShares();
     this.shareUsers = {};
     for (const s in shares) {
@@ -122,13 +127,19 @@ export default class Twitch implements StreamModuleInterface {
   }
 
   onExternalNetworkChanged() {
-    //this.eventsub.refreshEventSubs();
+    if (!this.loggedIn) {
+      return;
+    }
+    if (this.oauth.useWebhookTransport) {
+      this.eventsub.refreshEventSubs();
+    }
   }
 
   oauth = {} as KeyedObject;
   api = new TwitchApi();
   eventsub = new TwitchEventSub();
   chat = new TwitchChat();
+  cli = new TwitchCLI();
   activeViewers = {} as KeyedObject;
 
   getPluginFunctions = () => {
@@ -224,6 +235,7 @@ export default class Twitch implements StreamModuleInterface {
         this.oauth['token'] = botStatus.newtoken;
       } else if (botStatus.status == 'error') {
         twitchLog('CHATBOT ERROR', botStatus.error);
+        res(false);
         return;
       }
 
@@ -236,6 +248,7 @@ export default class Twitch implements StreamModuleInterface {
           this.oauth['broadcaster_token'] = broadcasterStatus.newtoken;
         } else if (broadcasterStatus.status == 'error') {
           twitchLog('BROADCASTER ERROR', broadcasterStatus.error);
+          res(false);
           return;
         }
       }

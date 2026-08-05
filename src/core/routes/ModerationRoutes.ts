@@ -89,7 +89,7 @@ export function ModerationRoutes() {
 
     let chatCommands = {} as KeyedObject;
     for (let e in events) {
-      if (triggerExistsAndEnabled(events[e].triggers, 'chat')) {
+      if (triggerExistsAndEnabled(events[e], 'chat')) {
         chatCommands[e] = {
           name: events[e].name,
           group: events[e].group,

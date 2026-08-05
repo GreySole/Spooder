@@ -7,15 +7,42 @@ import Twitch, { twitchLog } from './main';
 import { KeyedObject, StreamMessage } from '../../Types';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 
-export default async function OnEventSubReceived(data: KeyedObject) {
+export default async function OnEventSubReceived(type: string, event: KeyedObject) {
   const twitchModule = ModuleService.getStreamModule('twitch') as Twitch;
 
-  const type = data.payload.subscription.type;
-  const event = { ...data.payload.event };
+  try {
+    if (
+      event.broadcaster_user_name === 'testBroadcaster' ||
+      event.to_broadcaster_user_name === 'testBroadcaster'
+    ) {
+      const broadcasterUserId = event.broadcaster_user_id ?? event.to_broadcaster_user_id;
+      const userInfo = await twitchModule.api.getUserInfoById(broadcasterUserId);
+      if (event.broadcaster_user_id) {
+        event.broadcaster_user_id = broadcasterUserId;
+        event.broadcaster_user_name = userInfo?.display_name ?? 'unknown';
+        event.broadcaster_user_login = userInfo?.login ?? 'unknown';
+      } else if (event.to_broadcaster_user_id) {
+        event.to_broadcaster_user_id = broadcasterUserId;
+        event.to_broadcaster_user_name = userInfo?.display_name ?? 'unknown';
+        event.to_broadcaster_user_login = userInfo?.login ?? 'unknown';
+      }
+    }
 
-  const broadcasterUserId = twitchModule.api.broadcasterUserID;
-  if (event.broadcaster_user_name === 'testBroadcaster') {
-    event.broadcaster_user_id = broadcasterUserId;
+    /*if (event.user_name === 'testFromUser' || event.from_broadcaster_user_name === 'testFromUser') {
+      const userId = event.user_id ?? event.from_broadcaster_user_id;
+      const userInfo = await twitchModule.api.getUserInfoById(userId);
+      if (event.user_id) {
+        event.user_id = userId;
+        event.user_name = userInfo?.display_name ?? 'unknown';
+        event.user_login = userInfo?.login ?? 'unknown';
+      } else if (event.from_broadcaster_user_id) {
+        event.from_broadcaster_user_id = userId;
+        event.from_broadcaster_user_name = userInfo?.display_name ?? 'unknown';
+        event.from_broadcaster_user_login = userInfo?.login ?? 'unknown';
+      }
+    }*/
+  } catch (e) {
+    console.error('Error fetching user info for test event:', e);
   }
 
   const streamMessage = {
@@ -84,7 +111,7 @@ export default async function OnEventSubReceived(data: KeyedObject) {
     const modlocks = ModerationService.getModlocks();
     const events = EventService.getEvents();
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
       if (events[e].triggers.twitch.reward.id == event.reward.id) {
@@ -110,11 +137,8 @@ export default async function OnEventSubReceived(data: KeyedObject) {
     const events = EventService.getEvents();
     const modlocks = ModerationService.getModlocks();
     for (let e in events) {
-      if (events[e].triggers.twitch == null) {
-        continue;
-      }
       if (
-        events[e].triggers.twitch.enabled &&
+        triggerExistsAndEnabled(events[e], 'twitch') &&
         events[e].triggers.twitch.reward.id == event.reward.id &&
         events[e].triggers.twitch.reward.override == false
       ) {
@@ -136,10 +160,10 @@ export default async function OnEventSubReceived(data: KeyedObject) {
   } else {
     const events = EventService.getEvents();
     for (let e in events) {
-      if (!triggerExistsAndEnabled(events[e].triggers, 'twitch')) {
+      if (!triggerExistsAndEnabled(events[e], 'twitch')) {
         continue;
       }
-      console.log(events[e].triggers.twitch, type);
+
       if (events[e].triggers.twitch.type == type) {
         EventService.runCommands(streamMessage, e, 'event');
       }

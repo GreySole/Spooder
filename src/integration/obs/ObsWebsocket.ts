@@ -45,7 +45,17 @@ export default class ObsWebsocket {
       obsModule.connected = true;
       sendToTCP('/obs/status/connection', 1);
 
+      const streamStatus = (await this.call('GetStreamStatus')) as KeyedObject;
+      if (streamStatus.outputActive) {
+        obsModule.monitor.startMonitoring();
+      }
+
       obsClient.on('StreamStateChanged', (data: KeyedObject) => {
+        if (data.outputActive) {
+          obsModule.monitor.startMonitoring();
+        } else {
+          obsModule.monitor.stopMonitoring();
+        }
         sendToTCP('/obs/event/StreamStateChanged', JSON.stringify(data));
       });
       obsClient.on('RecordStateChanged', (data: KeyedObject) => {

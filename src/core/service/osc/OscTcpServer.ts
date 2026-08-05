@@ -96,6 +96,14 @@ export default class OscTcpServer {
       if (message.address.endsWith('/connect')) {
         this.sendToTCP(`${message.address}/success`, 1, false);
       }
+
+      if (message.address === '/spooder/monitor/live_logging') {
+        if (message.args[0] === 1) {
+          MonitorService.enableLiveLogging();
+        } else {
+          MonitorService.disableLiveLogging();
+        }
+      }
     });
     oscTCP.on('error', (e: any) => {
       oscLog('OSC Error: ', e);

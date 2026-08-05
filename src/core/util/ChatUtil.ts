@@ -10,7 +10,7 @@ import UserService from '../service/UserService';
 import { checkResponseTrigger } from './ResponseUtil';
 import { spooderLog } from '../Logging';
 import fs from 'fs';
-import { triggerExistsAndEnabled } from './EventTriggerUtil';
+import { groupIsDisabled, triggerExistsAndEnabled } from './EventTriggerUtil';
 
 export function convertToStreamMessage(
   userId: string,
@@ -163,9 +163,7 @@ export function processStreamMessage(streamMessage: StreamMessage) {
     }
 
     if (command[0] == 'commands') {
-      let commandsArray =
-        EventService.getStreamChatCommands(true, streamMessage.platform, streamMessage.channel) ??
-        [];
+      let commandsArray = EventService.getStreamChatCommands(true, streamMessage.shareId) ?? [];
       sayInChat(
         "Here's the chat command list: " + commandsArray.join(', '),
         streamMessage.platform,
@@ -303,7 +301,7 @@ export function processStreamMessage(streamMessage: StreamMessage) {
       }
     }
 
-    if (triggerExistsAndEnabled(events[e].triggers, 'chat')) {
+    if (triggerExistsAndEnabled(events[e], 'chat')) {
       if (
         events[e].triggers.chat.broadcaster == true ||
         events[e].triggers.chat.mod == true ||
