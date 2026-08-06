@@ -22,3 +22,11 @@
 	path = webui/public/src
 	url = https://github.com/GreySole/Spooder-PublicUI.git
 	branch = 0.5.0-dev
+[submodule "plugin-sdk/samples/ts"]
+	path = plugin-sdk/samples/ts
+	url = https://github.com/GreySole/Spooder-Sample-Plugin-TS.git
+	branch = 0.5.0-dev
+[submodule "plugin-sdk/samples/js"]
+	path = plugin-sdk/samples/js
+	url = https://github.com/GreySole/Spooder-Sample-Plugin-JS.git
+	branch = 0.5.0-dev
