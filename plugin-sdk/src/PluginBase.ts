@@ -1,7 +1,8 @@
-import { Request, Response } from 'express';
 import {
     KeyedObject,
     OSCMessage,
+    PluginApiRequest,
+    PluginApiResponse,
     PluginChatInfo,
     PluginConfigInfo,
     PluginModule,
@@ -51,10 +52,10 @@ export default class PluginBase implements Partial<PluginModule> {
     _router: 'local' | 'public',
     _method: 'get' | 'post' | 'put' | 'delete',
     _address: string,
-    _funct: (req: Request, res: Response) => void,
+    _funct: (req: PluginApiRequest, res: PluginApiResponse) => void,
   ): void {}
 
-  getActiveViewer(_req: Request): KeyedObject | undefined {
+  getActiveViewer(_req: PluginApiRequest): KeyedObject | undefined {
     return undefined;
   }
 

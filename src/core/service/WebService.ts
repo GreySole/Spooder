@@ -12,6 +12,7 @@ import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { frontendDir, userDir } from '../../Types';
 import { logToFile, spooderLog, webLog } from '../Logging';
 import { BackupRestoreRoutes } from '../routes/BackupRestoreRoutes';
+import { ChangelogRoutes } from '../routes/ChangelogRoutes';
 import { ConfigRoutes } from '../routes/ConfigRoutes';
 import { EventRoutes } from '../routes/EventRoutes';
 import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes';
@@ -312,6 +313,10 @@ export class WebService {
       const overlayContainerRoutes = OverlayContainerRoutes();
       router.use('/overlay_container', overlayContainerRoutes.local);
       publicRouter.use('/overlay_container', overlayContainerRoutes.public);
+
+      const changelogRoutes = ChangelogRoutes();
+      router.use('/changelog', changelogRoutes.local);
+      publicRouter.use('/changelog', changelogRoutes.public);
 
       const shareRoutes = ShareRoutes();
       router.use('/shares', shareRoutes.local);

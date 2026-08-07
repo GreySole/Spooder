@@ -394,7 +394,7 @@ export default class Plugin {
         funct: (req: Request, res: Response) => void,
       ) => registerPluginApi(this.pluginModule, router, method, address, funct);
 
-      this.pluginModule.getActiveViewer = UserService.getActiveViewer;
+      this.pluginModule.getActiveViewer = (req) => UserService.getActiveViewer(req as Request);
 
       if (fs.existsSync(path.resolve(userDir, 'plugins', pluginDirName, 'settings.json'))) {
         this.pluginModule.settings = JSON.parse(
