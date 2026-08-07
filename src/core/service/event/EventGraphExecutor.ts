@@ -72,22 +72,26 @@ function evaluateOperationNode(
 ): KeyedObject {
   const inputValues = resolveNodeValues(graph, node, ctx, depth);
 
-  if (node.moduleName === 'core') {
-    const eventName = inputValues.eventName || ctx.eventName;
-    switch (node.nodeTypeId) {
-      case 'get_string_value':
-        return { value: EventStorageService.getValue(eventName, inputValues.key, 'string', inputValues.defaultValue) };
-      case 'get_number_value':
-        return { value: EventStorageService.getValue(eventName, inputValues.key, 'number', inputValues.defaultValue) };
-      case 'get_boolean_value':
-        return { value: EventStorageService.getValue(eventName, inputValues.key, 'boolean', inputValues.defaultValue) };
-      default:
-        spooderLog(`Unknown core operation node '${node.nodeTypeId}' for event ${ctx.eventName}`);
-        return {};
+  // Keyed off nodeTypeId, not node.moduleName: the frontend palette tags operation nodes
+  // with their category as moduleName (these three carry category 'storage'), so a
+  // moduleName === 'core' check here would never match and these would fall through to
+  // OperationNodeService.evaluate() and throw.
+  switch (node.nodeTypeId) {
+    case 'get_string_value': {
+      const eventName = inputValues.eventName || ctx.eventName;
+      return { value: EventStorageService.getValue(eventName, inputValues.key, 'string', inputValues.defaultValue) };
     }
+    case 'get_number_value': {
+      const eventName = inputValues.eventName || ctx.eventName;
+      return { value: EventStorageService.getValue(eventName, inputValues.key, 'number', inputValues.defaultValue) };
+    }
+    case 'get_boolean_value': {
+      const eventName = inputValues.eventName || ctx.eventName;
+      return { value: EventStorageService.getValue(eventName, inputValues.key, 'boolean', inputValues.defaultValue) };
+    }
+    default:
+      return OperationNodeService.evaluate(node.nodeTypeId, inputValues);
   }
-
-  return OperationNodeService.evaluate(node.nodeTypeId, inputValues);
 }
 
 // Which named exec port(s) a node activates after running. Every existing node type

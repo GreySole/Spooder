@@ -180,6 +180,11 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
       };
     } else if (node.moduleName === 'twitch' && node.nodeTypeId === 'eventsub_event') {
       triggers.twitch = { enabled: true, ...node.values };
+    } else {
+      // Generic path for community/control module triggers (OBS, Discord, etc.), matched by
+      // EventService.emitTrigger()/matchesTriggerValues() via triggers[moduleName].nodeTypeId
+      // rather than the bespoke shapes above.
+      triggers[node.moduleName] = { enabled: true, nodeTypeId: node.nodeTypeId, ...node.values };
     }
   }
 
