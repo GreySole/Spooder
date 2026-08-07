@@ -1,0 +1,32 @@
+[submodule "webui/main/src"]
+	path = webui/main/src
+	url = https://github.com/GreySole/Spooder-WebUI.git
+	branch = 0.5.0-dev
+[submodule "webui/init/src"]
+	path = webui/init/src
+	url = https://github.com/GreySole/Spooder-InitUI.git
+	branch = 0.5.0-dev
+[submodule "webui/mod/src"]
+	path = webui/mod/src
+	url = https://github.com/GreySole/Spooder-ModUI.git
+	branch = 0.5.0-dev
+[submodule "webui/login/src"]
+	path = webui/login/src
+	url = https://github.com/GreySole/Spooder-LoginUI.git
+	branch = 0.5.0-dev
+[submodule "webui/share/src"]
+	path = webui/share/src
+	url = https://github.com/GreySole/Spooder-ShareUI.git
+	branch = 0.5.0-dev
+[submodule "webui/public/src"]
+	path = webui/public/src
+	url = https://github.com/GreySole/Spooder-PublicUI.git
+	branch = 0.5.0-dev
+[submodule "plugin-sdk/samples/ts"]
+	path = plugin-sdk/samples/ts
+	url = https://github.com/GreySole/Spooder-Sample-Plugin-TS.git
+	branch = 0.5.0-dev
+[submodule "plugin-sdk/samples/js"]
+	path = plugin-sdk/samples/js
+	url = https://github.com/GreySole/Spooder-Sample-Plugin-JS.git
+	branch = 0.5.0-dev

@@ -126,7 +126,7 @@ export default class TwitchChat {
     await this.chat.connect().catch((error) => {
       onAuthenticationFailure();
     });
-    
+
     this.chat
       .join(homeChannel)
       .then(async () => {

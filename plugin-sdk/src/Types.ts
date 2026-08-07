@@ -1,7 +1,24 @@
-import { Request, Response } from 'express';
-
 export interface KeyedObject {
   [key: string]: any;
+}
+
+// A minimal, framework-agnostic stand-in for the request/response objects passed to
+// registerPluginApi handlers. Spooder's backend happens to use express, so the real
+// objects are express Request/Response instances at runtime - but plugin-sdk doesn't
+// depend on express itself just to describe the handful of properties/methods plugins
+// actually use, so it's not a dependency every plugin has to carry around.
+export interface PluginApiRequest {
+  query: KeyedObject;
+  params: KeyedObject;
+  body: any;
+  headers: KeyedObject;
+  cookies: KeyedObject;
+}
+
+export interface PluginApiResponse {
+  status(code: number): PluginApiResponse;
+  send(body?: any): void;
+  json(body?: any): void;
 }
 
 export interface StreamMessage {
@@ -92,9 +109,9 @@ export interface PluginModule {
     router: 'local' | 'public',
     method: 'get' | 'post' | 'put' | 'delete',
     address: string,
-    funct: (req: Request, res: Response) => void,
+    funct: (req: PluginApiRequest, res: PluginApiResponse) => void,
   ) => void;
-  getActiveViewer: (req: Request) => KeyedObject | undefined;
+  getActiveViewer: (req: PluginApiRequest) => KeyedObject | undefined;
   getAssetPath: (assetPath: string) => string;
   getAssetUrl: (assetPath: string) => string;
   getLocalFilePath: (filePath: string) => string;
