@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EventGraph, EventGraphEdge, EventGraphFile, EventGraphNode, KeyedObject } from '../../Types';
+import { getNodeIdForSubscriptionType, getSubscriptionTypeForNodeId } from '../../integration/twitch/TwitchEventSubTriggers';
 
 function execEdge(fromNode: string, toNode: string): EventGraphEdge {
   return { id: uuidv4(), fromNode, fromPort: 'exec', toNode, toPort: 'exec' };
@@ -61,6 +62,9 @@ function triggerToCallbackNode(triggerType: string, triggerConfig: KeyedObject, 
   if (triggerType === 'chat') {
     return { ...base, moduleName: 'twitch', nodeTypeId: 'chat_command' };
   }
+  if (triggerType === 'chatMessage') {
+    return { ...base, moduleName: 'twitch', nodeTypeId: 'chat_message' };
+  }
   if (triggerType === 'osc') {
     return { ...base, moduleName: 'core', nodeTypeId: 'osc_trigger' };
   }
@@ -72,6 +76,13 @@ function triggerToCallbackNode(triggerType: string, triggerConfig: KeyedObject, 
       nodeTypeId: 'channel_point_redeem',
       values: { rewardId: triggerConfig.reward?.id, overrideAutoFulfill: triggerConfig.reward?.override },
     };
+  }
+  // Land on the dedicated node for this subscription type where one exists (e.g.
+  // 'channel.follow' -> 'follow'), so re-editing a migrated event shows the typed node
+  // instead of the freeform 'eventsub_event' escape hatch.
+  const dedicatedNodeId = getNodeIdForSubscriptionType(triggerConfig.type);
+  if (dedicatedNodeId) {
+    return { ...base, moduleName: 'twitch', nodeTypeId: dedicatedNodeId, values: {} };
   }
   return { ...base, moduleName: 'twitch', nodeTypeId: 'eventsub_event' };
 }
@@ -111,7 +122,7 @@ export function migrateFlatEventToGraph(flatEvent: KeyedObject): EventGraph {
 
   const callbackIndexes: number[] = [];
   let cbIndex = 0;
-  for (const triggerType of ['chat', 'osc', 'twitch']) {
+  for (const triggerType of ['chat', 'chatMessage', 'osc', 'twitch']) {
     const triggerConfig = flatEvent.triggers?.[triggerType];
     if (triggerConfig?.enabled) {
       nodes.push(triggerToCallbackNode(triggerType, triggerConfig, cbIndex));
@@ -168,8 +179,13 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
   const callbackNodes = graph.nodes.filter((n) => n.kind === 'callback');
 
   for (const node of callbackNodes) {
-    if (node.moduleName === 'twitch' && node.nodeTypeId === 'chat_command') {
+    // 'chat_command'/'chat_message' are matched by nodeTypeId alone, not moduleName, so any
+    // StreamModuleInterface implementation (Twitch today, a future YouTube module, etc.) can
+    // reuse the same trigger shape and land in the same triggers.chat*/ slot.
+    if (node.nodeTypeId === 'chat_command') {
       triggers.chat = { enabled: true, ...node.values };
+    } else if (node.nodeTypeId === 'chat_message') {
+      triggers.chatMessage = { enabled: true, ...node.values };
     } else if (node.moduleName === 'core' && node.nodeTypeId === 'osc_trigger') {
       triggers.osc = { enabled: true, ...node.values };
     } else if (node.moduleName === 'twitch' && node.nodeTypeId === 'channel_point_redeem') {
@@ -180,6 +196,8 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
       };
     } else if (node.moduleName === 'twitch' && node.nodeTypeId === 'eventsub_event') {
       triggers.twitch = { enabled: true, ...node.values };
+    } else if (node.moduleName === 'twitch' && getSubscriptionTypeForNodeId(node.nodeTypeId)) {
+      triggers.twitch = { enabled: true, type: getSubscriptionTypeForNodeId(node.nodeTypeId), ...node.values };
     } else {
       // Generic path for community/control module triggers (OBS, Discord, etc.), matched by
       // EventService.emitTrigger()/matchesTriggerValues() via triggers[moduleName].nodeTypeId

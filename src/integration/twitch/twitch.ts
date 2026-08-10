@@ -10,10 +10,12 @@ import {
   TriggerNodeDef,
   userDir,
 } from '../../Types';
+import { buildChatMessageTriggerNode } from '../../core/util/StreamModuleNodeUtil';
 import TwitchApi from './TwitchApi';
 import TwitchChat from './TwitchChat';
 import TwitchCLI from './TwitchCLI';
 import TwitchEventSub from './TwitchEventSub';
+import { getTwitchEventSubTriggerNodes } from './TwitchEventSubTriggers';
 import getResponseHandlers from './TwitchResponseHandlers';
 import getTwitchRouters from './TwitchRouter';
 
@@ -185,6 +187,7 @@ export default class Twitch implements StreamModuleInterface {
           { id: 'message', label: 'Message', dataType: 'string' },
         ],
       },
+      buildChatMessageTriggerNode(),
       {
         id: 'channel_point_redeem',
         label: 'Channel Point Redeem',
@@ -202,29 +205,19 @@ export default class Twitch implements StreamModuleInterface {
       },
       {
         id: 'eventsub_event',
-        label: 'EventSub Event',
-        description: 'Fires on a Twitch EventSub notification (raid, follow, sub, etc).',
+        label: 'EventSub Event (Other)',
+        description:
+          "Fires on any Twitch EventSub notification by its raw subscription type string - an escape hatch for event types that don't have a dedicated node above yet. See Twitch's EventSub docs for valid type strings (e.g. 'channel.chat.notification').",
         form: {
-          type: {
-            label: 'Event Type',
-            type: 'select',
-            options: {
-              selections: {
-                'channel.raid': 'Raid',
-                'channel.follow': 'Follow',
-                'channel.subscribe': 'Subscribe',
-                'stream.online': 'Stream Online',
-                'stream.offline': 'Stream Offline',
-              },
-            },
-          },
+          type: { label: 'Subscription Type', type: 'text' },
         },
-        defaults: { type: 'channel.follow' },
+        defaults: { type: '' },
         outputs: [
           { id: 'type', label: 'Event Type', dataType: 'string' },
           { id: 'username', label: 'Username', dataType: 'string' },
         ],
       },
+      ...getTwitchEventSubTriggerNodes(),
     ];
   };
 

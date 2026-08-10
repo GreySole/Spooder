@@ -327,6 +327,30 @@ export function processStreamMessage(streamMessage: StreamMessage) {
       if (check != null) {
         EventService.runCommands(check.message as StreamMessage, e, 'chat', check.extra);
       }
+    } else if (triggerExistsAndEnabled(events[e], 'chatMessage')) {
+      // No command to match - fires on every message, subject only to the same optional
+      // mod/sub/vip/broadcaster gating chat_command supports.
+      const trigger = events[e].triggers.chatMessage;
+      if (trigger.broadcaster == true || trigger.mod == true || trigger.sub == true || trigger.vip == true) {
+        let pass = false;
+        if (trigger.broadcaster == true && streamMessage.isBroadcaster) {
+          pass = true;
+        }
+        if (trigger.mod == true && streamMessage.isMod) {
+          pass = true;
+        }
+        if (trigger.sub == true && streamMessage.isSubscriber) {
+          pass = true;
+        }
+        if (trigger.vip == true && streamMessage.isVIP) {
+          pass = true;
+        }
+        if (pass == false) {
+          continue;
+        }
+      }
+
+      EventService.runCommands(streamMessage, e, 'chat');
     }
   }
 

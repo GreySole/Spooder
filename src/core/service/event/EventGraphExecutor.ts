@@ -48,11 +48,14 @@ function resolveNodeValues(
     }
     if (sourceNode.kind === 'callback') {
       // Callback output ports (username, message, etc.) come from the live trigger payload,
-      // not from the graph - direct StreamMessage field first, platformEventData as fallback
-      // (covers trigger payload data that isn't a top-level StreamMessage field).
+      // not from the graph - platformEventData first (the actual per-event Twitch/etc.
+      // payload), StreamMessage field as fallback. platformEventData is only ever set for
+      // EventSub-sourced messages (chat messages never populate it), and StreamMessage's own
+      // fields default to '' /false for those, so checking it first would silently shadow
+      // real payload data (e.g. a cheer's `message`) with an empty default.
       const streamMessage = ctx.streamMessage as unknown as KeyedObject;
       resolved[edge.toPort] =
-        streamMessage[edge.fromPort] ?? streamMessage.platformEventData?.[edge.fromPort];
+        streamMessage.platformEventData?.[edge.fromPort] ?? streamMessage[edge.fromPort];
       continue;
     }
     if (sourceNode.kind !== 'operation') {
