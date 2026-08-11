@@ -11,7 +11,9 @@ export interface NodePortDef {
 export interface NodeFieldDef {
   label: string;
   description?: string;
-  type: 'asset' | 'boolean' | 'color' | 'code' | 'select' | 'text' | 'number';
+  // 'custom' renders a module-provided component: options.component must name a
+  // renderer registered by the owning module via ModuleDefinition.fieldRenderers.
+  type: 'asset' | 'boolean' | 'color' | 'code' | 'select' | 'text' | 'number' | 'custom';
   options?: KeyedObject;
   showif?: { variable: string; condition: string; value: any };
   // When set, this field is also a connectable input port of the given data type:

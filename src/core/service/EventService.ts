@@ -11,6 +11,7 @@ import { buildMockStreamMessage } from '../util/ResponseUtil';
 import ConfigService from './ConfigService';
 import EventResponseCommand from './event/EventResponseCommand';
 import { walkEventGraph } from './event/EventGraphExecutor';
+import EventGraphStorageService from './EventGraphStorageService';
 import EventStorageService from './EventStorageService';
 import ModuleService from './ModuleService';
 import OSCService from './OSCService';
@@ -55,32 +56,12 @@ export class EventService {
       this.modCommands = {};
     }
 
-    try {
-      const settingFile = fs.readFileSync(userDir + '/settings/events.json', {
-        encoding: 'utf8',
-      });
-
-      const eventsObj = JSON.parse(settingFile);
-
-      if (eventsObj.graphs) {
-        this.graphs = eventsObj.graphs;
-        this.eventGroups = eventsObj.groups;
-        this.disabledGroups = eventsObj.disabledGroups || [];
-      } else {
-        spooderLog('Migrating events.json from the legacy flat format to the node graph format');
-        const migrated = migrateEventsFileToGraphs(eventsObj);
-        this.graphs = migrated.graphs;
-        this.eventGroups = migrated.groups;
-        this.disabledGroups = migrated.disabledGroups;
-        fs.writeFileSync(userDir + '/settings/events.json', JSON.stringify(migrated), 'utf-8');
-        spooderLog(`Migrated ${Object.keys(this.graphs).length} events to the node graph format`);
-      }
-
-      spooderLog('Got events');
-    } catch (e: any) {
-      this.graphs = {};
-      this.eventGroups = ['Default'];
-    }
+    EventGraphStorageService.initialize();
+    const loaded = EventGraphStorageService.loadAll();
+    this.graphs = loaded.graphs;
+    this.eventGroups = loaded.groups;
+    this.disabledGroups = loaded.disabledGroups;
+    spooderLog('Got events');
 
     EventStorageService.initialize();
   }
@@ -311,15 +292,7 @@ export class EventService {
     EventService.instance.eventGroups = newGroups;
     EventService.instance.disabledGroups = newDisabledGroups;
 
-    fs.writeFileSync(
-      userDir + '/settings/events.json',
-      JSON.stringify({
-        graphs: newGraphs,
-        groups: newGroups,
-        disabledGroups: newDisabledGroups,
-      }),
-      'utf-8',
-    );
+    EventGraphStorageService.saveAll(newGraphs, newGroups, newDisabledGroups);
 
     const activePlatforms = ModuleService.getStreamModules();
     for (let p in activePlatforms) {

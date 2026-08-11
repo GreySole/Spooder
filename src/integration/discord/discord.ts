@@ -201,8 +201,7 @@ export default class Discord implements CommunityModuleInterface {
         id: 'message',
         label: 'Send To Channel',
         form: {
-          guild: { label: 'Guild ID', type: 'text', portType: 'string' },
-          channel: { label: 'Channel ID', type: 'text', portType: 'string' },
+          destination: { label: 'Send To', type: 'custom', options: { component: 'channelSelect' } },
           message: { label: 'Message', type: 'code', options: { use_response_processor: true }, portType: 'string' },
           role: { label: 'Role To Tag', type: 'text', portType: 'string' },
           use_link_button: { label: 'Include Link Button', type: 'boolean' },
@@ -220,8 +219,7 @@ export default class Discord implements CommunityModuleInterface {
           },
         },
         defaults: {
-          guild: '',
-          channel: '',
+          destination: { destguild: '', destchannel: '' },
           message: '',
           role: '',
           use_link_button: false,
@@ -287,8 +285,8 @@ export default class Discord implements CommunityModuleInterface {
             const roleTag = values.role ? this.chat.makeRoleTag(values.role) : null;
 
             this.chat.sendToChannel(
-              values.guild,
-              values.channel,
+              values.destination?.destguild ?? values.guild,
+              values.destination?.destchannel ?? values.channel,
               `${roleTag ? roleTag + ' ' : ''}${response.response}`,
               components,
             );
