@@ -67,6 +67,9 @@ export interface NodeManifest {
   moduleName: string;
   triggers: TriggerNodeDef[];
   actions: ActionNodeDef[];
+  // Set for manifests generated from a plugin's events-form.json, so the node palette can
+  // group them under a single 'Plugins' submenu instead of one top-level entry per plugin.
+  isPlugin?: boolean;
 }
 
 export interface ActionExecutionContext {

@@ -150,11 +150,11 @@ export default class BackupRestoreService {
       zip.addLocalFolder(userDir + '/settings', '');
 
       if (!fs.existsSync(userDir + '/backup')) {
-        fs.mkdirSync(userDir + '/backup');
+        fs.mkdirSync(userDir + '/backup', { recursive: true });
       }
 
       if (!fs.existsSync(userDir + '/backup/settings')) {
-        fs.mkdirSync(userDir + '/backup/settings');
+        fs.mkdirSync(userDir + '/backup/settings', { recursive: true });
       }
 
       let backupName = null;
@@ -228,11 +228,11 @@ export default class BackupRestoreService {
       zip.addLocalFolder(userDir + '/web', '/web');
 
       if (!fs.existsSync(userDir + '/backup')) {
-        fs.mkdirSync(userDir + '/backup');
+        fs.mkdirSync(userDir + '/backup', { recursive: true });
       }
 
       if (!fs.existsSync(userDir + '/backup/plugins')) {
-        fs.mkdirSync(userDir + '/backup/plugins');
+        fs.mkdirSync(userDir + '/backup/plugins', { recursive: true });
       }
       let backupName = null;
       if (rawBackupName != null && rawBackupName != '') {
@@ -328,7 +328,7 @@ export default class BackupRestoreService {
 
   static async restoreSettings(selections: { [key: string]: boolean }) {
     if (!fs.existsSync(userDir + '/tmp')) {
-      fs.mkdirSync(userDir + '/tmp');
+      fs.mkdirSync(userDir + '/tmp', { recursive: true });
     }
 
     const tempDir = path.join(userDir, 'tmp');
@@ -367,10 +367,10 @@ export default class BackupRestoreService {
   static async prepareRestorePlugins(file: Express.Multer.File | null, backupName?: string) {
     let fileName = null;
     if (!fs.existsSync(userDir + '/backup/plugins')) {
-      fs.mkdirSync(userDir + '/backup/plugins');
+      fs.mkdirSync(userDir + '/backup/plugins', { recursive: true });
     }
     if (!fs.existsSync(userDir + '/tmp')) {
-      fs.mkdirSync(userDir + '/tmp');
+      fs.mkdirSync(userDir + '/tmp', { recursive: true });
     }
 
     if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {

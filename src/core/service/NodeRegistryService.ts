@@ -1,15 +1,54 @@
 import fs from 'fs';
 import path from 'path';
-import { ActionExecutionContext, ActionNodeDef, KeyedObject, NodeManifest, userDir } from '../../Types';
+import {
+  ActionExecutionContext,
+  ActionNodeDef,
+  KeyedObject,
+  NodeFieldDef,
+  NodeForm,
+  NodePortDataType,
+  NodeManifest,
+  userDir,
+} from '../../Types';
+import { spooderLog } from '../Logging';
+import { runResponseScript } from '../util/ResponseUtil';
 import { getCoreActionNodes } from './CoreNodeManifest';
 import ModuleService from './ModuleService';
 import PluginService from './PluginService';
+
+// events-form.json predates connectable ports and so never declares `portType`, which is
+// what makes a field render as a wireable input socket on the node card (see the frontend's
+// nodeLayout.computeNodePortLayout). Infer one from the field's editor type so every plugin
+// event gets sockets without each plugin having to update its events-form.json - matching
+// what the legacy generic 'plugin' node declares by hand. 'custom' is deliberately left
+// unwired: it's rendered by a module-supplied component and may hold a non-scalar value.
+const FIELD_TYPE_PORT_TYPES: { [fieldType: string]: NodePortDataType } = {
+  asset: 'string',
+  code: 'string',
+  color: 'string',
+  select: 'string',
+  text: 'string',
+  number: 'number',
+  boolean: 'boolean',
+};
+
+function withInferredPortTypes(form: NodeForm): NodeForm {
+  const ported: NodeForm = {};
+  for (const fieldName in form) {
+    const field: NodeFieldDef = form[fieldName];
+    // An explicitly declared portType always wins.
+    ported[fieldName] = field.portType
+      ? field
+      : { ...field, portType: FIELD_TYPE_PORT_TYPES[field.type] };
+  }
+  return ported;
+}
 
 function pluginFormToActionNodes(form: KeyedObject): ActionNodeDef[] {
   return Object.keys(form).map((actionId) => ({
     id: actionId,
     label: form[actionId].label ?? actionId,
-    form: form[actionId].form ?? {},
+    form: withInferredPortTypes(form[actionId].form ?? {}),
     defaults: form[actionId].defaults ?? {},
   }));
 }
@@ -26,6 +65,7 @@ export default class NodeRegistryService {
         moduleName: pluginName,
         triggers: [],
         actions: pluginFormToActionNodes(form),
+        isPlugin: true,
       };
     } catch (e) {
       return undefined;
@@ -75,6 +115,46 @@ export default class NodeRegistryService {
     return manifests;
   }
 
+  // Fires one of a plugin's events-form.json events directly, the dedicated-node equivalent
+  // of the legacy generic 'plugin' node (see event/EventPluginCommand.ts). Because the node's
+  // form def is available here, fields needing response-script preprocessing are read straight
+  // off the manifest - no need for the legacy node's `_`-prefixed sibling-key convention.
+  private static executePluginAction(
+    pluginName: string,
+    nodeId: string,
+    values: KeyedObject,
+    ctx: ActionExecutionContext,
+  ) {
+    return async () => {
+      const action = NodeRegistryService.getPluginManifest(pluginName)?.actions.find(
+        (a) => a.id === nodeId,
+      );
+
+      const eventValues: KeyedObject = { ...values };
+      for (const fieldName in action?.form ?? {}) {
+        if (!action!.form[fieldName].options?.use_response_processor) {
+          continue;
+        }
+        const response = await runResponseScript(
+          ctx.eventName,
+          ctx.streamMessage,
+          ctx.extra,
+          eventValues[fieldName],
+        );
+        if (response.status === 'ok') {
+          eventValues[fieldName] = response.response;
+        } else {
+          spooderLog(
+            `Error preprocessing plugin response script for ${pluginName} in ${nodeId} for ${ctx.eventName}: ${response.response}`,
+          );
+        }
+      }
+
+      ctx.streamMessage.pluginEventData = eventValues;
+      PluginService.getActivePlugins()[pluginName].onEvent(nodeId, ctx.streamMessage);
+    };
+  }
+
   static executeAction(
     moduleName: string,
     nodeId: string,
@@ -82,11 +162,18 @@ export default class NodeRegistryService {
     ctx: ActionExecutionContext,
   ) {
     const mod = ModuleService.findModule(moduleName);
-    if (!mod) {
-      return () => {
-        console.log(`NodeRegistryService: module '${moduleName}' not found for event ${ctx.eventName}`);
-      };
+    if (mod) {
+      return mod.executeActionNode(nodeId, values, ctx);
     }
-    return mod.executeActionNode(nodeId, values, ctx);
+
+    // Plugins aren't modules (ModuleService only tracks stream/community/control modules),
+    // so per-event plugin nodes resolve here instead.
+    if (PluginService.getActivePlugins()[moduleName]) {
+      return NodeRegistryService.executePluginAction(moduleName, nodeId, values, ctx);
+    }
+
+    return () => {
+      console.log(`NodeRegistryService: module '${moduleName}' not found for event ${ctx.eventName}`);
+    };
   }
 }
