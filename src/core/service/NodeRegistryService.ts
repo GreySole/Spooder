@@ -12,7 +12,7 @@ import {
 } from '../../Types';
 import { spooderLog } from '../Logging';
 import { runResponseScript } from '../util/ResponseUtil';
-import { getCoreActionNodes } from './CoreNodeManifest';
+import { getCoreActionNodes, getCoreTriggerNodes } from './CoreNodeManifest';
 import ModuleService from './ModuleService';
 import PluginService from './PluginService';
 
@@ -74,7 +74,7 @@ export default class NodeRegistryService {
 
   static getAllManifests(): NodeManifest[] {
     const manifests: NodeManifest[] = [
-      { moduleName: 'core', triggers: [], actions: getCoreActionNodes() },
+      { moduleName: 'core', triggers: getCoreTriggerNodes(), actions: getCoreActionNodes() },
     ];
 
     const streamModules = ModuleService.getStreamModules();

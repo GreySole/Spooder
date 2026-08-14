@@ -461,6 +461,46 @@ export class EventService {
     }
   };
 
+  // Runs only the branch hanging off one specific callback node, rather than every entry
+  // point in the graph. Used by TimerService so a Timer Elapsed and a Timer Tick can live in
+  // the same event without each firing the other's actions. Skips the cooldown/toggle
+  // bookkeeping in runCommands, which is keyed to chat/OSC semantics that don't apply here.
+  static runCommandsFromNode(
+    streamMessage: StreamMessage,
+    eventName: string,
+    callbackNodeId: string,
+    extra: KeyedObject = {},
+  ) {
+    const graph = EventService.getGraphs()[eventName];
+    if (!graph) {
+      return;
+    }
+    const event = EventService.getEvents()[eventName];
+    streamMessage.triggeredEventData = event;
+
+    // The callback itself isn't executed - its exec targets are where the branch begins.
+    const entryNodeIds = graph.edges
+      .filter((e) => e.fromNode === callbackNodeId && e.toPort === 'exec')
+      .map((e) => e.toNode);
+    if (entryNodeIds.length === 0) {
+      return;
+    }
+
+    walkEventGraph(
+      graph,
+      {
+        eventName,
+        streamMessage,
+        extra,
+        isChat: false,
+        isOSC: false,
+        event,
+        activeEvents: EventService.getActiveEvents(),
+      },
+      entryNodeIds,
+    );
+  }
+
   static createTimeout(
     name: string,
     command: any,

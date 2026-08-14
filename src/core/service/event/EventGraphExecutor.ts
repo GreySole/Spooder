@@ -5,6 +5,7 @@ import { EventService, sayInChat } from '../EventService';
 import EventStorageService from '../EventStorageService';
 import NodeRegistryService from '../NodeRegistryService';
 import OperationNodeService from '../OperationNodeService';
+import TimerService from '../TimerService';
 import EventModCommand from './EventModCommand';
 import EventPluginCommand from './EventPluginCommand';
 import EventResponseCommand from './EventResponseCommand';
@@ -145,6 +146,10 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
       case 'trigger_event':
         return () =>
           EventService.runCommands(ctx.streamMessage, values.eventName, ctx.streamMessage.messageType, ctx.extra);
+      case 'start_timer':
+        return () => TimerService.start(values.name, values.duration, values.repeat);
+      case 'stop_timer':
+        return () => TimerService.stop(values.name);
       default:
         return () => spooderLog(`Unknown core node '${node.nodeTypeId}' for event ${ctx.eventName}`);
     }
@@ -157,9 +162,18 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
   });
 }
 
-export function walkEventGraph(graph: EventGraph, ctx: GraphExecutionContext) {
+// `entryNodeIds` scopes the walk to one trigger's branch. Without it the walk starts from
+// every callback in the graph (findEntryNodeIds), so a graph with two triggers runs both
+// branches whichever one fired - fine when an event has a single trigger, but wrong for e.g.
+// a Timer Elapsed and a Timer Tick sharing one event. Callers that don't pass it keep the
+// original behavior exactly.
+export function walkEventGraph(
+  graph: EventGraph,
+  ctx: GraphExecutionContext,
+  entryNodeIds?: string[],
+) {
   const outgoing = buildExecAdjacency(graph);
-  let cursor: string[] = findEntryNodeIds(graph);
+  let cursor: string[] = entryNodeIds ?? findEntryNodeIds(graph);
 
   const visited = new Set<string>();
   while (cursor.length > 0) {
@@ -175,8 +189,32 @@ export function walkEventGraph(graph: EventGraph, ctx: GraphExecutionContext) {
     }
 
     const values = resolveNodeValues(graph, node, ctx);
+
+    // A 'delay' node defers the rest of the branch rather than itself. The node's own `delay`
+    // field (handled below) only postpones that one node's thunk - this loop pushes downstream
+    // nodes immediately either way - so pausing the chain means scheduling a fresh walk from
+    // this node's targets and stopping the current one here.
+    if (node.moduleName === 'core' && node.nodeTypeId === 'delay') {
+      const targets = activatedPorts(node, values).flatMap(
+        (port) => outgoing.get(`${nodeId}::${port}`) ?? [],
+      );
+      const seconds = Number(values.seconds);
+      if (targets.length > 0) {
+        setTimeout(
+          () => walkEventGraph(graph, ctx, targets),
+          Math.max(0, Number.isFinite(seconds) ? seconds : 0) * 1000,
+        );
+      }
+      continue;
+    }
+
     const thunk = executeGraphNode(node, values, ctx);
 
+    // Legacy per-node delay (milliseconds), superseded by the 'delay' node. It's no longer
+    // authorable - the inspector field and the palette's default are gone - but saved events
+    // still carry it, so it keeps being honored. Note the semantics differ from a delay node:
+    // this postpones only this node's own thunk while the walk continues immediately, so the
+    // values act as offsets from the start of the event rather than as sequential pauses.
     if ((node.delay ?? 0) === 0) {
       thunk();
     } else {

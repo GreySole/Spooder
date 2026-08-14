@@ -1,4 +1,4 @@
-import { ActionNodeDef, OperationNodeDef } from '../../Types';
+import { ActionNodeDef, OperationNodeDef, TriggerNodeDef } from '../../Types';
 
 function eventNameField() {
   return {
@@ -110,6 +110,69 @@ export function getCoreActionNodes(): ActionNodeDef[] {
         eventName: { label: 'Event Name', type: 'text', portType: 'string' },
       },
       defaults: { eventName: '' },
+    },
+    {
+      id: 'start_timer',
+      label: 'Start Timer',
+      description:
+        'Starts a named countdown. Starting a running timer resets it. Timer names are global, so any event can react to it.',
+      form: {
+        name: { label: 'Timer Name', type: 'text', portType: 'string' },
+        duration: { label: 'Duration (Seconds)', type: 'number', portType: 'number' },
+        repeat: { label: 'Repeat', type: 'boolean', portType: 'boolean' },
+      },
+      defaults: { name: '', duration: 5, repeat: false },
+    },
+    {
+      id: 'stop_timer',
+      label: 'Stop Timer',
+      description: 'Cancels a named timer, including any ticks it is driving.',
+      form: {
+        name: { label: 'Timer Name', type: 'text', portType: 'string' },
+      },
+      defaults: { name: '' },
+    },
+    {
+      id: 'delay',
+      label: 'Delay',
+      description:
+        'Waits the given number of seconds, then continues to the next node. For pauses that do not need a named, externally controllable timer.',
+      form: {
+        seconds: { label: 'Seconds', type: 'number', portType: 'number' },
+      },
+      defaults: { seconds: 1 },
+    },
+  ];
+}
+
+// The core manifest carried no triggers until timers arrived; NodeRegistryService now serves
+// these the same way it serves module triggers, so the palette and executor share one source.
+export function getCoreTriggerNodes(): TriggerNodeDef[] {
+  return [
+    {
+      id: 'timer_elapsed',
+      label: 'Timer Elapsed',
+      description: "Fires when the named timer's time is up. Repeats fire it each cycle.",
+      form: {
+        name: { label: 'Timer Name', type: 'text', portType: 'string' },
+      },
+      defaults: { name: '' },
+      outputs: [{ id: 'name', label: 'Timer Name', dataType: 'string' }],
+    },
+    {
+      id: 'timer_tick',
+      label: 'Timer Tick',
+      description: 'Fires on a set interval for as long as the named timer is running.',
+      form: {
+        name: { label: 'Timer Name', type: 'text', portType: 'string' },
+        interval: { label: 'Interval (Seconds)', type: 'number', portType: 'number' },
+      },
+      defaults: { name: '', interval: 1 },
+      outputs: [
+        { id: 'name', label: 'Timer Name', dataType: 'string' },
+        { id: 'elapsed', label: 'Elapsed (Seconds)', dataType: 'number' },
+        { id: 'remaining', label: 'Remaining (Seconds)', dataType: 'number' },
+      ],
     },
   ];
 }
