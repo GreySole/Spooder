@@ -152,6 +152,41 @@ const LOGIC_NODES: OperationNodeDef[] = [
     defaults: { a: 0, b: 0 },
     outputs: [{ id: 'result', label: 'Result', dataType: 'boolean' }],
   },
+  // Completes the comparison set the legacy OSC condition editor offered (==, !=, >=, <=, >, <)
+  // so any old condition can be expressed directly as one node instead of a not/or combination.
+  {
+    id: 'not_equals',
+    label: 'Not Equals',
+    category: 'logic',
+    form: {
+      a: { label: 'A', type: 'text', portType: 'any' },
+      b: { label: 'B', type: 'text', portType: 'any' },
+    },
+    defaults: { a: '', b: '' },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'boolean' }],
+  },
+  {
+    id: 'greater_or_equal',
+    label: 'Greater Than Or Equal',
+    category: 'logic',
+    form: {
+      a: { label: 'A', type: 'number', portType: 'number' },
+      b: { label: 'B', type: 'number', portType: 'number' },
+    },
+    defaults: { a: 0, b: 0 },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'boolean' }],
+  },
+  {
+    id: 'less_or_equal',
+    label: 'Less Than Or Equal',
+    category: 'logic',
+    form: {
+      a: { label: 'A', type: 'number', portType: 'number' },
+      b: { label: 'B', type: 'number', portType: 'number' },
+    },
+    defaults: { a: 0, b: 0 },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'boolean' }],
+  },
   {
     id: 'string_contains',
     label: 'String Contains',
@@ -266,6 +301,12 @@ export default class OperationNodeService {
         return { result: Number(values.a) > Number(values.b) };
       case 'less_than':
         return { result: Number(values.a) < Number(values.b) };
+      case 'not_equals':
+        return { result: values.a != values.b };
+      case 'greater_or_equal':
+        return { result: Number(values.a) >= Number(values.b) };
+      case 'less_or_equal':
+        return { result: Number(values.a) <= Number(values.b) };
       case 'string_contains':
         return { result: String(values.text).includes(String(values.search)) };
       case 'string_starts_with':
