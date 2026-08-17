@@ -1,4 +1,23 @@
-import { KeyedObject, OperationNodeDef } from '../../Types';
+import { KeyedObject, NodeForm, OperationNodeDef } from '../../Types';
+
+// Concat's inputs, in the order they're joined. A and B are always offered; the rest are
+// `growable`, so the frontend reveals C once A and B hold something, D once C does, and so on -
+// the node grows as it's used instead of showing eight empty boxes. Eight is simply the ceiling;
+// nothing but this list has to change to raise it.
+const CONCAT_SLOTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+function concatForm(): NodeForm {
+  const form: NodeForm = {};
+  CONCAT_SLOTS.forEach((slot, index) => {
+    form[slot] = {
+      label: slot.toUpperCase(),
+      type: 'text',
+      portType: 'string',
+      growable: index >= 2,
+    };
+  });
+  return form;
+}
 
 const MATH_NODES: OperationNodeDef[] = [
   {
@@ -74,10 +93,9 @@ const STRING_NODES: OperationNodeDef[] = [
     id: 'concat',
     label: 'Concat',
     category: 'string',
-    form: {
-      a: { label: 'A', type: 'text', portType: 'string' },
-      b: { label: 'B', type: 'text', portType: 'string' },
-    },
+    form: concatForm(),
+    // Only the two always-present slots are seeded: an unused slot stays absent from the node's
+    // values entirely, which is exactly what the evaluator and the frontend treat as empty.
     defaults: { a: '', b: '' },
     outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
   },
@@ -288,7 +306,13 @@ export default class OperationNodeService {
       case 'trim':
         return { result: String(values.text).trim() };
       case 'concat':
-        return { result: String(values.a) + String(values.b) };
+        // Every slot in order, skipping the ones the node never grew into. Unset slots are
+        // absent rather than empty, so they'd stringify to 'undefined' if they weren't dropped.
+        return {
+          result: CONCAT_SLOTS.map((slot) => values[slot])
+            .filter((value) => value !== undefined && value !== null)
+            .join(''),
+        };
       case 'substring':
         return { result: String(values.text).substring(Number(values.start), Number(values.end)) };
       case 'sanitize':
