@@ -2,11 +2,11 @@ import OSC from '@spooder/osc-js';
 import OBSWebSocket, { EventSubscription, OBSRequestTypes } from 'obs-websocket-js';
 import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
-import OSCService from '../../core/service/OSCService';
 import { buildMockStreamMessage } from '../../core/util/ResponseUtil';
 import { KeyedObject } from '../../Types';
 import OBS from './obs';
 import onObsOscMessage from './onObsOscMessage';
+import { sendToObsChannel } from './ObsOsc';
 
 export default class ObsWebsocket {
   constructor() {}
@@ -16,7 +16,7 @@ export default class ObsWebsocket {
   connected = false;
 
   async connect(host?: string, port?: number, password?: string) {
-    const sendToTCP = OSCService.sendToTCP;
+    const sendToTCP = sendToObsChannel;
     const obsClient = this.obsClient;
     const obsModule = ModuleService.getControlModule('obs') as OBS;
 
@@ -185,7 +185,7 @@ export default class ObsWebsocket {
     this.deckClients.push(iName);
     console.log('SUBSCRIBE', this.deckClients);
     this.obsClient.on('InputVolumeMeters', (data: any) => {
-      OSCService.sendToTCP('/obs/sound/InputVolumeMeters', JSON.stringify(data), false);
+      sendToObsChannel('/obs/sound/InputVolumeMeters', JSON.stringify(data), false);
     });
   }
 
@@ -194,7 +194,7 @@ export default class ObsWebsocket {
     console.log('UNSUBSCRIBE', this.deckClients);
     if (this.deckClients.length == 0) {
       this.obsClient.off('InputVolumeMeters');
-      OSCService.sendToTCP('/obs/event/InputVolumeMeters', 1, false);
+      sendToObsChannel('/obs/event/InputVolumeMeters', 1, false);
     }
   }
 

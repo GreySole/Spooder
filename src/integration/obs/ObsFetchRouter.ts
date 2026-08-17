@@ -1,6 +1,5 @@
 import { Response, Router } from 'express';
 import ModuleService from '../../core/service/ModuleService';
-import OSCService from '../../core/service/OSCService';
 import { KeyedObject } from '../../Types';
 import OBS from './obs';
 
@@ -8,8 +7,6 @@ export default function ObsFetchRouter() {
   const router = Router();
   const obs = ModuleService.getControlModule('obs') as OBS;
   const obsWebsocket = obs.websocket;
-  const sendToTCP = OSCService.sendToTCP;
-
   function obsSuccess(data: any, res: Response) {
     res.send({ data, status: 'ok' });
     return data;

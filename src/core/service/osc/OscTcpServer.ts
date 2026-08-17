@@ -5,32 +5,21 @@ import ModuleService from '../ModuleService';
 import MonitorService, { MonitorDataType, MonitorDirection } from '../MonitorService';
 import PluginService from '../PluginService';
 
-import { validateUser } from '../../routes/ModerationRoutes';
 import OSCService from '../OSCService';
-import { isLocal, WebService } from '../WebService';
+import { WebService } from '../WebService';
+import OscSocketRouter from './OscSocketRouter';
+import OscWebsocketPlugin from './OscWebsocketPlugin';
 
 export default class OscTcpServer {
   public oscTcp: OSC;
 
   constructor() {
-    const server = WebService.getServer();
+    // Upgrades arrive through OscSocketRouter (which also does the local/session auth the
+    // plugin's verifyClient used to), so module channels can serve their own paths off this
+    // same http server without the two websocket servers aborting each other's handshakes.
+    OscSocketRouter.attach(WebService.getServer());
     this.oscTcp = new OSC({
-      plugin: new OSC.WebsocketServerPlugin({
-        server: server,
-        path: '/osc',
-        verifyClient: (info: any, done: any) => {
-          const req = info.req;
-          if (isLocal(req)) {
-            done(true);
-          } else {
-            if (validateUser(req) === 'ok') {
-              done(true);
-            } else {
-              done(false, 403, 'Forbidden');
-            }
-          }
-        },
-      }),
+      plugin: new OscWebsocketPlugin('/osc') as any,
     });
 
     const oscTCP = this.oscTcp;

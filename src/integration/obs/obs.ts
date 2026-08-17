@@ -33,6 +33,10 @@ export default class OBS implements ControlModuleInterface {
   websocket = new ObsWebsocket();
   monitor = new ObsStreamMonitor();
 
+  // OBS gets its own OSC websocket (/osc/obs). Volume meters alone arrive at frame rate, and
+  // the shared /osc socket is carrying core events, plugin traffic and the OSC monitor.
+  oscChannel = 'obs';
+
   onPluginsLoaded() {}
 
   onOSC(message: OSC.Message) {

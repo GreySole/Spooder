@@ -1,9 +1,9 @@
 import ModuleService from '../../core/service/ModuleService';
-import OSCService from '../../core/service/OSCService';
+import { hasObsChannelClients, sendToObsChannel } from './ObsOsc';
 import OBS from './obs';
 
 export default async function onObsOscMessage(message: any) {
-  const sendToTCP = OSCService.sendToTCP;
+  const sendToTCP = sendToObsChannel;
   const obsModule = ModuleService.getControlModule('obs') as OBS;
   const obsWebsocket = obsModule.websocket;
 
@@ -35,6 +35,13 @@ export default async function onObsOscMessage(message: any) {
       if (address[3] == 'InputVolumeMeters') {
         if (message.args[0] == 1) {
           obsWebsocket.obsClient.on('InputVolumeMeters', (data: any) => {
+            // The deck normally turns meters off on unmount, but a closed laptop or a killed
+            // tab never sends that. Nobody left on /osc/obs means nobody is watching, so tear
+            // the subscription down rather than keep pushing frames into the void.
+            if (!hasObsChannelClients()) {
+              obsWebsocket.obsClient.off('InputVolumeMeters');
+              return;
+            }
             sendToTCP('/obs/sound/InputVolumeMeters', JSON.stringify(data), false);
           });
         } else {
