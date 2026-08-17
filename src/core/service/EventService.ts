@@ -14,6 +14,7 @@ import { walkEventGraph } from './event/EventGraphExecutor';
 import EventGraphStorageService from './EventGraphStorageService';
 import EventStorageService from './EventStorageService';
 import ModuleService from './ModuleService';
+import OscLayerService from './OscLayerService';
 import OSCService from './OSCService';
 import ShareService from './ShareService';
 
@@ -323,6 +324,10 @@ export class EventService {
   }
 
   static stopEvent(cEvent: string) {
+    // Layered OSC claims live in OscLayerService, not in activeEvents, so stopping an event
+    // before it reaches its OSC Release node would otherwise leave the address held forever.
+    OscLayerService.releaseAllForOwner(cEvent);
+
     const activeEvents = EventService.getActiveEvents();
     if (activeEvents[cEvent] !== undefined) {
       for (let e in activeEvents[cEvent]) {

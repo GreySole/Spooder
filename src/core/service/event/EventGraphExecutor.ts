@@ -5,6 +5,7 @@ import { EventService, sayInChat } from '../EventService';
 import EventStorageService from '../EventStorageService';
 import NodeRegistryService from '../NodeRegistryService';
 import OperationNodeService from '../OperationNodeService';
+import OscLayerService from '../OscLayerService';
 import TimerService from '../TimerService';
 import EventModCommand from './EventModCommand';
 import EventPluginCommand from './EventPluginCommand';
@@ -150,6 +151,20 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
         return () => TimerService.start(values.name, values.duration, values.repeat);
       case 'stop_timer':
         return () => TimerService.stop(values.name);
+      case 'osc_claim':
+        return () =>
+          OscLayerService.claim(
+            values.dest_udp,
+            values.address,
+            values.slot,
+            ctx.eventName,
+            values.priority,
+            values.value,
+            values.releaseValue,
+          );
+      case 'osc_release':
+        return () =>
+          OscLayerService.release(values.dest_udp, values.address, values.slot, ctx.eventName);
       default:
         return () => spooderLog(`Unknown core node '${node.nodeTypeId}' for event ${ctx.eventName}`);
     }

@@ -133,6 +133,45 @@ export function getCoreActionNodes(): ActionNodeDef[] {
       defaults: { name: '' },
     },
     {
+      id: 'osc_claim',
+      label: 'OSC Claim',
+      description:
+        'Takes shared ownership of an OSC address at a priority. The highest-priority active claim decides the value, so overlapping events do not clobber each other. Release it with OSC Release. Do not drive the same address with a legacy OSC Send node - the two do not share state.',
+      form: {
+        dest_udp: {
+          label: 'Destination',
+          type: 'custom',
+          portType: 'string',
+          options: { component: 'udpSelect' },
+        },
+        address: { label: 'Address', type: 'text', portType: 'string' },
+        // Scopes contention within an address without changing what is sent: MIDI puts
+        // everything on /cc, so two events only conflict on the same CC number.
+        slot: { label: 'Slot (optional)', type: 'text', portType: 'string' },
+        value: { label: 'Value', type: 'text', portType: 'string' },
+        releaseValue: { label: 'Value On Release', type: 'text', portType: 'string' },
+        priority: { label: 'Priority', type: 'number', portType: 'number' },
+      },
+      defaults: { dest_udp: '-1', address: '', slot: '', value: '1', releaseValue: '0', priority: 0 },
+    },
+    {
+      id: 'osc_release',
+      label: 'OSC Release',
+      description:
+        "Gives up this event's claim on an address. If another event still holds it, its value is restored; otherwise the claim's Value On Release is sent.",
+      form: {
+        dest_udp: {
+          label: 'Destination',
+          type: 'custom',
+          portType: 'string',
+          options: { component: 'udpSelect' },
+        },
+        address: { label: 'Address', type: 'text', portType: 'string' },
+        slot: { label: 'Slot (optional)', type: 'text', portType: 'string' },
+      },
+      defaults: { dest_udp: '-1', address: '', slot: '' },
+    },
+    {
       id: 'delay',
       label: 'Delay',
       description:
