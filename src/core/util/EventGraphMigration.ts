@@ -184,6 +184,11 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
     // reuse the same trigger shape and land in the same triggers.chat*/ slot.
     if (node.nodeTypeId === 'chat_command') {
       triggers.chat = { enabled: true, ...node.values };
+    } else if (node.nodeTypeId === 'chat_search') {
+      // Lands in the same slot as a chat command, with search mode implied by the node type
+      // rather than carried as a field - so ChatUtil and checkResponseTrigger keep reading one
+      // shape and never learn there are two nodes.
+      triggers.chat = { enabled: true, ...node.values, search: true };
     } else if (node.nodeTypeId === 'chat_message') {
       triggers.chatMessage = { enabled: true, ...node.values };
     } else if (node.moduleName === 'core' && node.nodeTypeId === 'osc_trigger') {
@@ -240,4 +245,29 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
     chatnotification: graph.chatnotification,
     cooldownnotification: graph.cooldownnotification,
   };
+}
+
+// Upgrades already-stored graphs to node shapes that changed after they were saved. Runs on
+// every load and is idempotent; the caller persists only when something actually changed, so a
+// graph is rewritten once and then left alone.
+//
+// 'chat_command' with `search: true` predates the Chat Search & Match node, which is the same
+// trigger with the mode baked into the node type instead of a checkbox. The values carry over
+// untouched (the pattern is still keyed `command`), so this is a node type swap and nothing else.
+export function upgradeGraphNodes(graphs: { [eventId: string]: EventGraph }): number {
+  let changed = 0;
+
+  for (const eventId in graphs) {
+    const graph = graphs[eventId];
+    graph.nodes = (graph.nodes ?? []).map((node) => {
+      if (node.nodeTypeId !== 'chat_command' || !node.values?.search) {
+        return node;
+      }
+      changed++;
+      const { search, ...values } = node.values;
+      return { ...node, nodeTypeId: 'chat_search', values };
+    });
+  }
+
+  return changed;
 }

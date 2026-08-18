@@ -3,42 +3,7 @@ import EventStorageService from '../service/EventStorageService';
 import { EventService, sayInChat } from '../service/EventService';
 import ModuleService from '../service/ModuleService';
 import { triggerExistsAndEnabled } from './EventTriggerUtil';
-
-function matchConditions(a: string, b: string) {
-  if (a.includes('|')) {
-    let cSplitOR = a.split('|');
-    for (let c in cSplitOR) {
-      if (cSplitOR[c].startsWith('>')) {
-        if (b.startsWith(cSplitOR[c].replace('>', ''))) {
-          return b;
-        }
-      } else if (cSplitOR[c].startsWith('<')) {
-        if (b.endsWith(cSplitOR[c].replace('<', ''))) {
-          return b;
-        }
-      } else if (cSplitOR[c].toLowerCase() == b.toLowerCase()) {
-        return b;
-      }
-    }
-    return false;
-  } else if (a.startsWith('>')) {
-    if (b.startsWith(a.replace('>', ''))) {
-      return b;
-    } else {
-      return false;
-    }
-  } else if (a.startsWith('<')) {
-    if (b.endsWith(a.replace('<', ''))) {
-      return b;
-    } else {
-      return false;
-    }
-  } else if (a.toLowerCase() == b.toLowerCase()) {
-    return b;
-  } else {
-    return false;
-  }
-}
+import { matchSearchPattern } from './SearchMatchUtil';
 
 export function checkResponseTrigger(eventData: KeyedObject, message: StreamMessage) {
   let searchMode = false;
@@ -59,54 +24,14 @@ export function checkResponseTrigger(eventData: KeyedObject, message: StreamMess
     command = eventData.triggers.chat.command.toLowerCase();
   }
   if (searchMode == true) {
-    let commandSplit = command.split(' ');
-    let commandMatch = new Array(commandSplit.length).fill(false);
-    let messageSplit = message.message
-      .toLowerCase()
-      .replaceAll(/[\p{P}\p{S}]/gu, '')
-      .split(' ');
-    let matchIndex = 0;
-    let startInd = 0;
-    for (let m = 0; m < messageSplit.length; m++) {
-      if (commandSplit[matchIndex] == '*') {
-        commandMatch[matchIndex] = messageSplit[m];
-      } else if (commandSplit[matchIndex].startsWith('*')) {
-        for (let n = m; n < messageSplit.length; n++) {
-          if (matchConditions(commandSplit[matchIndex].substr(1), messageSplit[n]) != false) {
-            commandMatch[matchIndex] = messageSplit[n];
-
-            m = n;
-            break;
-          }
-        }
-      } else {
-        commandMatch[matchIndex] = matchConditions(commandSplit[matchIndex], messageSplit[m]);
-      }
-
-      if (commandMatch[matchIndex] != false) {
-        if (matchIndex == 0) {
-          startInd = m;
-        }
-        matchIndex++;
-
-        if (matchIndex == commandMatch.length) {
-          console.log('FINISH', commandMatch);
-          break;
-        }
-      } else {
-        if (matchIndex > 0) {
-          m = startInd;
-        }
-
-        matchIndex = 0;
-        commandMatch = new Array(commandSplit.length).fill(false);
-      }
-    }
-
-    if (matchIndex == commandMatch.length) {
+    // The matcher itself lives in SearchMatchUtil, shared with the Search & Match operation
+    // node. The words it returns become this event's `extra` - the match array a response
+    // script reads as extra[] and the trigger node's Match ports resolve from.
+    const matched = matchSearchPattern(command, message.message);
+    if (matched) {
       return {
         message: message,
-        extra: commandMatch,
+        extra: matched,
       };
     }
   } else {

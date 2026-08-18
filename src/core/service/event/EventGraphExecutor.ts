@@ -49,6 +49,25 @@ function resolveNodeValues(
       continue;
     }
     if (sourceNode.kind === 'callback') {
+      // 'match0'..'matchN' are the words a search-and-match trigger pulled out of the message
+      // (see checkResponseTrigger in ResponseUtil): they aren't fields of the StreamMessage at
+      // all, they're the per-fire match array the trigger handed to this walk as ctx.extra -
+      // the same array a response script reads as extra[]. Matched on the port id rather than
+      // on the node type so every trigger that runs a search pattern (chat_command today, the
+      // OSC trigger's 'search' handle type) resolves them the same way.
+      if (edge.fromPort === 'matches') {
+        // The match array itself. Guarded because ctx.extra is only an array when a search
+        // pattern filled it - every other trigger leaves it an empty object.
+        resolved[edge.toPort] = Array.isArray(ctx.extra) ? ctx.extra : [];
+        continue;
+      }
+      const matchPort = /^match(\d+)$/.exec(edge.fromPort);
+      if (matchPort) {
+        // '' rather than undefined: an unmatched slot should read as empty text downstream,
+        // not print as 'undefined' in a chat message.
+        resolved[edge.toPort] = (ctx.extra as KeyedObject)?.[Number(matchPort[1])] ?? '';
+        continue;
+      }
       // Callback output ports (username, message, etc.) come from the live trigger payload,
       // not from the graph - platformEventData first (the actual per-event Twitch/etc.
       // payload), StreamMessage field as fallback. platformEventData is only ever set for

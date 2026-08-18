@@ -4,6 +4,7 @@ import { EventGraph, KeyedObject, StreamMessage, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import {
   migrateEventsFileToGraphs,
+  upgradeGraphNodes,
   reconstructFlatEventFromGraph,
 } from '../util/EventGraphMigration';
 import { matchesTriggerValues, triggerExistsAndEnabled } from '../util/EventTriggerUtil';
@@ -62,6 +63,15 @@ export class EventService {
     this.graphs = loaded.graphs;
     this.eventGroups = loaded.groups;
     this.disabledGroups = loaded.disabledGroups;
+
+    // Written straight back to storage rather than re-derived every boot. Saved through the
+    // storage service directly, not saveEventGraphs, because the stream modules it notifies
+    // aren't up yet at this point in startup.
+    const upgraded = upgradeGraphNodes(this.graphs);
+    if (upgraded > 0) {
+      EventGraphStorageService.saveAll(this.graphs, this.eventGroups, this.disabledGroups);
+      spooderLog(`Upgraded ${upgraded} node(s) to current node types`);
+    }
     spooderLog('Got events');
 
     EventStorageService.initialize();

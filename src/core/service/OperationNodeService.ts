@@ -1,4 +1,5 @@
 import { KeyedObject, NodeForm, OperationNodeDef } from '../../Types';
+import { matchSearchPattern, patternSlots } from '../util/SearchMatchUtil';
 
 // Concat's inputs, in the order they're joined. A and B are always offered; the rest are
 // `growable`, so the frontend reveals C once A and B hold something, D once C does, and so on -
@@ -121,6 +122,27 @@ const STRING_NODES: OperationNodeDef[] = [
     },
     defaults: { text: '' },
     outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
+  },
+  {
+    id: 'search_match',
+    label: 'Search & Match',
+    description:
+      "Matches a pattern anywhere in some text and hands out the words it matched, one Match output per pattern word: '*' takes any word, '*word' skips ahead to that word, '>pre' matches a word starting with 'pre', '<suf' one ending with 'suf', and 'a|b' either. The same matcher the Chat Search & Match trigger runs, usable on any string - a Discord message, an OSC value, a stored variable.",
+    category: 'string',
+    form: {
+      text: { label: 'Text', type: 'text', portType: 'string' },
+      pattern: { label: 'Pattern', type: 'text', portType: 'string' },
+    },
+    defaults: { text: '', pattern: '' },
+    // The Match ports aren't listed: how many there are depends on the pattern, so the frontend
+    // derives them from it. They need no executor support of their own - an operation node's
+    // outputs are whatever evaluate() returns, and it returns one entry per slot.
+    outputs: [
+      { id: 'matched', label: 'Matched', dataType: 'boolean' },
+      // Every matched word in one go, for anything that wants to iterate them rather than wire
+      // each slot: typed 'any' because a port type can't say 'array of string'.
+      { id: 'matches', label: 'All Matches', dataType: 'any' },
+    ],
   },
   {
     id: 'word_at',
@@ -317,6 +339,18 @@ export default class OperationNodeService {
         return { result: String(values.text).substring(Number(values.start), Number(values.end)) };
       case 'sanitize':
         return { result: String(values.text).replace(/[`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g, '') };
+      case 'search_match': {
+        const pattern = String(values.pattern ?? '');
+        const matched = matchSearchPattern(pattern, String(values.text ?? ''));
+        // Every slot is reported whether or not the text matched: a port that resolves to
+        // undefined reads as the literal 'undefined' downstream, so an unmatched run gives
+        // empty strings and the 'matched' flag to branch on.
+        const result: KeyedObject = { matched: matched !== undefined, matches: matched ?? [] };
+        patternSlots(pattern).forEach((_slot, i) => {
+          result[`match${i}`] = matched?.[i] ?? '';
+        });
+        return result;
+      }
       case 'word_at':
         return { result: String(values.text).split(' ')[Number(values.index)] ?? '' };
       case 'equals':
