@@ -2,8 +2,12 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'fs';
 import { KeyedObject, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
+import { toArray } from '../util/ArrayUtil';
 
 type StoredType = 'string' | 'number' | 'boolean' | 'json';
+
+// What a graph node asks for. 'array' maps onto the 'json' column type below.
+export type StoredValueType = 'string' | 'number' | 'boolean' | 'array';
 
 function inferType(value: any): StoredType {
   if (typeof value === 'number') return 'number';
@@ -139,23 +143,38 @@ export default class EventStorageService {
   }
 
   // Typed get/set used by the new get_*_value/set_*_value graph nodes.
+  //
+  // 'array' isn't a column type of its own: arrays are stored as 'json' like any other
+  // structure (which is also how the response-script sandbox has always stored them), so the
+  // read checks the decoded shape rather than the row's type name. A key holding a json object
+  // reads as the default here rather than as an array, exactly as a number key reads as the
+  // default for a string get.
   static getValue(
     eventName: string,
     key: string,
-    type: 'string' | 'number' | 'boolean',
+    type: StoredValueType,
     defaultValue: any,
   ) {
     const row = EventStorageService.db
       .prepare('SELECT value_type, value_text, value_number, value_boolean FROM event_values WHERE event_name = ? AND key = ?')
       .get(eventName, key) as KeyedObject | undefined;
-    if (!row || row.value_type !== type) {
+    if (!row) {
+      return defaultValue;
+    }
+    if (type === 'array') {
+      const decoded = row.value_type === 'json' ? decodeRow(row) : undefined;
+      return Array.isArray(decoded) ? decoded : defaultValue;
+    }
+    if (row.value_type !== type) {
       return defaultValue;
     }
     const decoded = decodeRow(row);
     return decoded ?? defaultValue;
   }
 
-  static setValue(eventName: string, key: string, type: 'string' | 'number' | 'boolean', value: any) {
-    EventStorageService.setRawValue(eventName, key, value);
+  static setValue(eventName: string, key: string, type: StoredValueType, value: any) {
+    // Normalized here rather than at the call site so a Set Array Value node can never leave a
+    // scalar behind a key the matching get will then refuse to read.
+    EventStorageService.setRawValue(eventName, key, type === 'array' ? toArray(value) : value);
   }
 }

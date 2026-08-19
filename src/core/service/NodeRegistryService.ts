@@ -74,7 +74,11 @@ export default class NodeRegistryService {
 
   static getAllManifests(): NodeManifest[] {
     const manifests: NodeManifest[] = [
-      { moduleName: 'core', triggers: getCoreTriggerNodes(), actions: getCoreActionNodes() },
+      {
+        moduleName: 'core',
+        triggers: getCoreTriggerNodes(),
+        actions: getCoreActionNodes(Object.keys(ModuleService.getStreamModules())),
+      },
     ];
 
     const streamModules = ModuleService.getStreamModules();

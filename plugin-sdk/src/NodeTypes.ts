@@ -13,7 +13,9 @@ export interface NodeFieldDef {
   description?: string;
   // 'custom' renders a module-provided component: options.component must name a
   // renderer registered by the owning module via ModuleDefinition.fieldRenderers.
-  type: 'asset' | 'boolean' | 'color' | 'code' | 'select' | 'text' | 'number' | 'custom';
+  // 'port' is a wire-only input: it draws a labelled socket and nothing else, for values that
+  // can only sensibly come from another node (an array, an object) and have no typeable form.
+  type: 'asset' | 'boolean' | 'color' | 'code' | 'select' | 'text' | 'number' | 'custom' | 'port';
   options?: KeyedObject;
   showif?: { variable: string; condition: string; value: any };
   // When set, this field is also a connectable input port of the given data type:
@@ -62,7 +64,7 @@ export interface OperationNodeDef {
   id: string;
   label: string;
   description?: string;
-  category: 'math' | 'string' | 'logic' | 'random' | 'storage';
+  category: 'math' | 'string' | 'logic' | 'random' | 'storage' | 'array';
   form: NodeForm;
   defaults: KeyedObject;
   outputs: NodePortDef[];

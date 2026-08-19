@@ -1,4 +1,7 @@
 import { KeyedObject, NodeForm, OperationNodeDef } from '../../Types';
+import { spooderLog } from '../Logging';
+import { toArray } from '../util/ArrayUtil';
+import { matchCommand } from '../util/CommandMatchUtil';
 import { matchSearchPattern, patternSlots } from '../util/SearchMatchUtil';
 
 // Concat's inputs, in the order they're joined. A and B are always offered; the rest are
@@ -115,12 +118,38 @@ const STRING_NODES: OperationNodeDef[] = [
   {
     id: 'sanitize',
     label: 'Sanitize',
-    description: 'Strips punctuation/symbol characters from text.',
+    description:
+      "Strips characters out of text. Special Characters removes punctuation and symbols (the default, and what the sanitize() helper in a response script does); Numbers and Letters remove those; Custom Regex removes everything a pattern of your own matches.",
     category: 'string',
     form: {
       text: { label: 'Text', type: 'text', portType: 'string' },
+      mode: {
+        label: 'Remove',
+        type: 'select',
+        portType: 'string',
+        options: {
+          selections: {
+            special: 'Special Characters',
+            numbers: 'Numbers',
+            letters: 'Letters',
+            custom: 'Custom Regex',
+          },
+        },
+      },
+      pattern: {
+        label: 'Regex',
+        type: 'text',
+        portType: 'string',
+        showif: { variable: 'mode', condition: 'equals', value: 'custom' },
+      },
+      flags: {
+        label: "Regex Flags ('g' is always on)",
+        type: 'text',
+        portType: 'string',
+        showif: { variable: 'mode', condition: 'equals', value: 'custom' },
+      },
     },
-    defaults: { text: '' },
+    defaults: { text: '', mode: 'special', pattern: '', flags: '' },
     outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
   },
   {
@@ -145,6 +174,42 @@ const STRING_NODES: OperationNodeDef[] = [
     ],
   },
   {
+    id: 'split_text',
+    label: 'Split',
+    description:
+      "Breaks text into an array on each occurrence of the separator. An empty separator splits into single characters.",
+    category: 'string',
+    form: {
+      text: { label: 'Text', type: 'text', portType: 'string' },
+      separator: { label: 'Separator', type: 'text', portType: 'string' },
+    },
+    defaults: { text: '', separator: ' ' },
+    outputs: [
+      { id: 'result', label: 'Items', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
+  },
+  {
+    id: 'command_match',
+    label: 'Chat Command',
+    description:
+      "Whether text starts with a command, and the whitespace-separated arguments that follow it. Set Arg Count for how many argument outputs to draw; an argument the message didn't supply comes out empty. Matching is by prefix, so a command can be more than one word.",
+    category: 'string',
+    form: {
+      text: { label: 'Message', type: 'text', portType: 'string' },
+      command: { label: 'Command', type: 'text', portType: 'string' },
+      argCount: { label: 'Arg Count', type: 'number' },
+    },
+    defaults: { text: '', command: '', argCount: 0 },
+    // The Arg ports aren't listed: how many there are is the user's Arg Count, so the frontend
+    // draws them the same way it draws the OSC trigger's args, and evaluate() returns one entry
+    // per declared slot.
+    outputs: [
+      { id: 'matched', label: 'Matched', dataType: 'boolean' },
+      { id: 'args', label: 'All Args', dataType: 'any' },
+    ],
+  },
+  {
     id: 'word_at',
     label: 'Word At',
     description: 'Splits text on spaces and returns the word at the given index (0-based).',
@@ -155,6 +220,198 @@ const STRING_NODES: OperationNodeDef[] = [
     },
     defaults: { text: '', index: 0 },
     outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
+  },
+];
+
+
+// A wire-only array input. Every array node takes one of these as its subject.
+function arrayInput(label = 'Array') {
+  return { label, type: 'port' as const, portType: 'any' as const };
+}
+
+// What each Sanitize mode strips. 'special' is the character list the sanitize() helper in a
+// response script has always used, kept verbatim so the node and the helper agree.
+const SANITIZE_PATTERNS: { [mode: string]: RegExp } = {
+  special: /[`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g,
+  // Unicode-aware, so these do what they say for non-English text too: a full-width digit is a
+  // number and an accented character is a letter.
+  numbers: /\p{N}/gu,
+  letters: /\p{L}/gu,
+};
+
+function sanitizeText(text: string, values: KeyedObject): string {
+  const mode = String(values.mode || 'special');
+  if (mode !== 'custom') {
+    // An unknown mode (an empty select, an older saved node) sanitizes the way it always did.
+    return text.replace(SANITIZE_PATTERNS[mode] ?? SANITIZE_PATTERNS.special, '');
+  }
+
+  const pattern = String(values.pattern ?? '');
+  if (pattern === '') {
+    return text;
+  }
+  try {
+    // 'g' is forced on: without it a pattern would strip only its first match, which is never
+    // what "remove this" means here.
+    const flags = String(values.flags ?? '').replace(/[^a-z]/g, '');
+    return text.replace(new RegExp(pattern, flags.includes('g') ? flags : `g${flags}`), '');
+  } catch (e) {
+    // An invalid pattern (or flag) leaves the text alone rather than taking the event down with
+    // it - the node is usually mid-chain and a half-typed regex shouldn't stop the branch.
+    spooderLog(`Sanitize node: invalid regex ${JSON.stringify(pattern)}`, e);
+    return text;
+  }
+}
+
+const ARRAY_NODES: OperationNodeDef[] = [
+  {
+    id: 'array_at',
+    label: 'Item At',
+    description:
+      'The item at an index, counting from 0. Negative indexes count back from the end, so -1 is the last item.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      index: { label: 'Index', type: 'number', portType: 'number' },
+    },
+    defaults: { index: 0 },
+    outputs: [{ id: 'value', label: 'Item', dataType: 'any' }],
+  },
+  {
+    id: 'array_length',
+    label: 'Length',
+    description: 'How many items the array holds.',
+    category: 'array',
+    form: { array: arrayInput() },
+    defaults: {},
+    outputs: [{ id: 'result', label: 'Length', dataType: 'number' }],
+  },
+  {
+    id: 'array_join',
+    label: 'Join',
+    description: 'Glues the items into one string, separated by the given text.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      separator: { label: 'Separator', type: 'text', portType: 'string' },
+    },
+    defaults: { separator: ' ' },
+    outputs: [{ id: 'result', label: 'Text', dataType: 'string' }],
+  },
+  {
+    id: 'array_includes',
+    label: 'Includes',
+    description: 'Whether the array contains a value, and where it sits. Index is -1 when absent.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      value: { label: 'Value', type: 'text', portType: 'any' },
+    },
+    defaults: { value: '' },
+    outputs: [
+      { id: 'result', label: 'Includes', dataType: 'boolean' },
+      { id: 'index', label: 'Index', dataType: 'number' },
+    ],
+  },
+  {
+    id: 'array_sort',
+    label: 'Sort',
+    description: 'A sorted copy of the array. Text sorts alphabetically, Number sorts numerically.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      mode: {
+        label: 'Order',
+        type: 'select',
+        options: {
+          selections: {
+            text_asc: 'Text A-Z',
+            text_desc: 'Text Z-A',
+            number_asc: 'Number 0-9',
+            number_desc: 'Number 9-0',
+          },
+        },
+      },
+    },
+    defaults: { mode: 'text_asc' },
+    outputs: [{ id: 'result', label: 'Sorted', dataType: 'any' }],
+  },
+  {
+    id: 'array_push',
+    label: 'Push',
+    description: 'The array with a value added to the end.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      value: { label: 'Value', type: 'text', portType: 'any' },
+    },
+    defaults: { value: '' },
+    outputs: [
+      { id: 'result', label: 'Array', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
+  },
+  {
+    id: 'array_unshift',
+    label: 'Unshift',
+    description: 'The array with a value added to the front.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      value: { label: 'Value', type: 'text', portType: 'any' },
+    },
+    defaults: { value: '' },
+    outputs: [
+      { id: 'result', label: 'Array', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
+  },
+  {
+    id: 'array_pop',
+    label: 'Pop',
+    description:
+      "The last item, and the array without it. Nothing is modified in place - wire 'Array' onward to keep the shortened version.",
+    category: 'array',
+    form: { array: arrayInput() },
+    defaults: {},
+    outputs: [
+      { id: 'value', label: 'Popped', dataType: 'any' },
+      { id: 'result', label: 'Array', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
+  },
+  {
+    id: 'array_shift',
+    label: 'Shift',
+    description:
+      "The first item, and the array without it. Nothing is modified in place - wire 'Array' onward to keep the shortened version.",
+    category: 'array',
+    form: { array: arrayInput() },
+    defaults: {},
+    outputs: [
+      { id: 'value', label: 'Shifted', dataType: 'any' },
+      { id: 'result', label: 'Array', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
+  },
+  {
+    id: 'array_splice',
+    label: 'Splice',
+    description:
+      'Removes Count items from Start and optionally inserts in their place. An array wired into Insert is spliced in item by item; anything else goes in as a single item.',
+    category: 'array',
+    form: {
+      array: arrayInput(),
+      start: { label: 'Start', type: 'number', portType: 'number' },
+      count: { label: 'Count', type: 'number', portType: 'number' },
+      insert: { label: 'Insert (optional)', type: 'text', portType: 'any' },
+    },
+    defaults: { start: 0, count: 1, insert: '' },
+    outputs: [
+      { id: 'result', label: 'Array', dataType: 'any' },
+      { id: 'removed', label: 'Removed', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
   },
 ];
 
@@ -272,6 +529,20 @@ const LOGIC_NODES: OperationNodeDef[] = [
     outputs: [{ id: 'result', label: 'Result', dataType: 'boolean' }],
   },
   {
+    id: 'if_value',
+    label: 'If Value',
+    description:
+      "Picks between two values on a condition - the value counterpart to the If node, which picks between two branches of execution. Both sides are worked out either way (operation nodes are pure, so there's nothing to skip); it's the answer that's chosen.",
+    category: 'logic',
+    form: {
+      condition: { label: 'Condition', type: 'boolean', portType: 'boolean' },
+      whenTrue: { label: 'If True', type: 'text', portType: 'any' },
+      whenFalse: { label: 'If False', type: 'text', portType: 'any' },
+    },
+    defaults: { condition: false, whenTrue: '', whenFalse: '' },
+    outputs: [{ id: 'value', label: 'Value', dataType: 'any' }],
+  },
+  {
     id: 'not',
     label: 'Not',
     category: 'logic',
@@ -301,7 +572,7 @@ const RANDOM_NODES: OperationNodeDef[] = [
 
 export default class OperationNodeService {
   static getOperationNodes(): OperationNodeDef[] {
-    return [...MATH_NODES, ...STRING_NODES, ...LOGIC_NODES, ...RANDOM_NODES];
+    return [...MATH_NODES, ...STRING_NODES, ...ARRAY_NODES, ...LOGIC_NODES, ...RANDOM_NODES];
   }
 
   static isOperationNode(nodeTypeId: string): boolean {
@@ -338,7 +609,18 @@ export default class OperationNodeService {
       case 'substring':
         return { result: String(values.text).substring(Number(values.start), Number(values.end)) };
       case 'sanitize':
-        return { result: String(values.text).replace(/[`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g, '') };
+        return { result: sanitizeText(String(values.text ?? ''), values) };
+      case 'command_match': {
+        const { matched, args } = matchCommand(values.command, values.text);
+        const result: KeyedObject = { matched, args };
+        const argCount = Number(values.argCount);
+        for (let i = 0; i < (Number.isFinite(argCount) ? argCount : 0); i++) {
+          // Declared slots always resolve: an argument nobody typed reads as empty rather than
+          // printing as 'undefined' downstream.
+          result[`arg${i}`] = args[i] ?? '';
+        }
+        return result;
+      }
       case 'search_match': {
         const pattern = String(values.pattern ?? '');
         const matched = matchSearchPattern(pattern, String(values.text ?? ''));
@@ -353,6 +635,81 @@ export default class OperationNodeService {
       }
       case 'word_at':
         return { result: String(values.text).split(' ')[Number(values.index)] ?? '' };
+      case 'array_at': {
+        const items = toArray(values.array);
+        const index = Number(values.index);
+        const from = Number.isFinite(index) ? index : 0;
+        // Array.prototype.at() semantics, spelled out: the project's TS lib target predates it,
+        // and a node isn't a reason to move the whole build's target.
+        const value = items[from < 0 ? items.length + from : from];
+        return { value: value ?? '' };
+      }
+      case 'array_length':
+        return { result: toArray(values.array).length };
+      case 'array_join':
+        return { result: toArray(values.array).join(String(values.separator ?? '')) };
+      case 'split_text': {
+        const items = String(values.text ?? '').split(String(values.separator ?? ''));
+        return { result: items, length: items.length };
+      }
+      case 'array_includes': {
+        const items = toArray(values.array);
+        // Loose equality, matching the 'equals' node: a number that arrived down a wire and the
+        // text typed into the Value box should still find each other.
+        const index = items.findIndex((item) => item == values.value);
+        return { result: index !== -1, index };
+      }
+      case 'array_sort': {
+        const items = toArray(values.array);
+        const numeric = String(values.mode ?? '').startsWith('number');
+        const descending = String(values.mode ?? '').endsWith('desc');
+        items.sort((a, b) => {
+          const order = numeric
+            ? Number(a) - Number(b)
+            : String(a).localeCompare(String(b));
+          return descending ? -order : order;
+        });
+        return { result: items };
+      }
+      case 'array_push': {
+        const items = toArray(values.array);
+        items.push(values.value);
+        return { result: items, length: items.length };
+      }
+      case 'array_unshift': {
+        const items = toArray(values.array);
+        items.unshift(values.value);
+        return { result: items, length: items.length };
+      }
+      case 'array_pop': {
+        const items = toArray(values.array);
+        const value = items.pop();
+        return { result: items, value: value ?? '', length: items.length };
+      }
+      case 'array_shift': {
+        const items = toArray(values.array);
+        const value = items.shift();
+        return { result: items, value: value ?? '', length: items.length };
+      }
+      case 'array_splice': {
+        const items = toArray(values.array);
+        const start = Number(values.start);
+        const count = Number(values.count);
+        // An empty Insert box is 'insert nothing', not 'insert an empty string' - the field is
+        // optional and starts out empty.
+        const insert =
+          values.insert === undefined || values.insert === null || values.insert === ''
+            ? []
+            : Array.isArray(values.insert)
+              ? values.insert
+              : [values.insert];
+        const removed = items.splice(
+          Number.isFinite(start) ? start : 0,
+          Number.isFinite(count) ? count : 0,
+          ...insert,
+        );
+        return { result: items, removed, length: items.length };
+      }
       case 'equals':
         return { result: values.a == values.b };
       case 'greater_than':
@@ -375,6 +732,10 @@ export default class OperationNodeService {
         return { result: Boolean(values.a) || Boolean(values.b) };
       case 'not':
         return { result: !values.value };
+      case 'if_value':
+        // Plain truthiness, matching what the If node does with the same input - the two should
+        // never disagree about what counts as true.
+        return { value: values.condition ? values.whenTrue : values.whenFalse };
       case 'choose_random': {
         const options = [values.a, values.b, values.c, values.d].filter(
           (v) => v !== '' && v !== undefined && v !== null,

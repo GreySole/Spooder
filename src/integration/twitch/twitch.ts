@@ -10,7 +10,6 @@ import {
   TriggerNodeDef,
   userDir,
 } from '../../Types';
-import { buildChatMessageTriggerNode, buildChatSearchTriggerNode } from '../../core/util/StreamModuleNodeUtil';
 import TwitchApi from './TwitchApi';
 import TwitchChat from './TwitchChat';
 import TwitchCLI from './TwitchCLI';
@@ -169,25 +168,6 @@ export default class Twitch implements StreamModuleInterface {
 
   getTriggerNodes = (): TriggerNodeDef[] => {
     return [
-      {
-        id: 'chat_command',
-        label: 'Chat Command',
-        description: 'Fires when a chat message starts with this command. To match a phrase anywhere in a message instead, use the Chat Search & Match node.',
-        form: {
-          command: { label: 'Command', type: 'text' },
-          vip: { label: 'Require VIP', type: 'boolean' },
-          mod: { label: 'Require Mod', type: 'boolean' },
-          sub: { label: 'Require Subscriber', type: 'boolean' },
-          broadcaster: { label: 'Require Broadcaster', type: 'boolean' },
-        },
-        defaults: { command: '', vip: false, mod: false, sub: false, broadcaster: false },
-        outputs: [
-          { id: 'username', label: 'Username', dataType: 'string' },
-          { id: 'message', label: 'Message', dataType: 'string' },
-        ],
-      },
-      buildChatSearchTriggerNode(),
-      buildChatMessageTriggerNode(),
       {
         id: 'channel_point_redeem',
         label: 'Channel Point Redeem',

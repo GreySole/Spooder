@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventGraph, KeyedObject, StreamMessage, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import {
+  CHAT_TRIGGER_NODE_TYPES,
   migrateEventsFileToGraphs,
+  OSC_TRIGGER_NODE_TYPES,
   upgradeGraphNodes,
   reconstructFlatEventFromGraph,
 } from '../util/EventGraphMigration';
@@ -11,7 +13,7 @@ import { matchesTriggerValues, triggerExistsAndEnabled } from '../util/EventTrig
 import { buildMockStreamMessage } from '../util/ResponseUtil';
 import ConfigService from './ConfigService';
 import EventResponseCommand from './event/EventResponseCommand';
-import { walkEventGraph } from './event/EventGraphExecutor';
+import { entryNodesForDispatch, walkEventGraph } from './event/EventGraphExecutor';
 import EventGraphStorageService from './EventGraphStorageService';
 import EventStorageService from './EventStorageService';
 import ModuleService from './ModuleService';
@@ -429,6 +431,46 @@ export class EventService {
       }
     }
 
+    // The walk decides whether this event actually did anything: matching moved into the graph
+    // (Chat Message -> a matcher -> If), so runCommands is now asked on every message and only
+    // the walk knows whether a branch was taken. The activation notice and the cooldown that
+    // follow used to run before this, which - once an event could decline - meant announcing and
+    // locking out an event for a message it ignored.
+    const graph = EventService.getGraphs()[eventName];
+    let ranActions = 0;
+    if (graph) {
+      const graphContext = { eventName, streamMessage, extra, isChat, isOSC, event, activeEvents };
+      // Only the branch belonging to the trigger that fired, and only if that trigger's
+      // condition input (if it has one wired) says yes. A graph can hold more than one trigger -
+      // a chat command and the Timer Elapsed it starts, say - and walking from every entry point
+      // would run the timer's actions the moment a chat message arrived.
+      const triggerNodeTypes = isChat
+        ? CHAT_TRIGGER_NODE_TYPES
+        : isOSC
+          ? OSC_TRIGGER_NODE_TYPES
+          : undefined;
+      ranActions = walkEventGraph(
+        graph,
+        graphContext,
+        entryNodesForDispatch(graph, graphContext, triggerNodeTypes),
+      );
+    } else if (event.commands) {
+      // Mod-command virtual events aren't backed by a graph (they live in mod_commands.json)
+      // and are always exactly one 'response' command - handled directly.
+      const eCommand = event.commands[0];
+      const thisCommand = EventResponseCommand(eCommand, eventName, streamMessage, extra);
+      if (eCommand.delay == 0) {
+        thisCommand();
+      } else {
+        setTimeout(thisCommand, eCommand.delay);
+      }
+      ranActions = 1;
+    }
+
+    if (ranActions === 0) {
+      return;
+    }
+
     if (isChat && event.chatnotification == true) {
       sayInChat(
         streamMessage.displayName + ' has activated ' + event.name + '!',
@@ -460,20 +502,6 @@ export class EventService {
       }
     }
 
-    const graph = EventService.getGraphs()[eventName];
-    if (graph) {
-      walkEventGraph(graph, { eventName, streamMessage, extra, isChat, isOSC, event, activeEvents });
-    } else if (event.commands) {
-      // Mod-command virtual events aren't backed by a graph (they live in mod_commands.json)
-      // and are always exactly one 'response' command - handled directly.
-      const eCommand = event.commands[0];
-      const thisCommand = EventResponseCommand(eCommand, eventName, streamMessage, extra);
-      if (eCommand.delay == 0) {
-        thisCommand();
-      } else {
-        setTimeout(thisCommand, eCommand.delay);
-      }
-    }
   };
 
   // Runs only the branch hanging off one specific callback node, rather than every entry
@@ -501,19 +529,17 @@ export class EventService {
       return;
     }
 
-    walkEventGraph(
-      graph,
-      {
-        eventName,
-        streamMessage,
-        extra,
-        isChat: false,
-        isOSC: false,
-        event,
-        activeEvents: EventService.getActiveEvents(),
-      },
-      entryNodeIds,
-    );
+    const graphContext = {
+      eventName,
+      streamMessage,
+      extra,
+      isChat: false,
+      isOSC: false,
+      event,
+      activeEvents: EventService.getActiveEvents(),
+    };
+
+    walkEventGraph(graph, graphContext, entryNodeIds);
   }
 
   static createTimeout(

@@ -21,11 +21,20 @@ export interface PluginApiResponse {
   json(body?: any): void;
 }
 
+// Which module produced a message: a stream module's registered name (the `name` in its
+// package.json `spooder_module` block), or 'osc' for the StreamMessage the OSC layer synthesizes
+// for OSC-triggered events - nothing chatted that one.
+//
+// Left open rather than closed to the names below: stream modules are discovered at load time,
+// so a module built against this SDK has to be able to identify itself without the SDK knowing
+// about it first. The listed names are the ones this repo ships, and they autocomplete.
+export type StreamPlatform = 'twitch' | 'osc' | (string & {});
+
 export interface StreamMessage {
   userId: string;
   username: string;
   displayName: string;
-  platform: string;
+  platform: StreamPlatform;
   channel: string;
   message: string;
   messageType: string;
