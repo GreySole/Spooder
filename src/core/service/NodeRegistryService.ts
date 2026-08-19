@@ -44,10 +44,21 @@ function withInferredPortTypes(form: NodeForm): NodeForm {
   return ported;
 }
 
+// An events-form.json event may set `nodeWidth` beside its label to say how wide its node card
+// should start out - worth doing for an event whose fields need the room (an asset picker draws
+// a preview, a code field an editor). Anything unusable is dropped rather than clamped, so a
+// typo falls back to the standard width instead of silently becoming some other number; the
+// frontend clamps what's left to the same range a user can drag a card to.
+function pluginNodeWidth(declared: any): number | undefined {
+  const width = Number(declared);
+  return Number.isFinite(width) && width > 0 ? width : undefined;
+}
+
 function pluginFormToActionNodes(form: KeyedObject): ActionNodeDef[] {
   return Object.keys(form).map((actionId) => ({
     id: actionId,
     label: form[actionId].label ?? actionId,
+    nodeWidth: pluginNodeWidth(form[actionId].nodeWidth),
     form: withInferredPortTypes(form[actionId].form ?? {}),
     defaults: form[actionId].defaults ?? {},
   }));

@@ -40,6 +40,7 @@ export default class EventGraphStorageService {
         delay REAL,
         position_x REAL NOT NULL,
         position_y REAL NOT NULL,
+        width REAL,
         PRIMARY KEY (event_id, node_id)
       ) WITHOUT ROWID;
 
@@ -60,8 +61,24 @@ export default class EventGraphStorageService {
       ) WITHOUT ROWID;
     `);
 
+    EventGraphStorageService.addMissingColumns();
+
     if (isNewDb) {
       EventGraphStorageService.migrateFromJson();
+    }
+  }
+
+  // CREATE TABLE IF NOT EXISTS leaves an existing table exactly as it was, so a column added to
+  // the schema above never reaches a database that already exists. Adding them here keeps both
+  // paths on one shape: a fresh database gets them from the CREATE, an older one from these.
+  private static addMissingColumns() {
+    const columns = new Set(
+      (EventGraphStorageService.db.prepare('PRAGMA table_info(event_nodes)').all() as KeyedObject[]).map(
+        (row) => row.name as string,
+      ),
+    );
+    if (!columns.has('width')) {
+      EventGraphStorageService.db.exec('ALTER TABLE event_nodes ADD COLUMN width REAL');
     }
   }
 
@@ -119,6 +136,11 @@ export default class EventGraphStorageService {
       };
       if (row.delay !== null) {
         node.delay = row.delay as number;
+      }
+      // Null for every node the user hasn't resized - the card falls back to the node type's
+      // own nodeWidth, then to the standard width.
+      if (row.width !== null && row.width !== undefined) {
+        node.width = row.width as number;
       }
       if (!nodesByEvent.has(row.event_id as string)) {
         nodesByEvent.set(row.event_id as string, []);
@@ -180,8 +202,8 @@ export default class EventGraphStorageService {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       );
       const insertNode = db.prepare(
-        `INSERT INTO event_nodes (event_id, node_id, kind, module_name, node_type_id, values_json, delay, position_x, position_y)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO event_nodes (event_id, node_id, kind, module_name, node_type_id, values_json, delay, position_x, position_y, width)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const insertEdge = db.prepare(
         `INSERT INTO event_edges (event_id, edge_id, from_node, from_port, to_node, to_port)
@@ -213,6 +235,7 @@ export default class EventGraphStorageService {
             node.delay ?? null,
             node.position.x,
             node.position.y,
+            node.width ?? null,
           );
         }
         for (const edge of graph.edges) {

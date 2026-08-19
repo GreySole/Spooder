@@ -37,6 +37,11 @@ export interface TriggerNodeDef {
   id: string;
   label: string;
   description?: string;
+  // How wide this node's card should be by default, in graph units. Omit to take the standard
+  // width - only worth setting for a node whose controls need the room (an asset picker with a
+  // preview, a code editor). The user can still resize any card, and a card they have resized
+  // keeps their width instead.
+  nodeWidth?: number;
   form: NodeForm;
   defaults: KeyedObject;
   // Ports exposing payload data to downstream nodes once the trigger fires.
@@ -47,6 +52,8 @@ export interface ActionNodeDef {
   id: string;
   label: string;
   description?: string;
+  // See TriggerNodeDef.nodeWidth. A plugin sets this per event in its events-form.json.
+  nodeWidth?: number;
   form: NodeForm;
   defaults: KeyedObject;
   // Rarely used: reserved for actions that hand a result back into the graph.
@@ -65,6 +72,8 @@ export interface OperationNodeDef {
   label: string;
   description?: string;
   category: 'math' | 'string' | 'logic' | 'random' | 'storage' | 'array';
+  // See TriggerNodeDef.nodeWidth.
+  nodeWidth?: number;
   form: NodeForm;
   defaults: KeyedObject;
   outputs: NodePortDef[];
@@ -94,6 +103,9 @@ export interface EventGraphNode {
   values: KeyedObject;
   delay?: number;
   position: { x: number; y: number };
+  // A width the user dragged this card to, overriding the node type's own `nodeWidth` and the
+  // frontend's default. Absent on every node nobody has resized, which is most of them.
+  width?: number;
 }
 
 export interface EventGraphEdge {
