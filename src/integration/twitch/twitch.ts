@@ -181,6 +181,8 @@ export default class Twitch implements StreamModuleInterface {
           { id: 'rewardTitle', label: 'Reward Title', dataType: 'string' },
           { id: 'status', label: 'Status', dataType: 'string' },
           { id: 'username', label: 'Username', dataType: 'string' },
+          { id: 'displayName', label: 'Display Name', dataType: 'string' },
+          { id: 'userId', label: 'User ID', dataType: 'string' },
         ],
       },
       {
@@ -195,6 +197,8 @@ export default class Twitch implements StreamModuleInterface {
         outputs: [
           { id: 'type', label: 'Event Type', dataType: 'string' },
           { id: 'username', label: 'Username', dataType: 'string' },
+          { id: 'displayName', label: 'Display Name', dataType: 'string' },
+          { id: 'userId', label: 'User ID', dataType: 'string' },
         ],
       },
       ...getTwitchEventSubTriggerNodes(),
@@ -306,6 +310,13 @@ export default class Twitch implements StreamModuleInterface {
       this.chat.runChat();
       this.eventsub.initialize();
       this.loggedIn = true;
+      // Warm the cheermote cache so the first cheer of a stream renders its art rather than
+      // plain text - the chat path reads the cache synchronously and can't fetch on demand.
+      // Deliberately not awaited: login must not wait on, or fail over, a decoration.
+      this.api
+        .getBroadcasterId()
+        .then((broadcasterId) => this.api.getCheermotes(broadcasterId))
+        .catch(() => {});
       res(true);
     });
   }

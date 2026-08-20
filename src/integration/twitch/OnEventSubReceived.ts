@@ -6,6 +6,7 @@ import ShareService from '../../core/service/ShareService';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 import Discord from '../discord/discord';
 import Twitch, { twitchLog } from './twitch';
+import parseCheermotes from './functions/parseCheermotes';
 
 export default async function OnEventSubReceived(type: string, event: KeyedObject) {
   const twitchModule = ModuleService.getStreamModule('twitch') as Twitch;
@@ -98,13 +99,31 @@ export default async function OnEventSubReceived(type: string, event: KeyedObjec
     return;
   }
 
+  // Cheermotes are not emotes: the channel.cheer payload carries the raw message text
+  // ('Cheer100 pogchamp Kappa250') with no positional data at all, so unlike a chat message
+  // there is nothing to hand an overlay that says which parts are art. Resolving them here -
+  // rather than leaving it to whatever consumes the event - means the Cheer node's `emotes` and
+  // `cheermotes` ports carry the same already-positioned array a chat message's do, and an
+  // overlay renders both with one code path.
+  if (type == 'channel.cheer') {
+    // The guard above already returned for any broadcaster but ours, so this id is the home
+    // channel's - passed explicitly rather than left to default so the cheermote set is always
+    // the one belonging to the channel the cheer happened in.
+    const cheermotes = await twitchModule.api.getCheermotes(event.broadcaster_user_id);
+    const matches = parseCheermotes(event.message, cheermotes);
+    streamMessage.emotes = matches;
+    // Also under its own name so a graph can wire cheermotes specifically without having to
+    // filter a mixed emote array by `type`.
+    streamMessage.platformEventData!.cheermotes = matches;
+  }
+
   if (type == 'channel.raid') {
     await twitchModule.api.getBroadcasterId();
-    if (event.to_broadcaster_user_id == twitchModule.api.broadcasterUserID) {
-      streamMessage.platformEventData!.raidType = 'receive';
-    } else if (event.from_broadcaster_user_id == twitchModule.api.broadcasterUserID) {
-      streamMessage.platformEventData!.raidType = 'send';
-    }
+    // The Raid trigger node's `isReceived` port: true when this channel is the raid's target,
+    // false when this channel is the one raiding out. Twitch sends the same subscription type
+    // for both directions, so the only thing telling them apart is which side we're on.
+    streamMessage.platformEventData!.isReceived =
+      event.to_broadcaster_user_id == twitchModule.api.broadcasterUserID;
   }
 
   if (type == 'channel.channel_points_custom_reward_redemption.add') {

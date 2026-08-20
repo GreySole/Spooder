@@ -32,6 +32,8 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when someone follows the channel.',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'followed_at', label: 'Followed At', dataType: 'string' },
     ],
   },
@@ -42,6 +44,8 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when someone subscribes to the channel.',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'tier', label: 'Tier', dataType: 'string' },
       { id: 'is_gift', label: 'Is Gift', dataType: 'boolean' },
     ],
@@ -53,6 +57,8 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when a subscription ends.',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'tier', label: 'Tier', dataType: 'string' },
       { id: 'is_gift', label: 'Is Gift', dataType: 'boolean' },
     ],
@@ -64,6 +70,8 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when someone gifts subscriptions to the channel.',
     outputs: [
       { id: 'username', label: 'Gifter Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'total', label: 'Total Gifted', dataType: 'number' },
       { id: 'tier', label: 'Tier', dataType: 'string' },
       { id: 'is_anonymous', label: 'Is Anonymous', dataType: 'boolean' },
@@ -76,6 +84,8 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when a subscriber shares a resub message.',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'tier', label: 'Tier', dataType: 'string' },
       { id: 'cumulative_months', label: 'Cumulative Months', dataType: 'number' },
       { id: 'streak_months', label: 'Streak Months', dataType: 'number' },
@@ -85,11 +95,18 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     nodeTypeId: 'cheer',
     subscriptionType: 'channel.cheer',
     label: 'Cheer',
-    description: 'Fires when someone cheers bits.',
+    description:
+      'Fires when someone cheers bits. Cheermotes carries the cheermote art found in the message - wire it, with Message, into an overlay plugin action to render the cheer as Twitch draws it.',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'bits', label: 'Bits', dataType: 'number' },
       { id: 'message', label: 'Message', dataType: 'string' },
+      // Resolved in OnEventSubReceived, since the raw channel.cheer payload has no positional
+      // data at all. 'any' because it's an array of objects - see CheermoteMatch in
+      // functions/parseCheermotes, whose {id, start, end} prefix matches the chat emote shape.
+      { id: 'cheermotes', label: 'Cheermotes', dataType: 'any' },
       { id: 'is_anonymous', label: 'Is Anonymous', dataType: 'boolean' },
     ],
   },
@@ -100,8 +117,10 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when the channel is raided (or raids another channel).',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'viewers', label: 'Viewers', dataType: 'number' },
-      { id: 'raidType', label: 'Raid Type (send/receive)', dataType: 'string' },
+      { id: 'isReceived', label: 'Is Received', dataType: 'boolean' },
     ],
   },
   {
@@ -111,6 +130,8 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     description: 'Fires when a user is banned or timed out.',
     outputs: [
       { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'reason', label: 'Reason', dataType: 'string' },
       { id: 'is_permanent', label: 'Is Permanent', dataType: 'boolean' },
     ],
@@ -120,21 +141,33 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     subscriptionType: 'channel.unban',
     label: 'Unban',
     description: 'Fires when a user is unbanned.',
-    outputs: [{ id: 'username', label: 'Username', dataType: 'string' }],
+    outputs: [
+      { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
+    ],
   },
   {
     nodeTypeId: 'moderator_add',
     subscriptionType: 'channel.moderator.add',
     label: 'Moderator Added',
     description: 'Fires when a user is granted moderator status.',
-    outputs: [{ id: 'username', label: 'Username', dataType: 'string' }],
+    outputs: [
+      { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
+    ],
   },
   {
     nodeTypeId: 'moderator_remove',
     subscriptionType: 'channel.moderator.remove',
     label: 'Moderator Removed',
     description: 'Fires when a user loses moderator status.',
-    outputs: [{ id: 'username', label: 'Username', dataType: 'string' }],
+    outputs: [
+      { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
+    ],
   },
   {
     nodeTypeId: 'poll_begin',

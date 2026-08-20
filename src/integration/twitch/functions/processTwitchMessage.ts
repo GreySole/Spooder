@@ -3,6 +3,7 @@ import ShareService from '../../../core/service/ShareService';
 import { KeyedObject } from '../../../Types';
 import { twitchLog } from '../twitch';
 import TwitchChat from '../TwitchChat';
+import parseCheermotes from './parseCheermotes';
 
 export const twitchEvents = [
   'messagedeleted',
@@ -129,6 +130,14 @@ export function processTwitchEvent(this: TwitchChat, eventType: string, ...args:
       message.tags = args[1];
       message.message = args[2];
       message.bits = args[1]?.bits;
+      // Cheermote positions within the message text. tmi's tags mark regular emotes but say
+      // nothing about cheermotes, so a plugin listening here would otherwise have to know
+      // Twitch's token format and own tier list to draw them. Read from cache rather than
+      // fetched because this handler is synchronous - see getCachedCheermotes.
+      message.cheermotes = parseCheermotes(
+        args[2],
+        this.getModule().api.getCachedCheermotes(args[1]?.['room-id']),
+      );
       message.isBroadcaster = args[1]?.badges?.broadcaster == '1';
       message.isMod = args[1]?.mod == true;
       message.isSubscriber = args[1]?.subscriber == true;

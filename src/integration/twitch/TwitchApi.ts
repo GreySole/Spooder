@@ -460,6 +460,70 @@ export default class TwitchApi {
     });
   };
 
+  // Cheermotes change on the order of months (Twitch adds a global set now and then; a channel
+  // adds one when it unlocks a new tier), but a cheer needs them synchronously to render, so
+  // they're fetched once and held. Keyed by broadcaster because the endpoint returns global
+  // cheermotes *plus* that channel's own - a shared channel's cheer must not be drawn with the
+  // home channel's custom set.
+  cheermoteCache: { [broadcasterId: string]: { fetchedAt: number; data: KeyedObject[] } } = {};
+
+  // Long enough that a normal stream fetches once, short enough that adding a cheermote
+  // mid-stream shows up without a restart.
+  static CHEERMOTE_CACHE_MS = 60 * 60 * 1000;
+
+  // Global + channel cheermotes for a broadcaster, as helix's `data` array (see
+  // parseCheermotes for the shape consumed out of it). Get Cheermotes needs no scope beyond a
+  // valid token, so this asks for nothing existing users haven't already granted.
+  //
+  // Failure resolves to [] rather than rejecting: the caller is event dispatch, where the cost
+  // of no cheermote list is a cheer rendered as plain text, and the cost of a rejection is a
+  // dropped event.
+  getCheermotes = async (broadcasterId?: string): Promise<KeyedObject[]> => {
+    const id = broadcasterId || this.broadcasterUserID;
+    if (!id || this.getModule().loggedIn == false) {
+      return [];
+    }
+
+    const cached = this.cheermoteCache[id];
+    if (cached && Date.now() - cached.fetchedAt < TwitchApi.CHEERMOTE_CACHE_MS) {
+      return cached.data;
+    }
+
+    try {
+      const response = (await this.callBroadcasterApi(
+        'https://api.twitch.tv/helix/bits/cheermotes?broadcaster_id=' + id,
+      )) as KeyedObject | undefined;
+      const data = Array.isArray(response?.data) ? (response!.data as KeyedObject[]) : [];
+      // A successful-but-empty response is still cached: it means this channel genuinely has
+      // none, and re-asking on every cheer would be a request per cheer.
+      this.cheermoteCache[id] = { fetchedAt: Date.now(), data };
+      return data;
+    } catch (e) {
+      twitchLog('getCheermotes error: ', e);
+      // Deliberately not cached - a network blip shouldn't cost the overlay its cheermotes for
+      // the next hour. The stale set is better than nothing if there is one.
+      return cached?.data ?? [];
+    }
+  };
+
+  // The synchronous read, for callers that can't await one - tmi's chat events are dispatched
+  // from a plain synchronous handler (see processTwitchEvent), and turning that async to fetch
+  // a rarely-changing list would reorder plugin dispatch for every event on the chat path.
+  // Returns whatever is cached (stale included, which is nearly always right for a list that
+  // changes monthly) and kicks off a refresh in the background when it isn't fresh, so a cold
+  // start self-heals by the next cheer instead of staying empty.
+  getCachedCheermotes = (broadcasterId?: string): KeyedObject[] => {
+    const id = broadcasterId || this.broadcasterUserID;
+    if (!id) {
+      return [];
+    }
+    const cached = this.cheermoteCache[id];
+    if (!cached || Date.now() - cached.fetchedAt >= TwitchApi.CHEERMOTE_CACHE_MS) {
+      this.getCheermotes(id).catch(() => {});
+    }
+    return cached?.data ?? [];
+  };
+
   getUserInfoById = async (id: string): Promise<KeyedObject> => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;
