@@ -74,11 +74,19 @@ interface WebUIUpdateSection {
   schedule: string;
 }
 
+// Only ever checks for plugin updates and flags them - installs stay manual, since a
+// plugin reload mid-stream is the user's call to make.
+interface PluginUpdateSection {
+  enabled: boolean;
+  schedule: string;
+}
+
 export interface ConfigFile {
   bot: ConfigBotSection;
   network: ConfigNetworkSection;
   backup: BackupSection;
   webui_update: WebUIUpdateSection;
+  plugin_update: PluginUpdateSection;
 }
 
 export interface OverlayContainerEntry {
@@ -143,6 +151,10 @@ export default class ConfigService {
       },
     },
     webui_update: {
+      enabled: false,
+      schedule: '0 0 * * *',
+    },
+    plugin_update: {
       enabled: false,
       schedule: '0 0 * * *',
     },
@@ -259,6 +271,9 @@ export default class ConfigService {
           webui_update:
             (configObj.webui_update as WebUIUpdateSection) ||
             ConfigService.instance.config.webui_update,
+          plugin_update:
+            (configObj.plugin_update as PluginUpdateSection) ||
+            ConfigService.instance.config.plugin_update,
         };
 
         ConfigService.instance.config = newConfig;
@@ -266,10 +281,19 @@ export default class ConfigService {
         if (!configObj.webui_update) {
           configObj.webui_update = ConfigService.instance.config.webui_update;
         }
+        if (!configObj.plugin_update) {
+          configObj.plugin_update = ConfigService.instance.config.plugin_update;
+        }
         ConfigService.instance.config = configObj;
       }
       BackupRestoreService.InitSchedule();
       WebUIUpdateService.InitSchedule();
+      // Loaded lazily on purpose: PluginRepoService pulls in the whole plugin runtime,
+      // which imports ConfigService back. A static import here would make that cycle part
+      // of module load order instead of a runtime call.
+      import('./PluginRepoService')
+        .then((m) => m.default.InitSchedule())
+        .catch((e) => spooderLog('Failed to schedule plugin update checks:', e.message ?? e));
     } catch (e) {
       console.error(e);
     }

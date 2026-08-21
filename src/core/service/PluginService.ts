@@ -173,14 +173,19 @@ export default class PluginService {
     return PluginService.instance.settings[pluginName].enabled;
   }
 
-  static setDevMode(pluginName: string, isEnabled: boolean) {
+  // `refresh` is opt-out for installers, which need the flag written before the plugin's
+  // files land: Plugin reads it to decide between build/manifest.json and running from
+  // source, and there's nothing to reload until the install finishes.
+  static setDevMode(pluginName: string, isEnabled: boolean, refresh = true) {
     if (PluginService.instance.settings[pluginName]) {
       PluginService.instance.settings[pluginName].dev_mode = isEnabled;
     } else {
       PluginService.instance.settings[pluginName] = { dev_mode: isEnabled };
     }
     PluginService.instance.saveGlobalPluginSettings();
-    PluginService.refreshPlugin(pluginName);
+    if (refresh) {
+      PluginService.refreshPlugin(pluginName);
+    }
   }
 
   static isPluginInDevMode(pluginName: string) {
@@ -425,6 +430,7 @@ export default class PluginService {
     return {
       status: 'OK',
       message: '',
+      pluginName: finalPluginName,
     };
   }
 

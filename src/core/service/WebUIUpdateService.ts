@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import nodeSchedule from 'node-schedule';
 import path from 'path';
 import { spooderLog } from '../Logging';
+import { compareVersions } from '../util/VersionUtil';
 import ConfigService from './ConfigService';
 
 interface WebUIModule {
@@ -45,21 +46,6 @@ function versionMarkerPath(mod: WebUIModule) {
 
 function downloadTempZipPath(mod: WebUIModule) {
   return path.join('./', 'webui', mod.name, `${mod.name}-release.zip`);
-}
-
-// Compares dot-separated numeric version strings (e.g. "0.5.11" vs "0.5.9"). Returns
-// positive if `a` is newer, negative if older, 0 if equal. Missing segments count as 0.
-function compareVersions(a: string, b: string): number {
-  const aParts = a.split('.').map((p) => parseInt(p, 10) || 0);
-  const bParts = b.split('.').map((p) => parseInt(p, 10) || 0);
-  const length = Math.max(aParts.length, bParts.length);
-  for (let i = 0; i < length; i++) {
-    const diff = (aParts[i] ?? 0) - (bParts[i] ?? 0);
-    if (diff !== 0) {
-      return diff;
-    }
-  }
-  return 0;
 }
 
 export default class WebUIUpdateService {

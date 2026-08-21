@@ -8,6 +8,12 @@ All notable changes to this project are documented in this file. This changelog 
 - Overlay container backend: `OverlayContainerRoutes.ts` (`/overlay_container/config`, `/overlay_container/save`) plus `ConfigService` support for saving/loading the overlay layout config.
 - Overlay container frontend (`webui/overlay/`), served via new `/shared` and `/overlays` static routes.
 - Added WebUI updater and submodules to this repo.
+- Git-based plugin installs and updates (`PluginRepoService`). A plugin repo is laid out exactly like an `/export_plugin` zip, and can be installed in one of two modes tracked per plugin in `user/settings/plugin-repos.json`:
+  - `release` (default) downloads the zip attached to the repo's latest GitHub release — falling back to the tag's source zipball — and runs the plugin from its prebuilt `build/`. No Git binary required.
+  - `source` clones the repo with the system Git CLI into `user/plugin-repos/<plugin>` and runs the plugin from source in dev mode. Updates are a fetch plus hard reset to the tracked branch HEAD.
+  - New routes: `POST /plugin/install_plugin_from_repo`, `POST /plugin/update_plugin_from_repo`, `POST /plugin/set_plugin_repo_mode`, `GET /plugin/check_plugin_updates`, `GET /plugin/get_plugin_repos`. `/plugin/get_list` now includes each plugin's `repo` record, and `/plugin/delete_plugin` drops the repo tracking and local clone.
+  - New `plugin_update` config section (`enabled`, `schedule`) runs a scheduled update *check* only — it flags plugins with updates and emits `/spooder/plugin/update/available` over OSC, but never installs on its own.
+  - A plugin's `settings.json` and `_share/` are never overwritten by a repo checkout, so updates keep the user's configuration.
 
 ### Fixed
 - Twitch EventSub WebSocket reconnect logic: fixed a race between `onerror`/`onclose` double-reconnecting, an incorrect `session_reconnect` handoff sequence that could trigger Twitch's "Invalid reconnect" close code, and an unguarded `.pong()` call that could crash the process when called on a stale socket. Added a keepalive watchdog and exponential backoff.
