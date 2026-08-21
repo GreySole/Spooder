@@ -171,9 +171,14 @@ export default class Twitch implements StreamModuleInterface {
       {
         id: 'channel_point_redeem',
         label: 'Channel Point Redeem',
-        description: 'Fires when a channel point reward is redeemed.',
+        description:
+          'Fires when a channel point reward is redeemed. Pick the reward on the card; select the node to edit that reward on Twitch, or to create, disable, or delete rewards.',
         form: {
-          rewardId: { label: 'Reward ID', type: 'text' },
+          // Custom rather than 'select': the options are the channel's live reward list, which
+          // only the frontend can fetch, and the picker doubles as the anchor for the reward
+          // editor in the inspector. Renderer registered as 'rewardSelect' by the WebUI's
+          // twitch module.
+          rewardId: { label: 'Reward', type: 'custom', options: { component: 'rewardSelect' } },
           overrideAutoFulfill: { label: 'Override Auto-Fulfill', type: 'boolean' },
         },
         defaults: { rewardId: '', overrideAutoFulfill: false },

@@ -414,6 +414,53 @@ export default class TwitchApi {
     });
   };
 
+  // Channel point custom rewards. All four go through callBroadcasterApi rather than Axios
+  // directly, so a stale broadcaster token is refreshed and the call retried once instead of
+  // surfacing as a 401 in the UI.
+  //
+  // Twitch splits these into two populations: rewards this client created (`only_manageable`),
+  // which it may edit and delete, and every other reward on the channel, which it may only
+  // read and match redemptions against. The redeem node's picker needs both - a graph can
+  // trigger off any reward - so the caller says which set it wants.
+  private rewardsUrl = async (query: KeyedObject = {}) => {
+    if (this.broadcasterUserID == '') {
+      await this.getBroadcasterId();
+    }
+    const params = new URLSearchParams({ broadcaster_id: this.broadcasterUserID });
+    for (const key in query) {
+      params.set(key, String(query[key]));
+    }
+    return `https://api.twitch.tv/helix/channel_points/custom_rewards?${params.toString()}`;
+  };
+
+  getCustomRewards = async (onlyManageable = false): Promise<KeyedObject[]> => {
+    const url = await this.rewardsUrl(onlyManageable ? { only_manageable_rewards: 'true' } : {});
+    const response = (await this.callBroadcasterApi(url)) as KeyedObject;
+    return response?.data ?? [];
+  };
+
+  createCustomReward = async (reward: KeyedObject): Promise<KeyedObject | undefined> => {
+    const url = await this.rewardsUrl();
+    const response = (await this.callBroadcasterApi(url, reward, 'POST')) as KeyedObject;
+    return response?.data?.[0];
+  };
+
+  updateCustomReward = async (
+    id: string,
+    reward: KeyedObject,
+  ): Promise<KeyedObject | undefined> => {
+    const url = await this.rewardsUrl({ id });
+    const response = (await this.callBroadcasterApi(url, reward, 'PATCH')) as KeyedObject;
+    return response?.data?.[0];
+  };
+
+  deleteCustomReward = async (id: string): Promise<void> => {
+    // DELETE takes its id on the query string; a body here is ignored, and passing one would
+    // only make callBroadcasterApi guess POST.
+    const url = await this.rewardsUrl({ id });
+    await this.callBroadcasterApi(url, undefined, 'DELETE');
+  };
+
   getChannelInfo = async (channel?: string | undefined): Promise<KeyedObject> => {
     const oauth = this.getModule().oauth;
     const loggedIn = this.getModule().loggedIn;

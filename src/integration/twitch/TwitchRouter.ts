@@ -172,44 +172,103 @@ export default function getTwitchRouters() {
     res.send(currentSubs);
   });
 
-  router.get('/get_channelpoint_rewards', async (req, res) => {
+  // Shared by every channel point reward route below: they all need a validated broadcaster
+  // token and a broadcaster id, and all report the same three ways of not having them. Returns
+  // false once it has answered the request itself.
+  async function requireBroadcaster(res: Response): Promise<boolean> {
     if (twitchModule.loggedIn === false) {
       res.send({ error: 'nologin' });
-      return;
+      return false;
     }
     if (oauth.broadcaster_token == '' || oauth.broadcaster_token == null) {
-      res.send({ status: 'NO BROADCASTER TOKEN' });
-      return;
+      res.send({ error: 'NO BROADCASTER TOKEN' });
+      return false;
     }
 
-    console.log('Getting channel point rewards');
     await twitchModule.api.validateBroadcaster();
     await twitchModule.api.getBroadcasterId();
 
     if (twitchModule.api.broadcasterUserID == '') {
-      res.send({ status: 'NO BROADCASTER USER ID' });
+      res.send({ error: 'NO BROADCASTER USER ID' });
+      return false;
+    }
+    return true;
+  }
+
+  // Twitch only reports a failure's real cause in the response body ('CUSTOM_REWARD_TITLE
+  // DUPLICATE', 'must be at least 1'), so it's forwarded rather than flattened to the status
+  // text - the reward editor shows it verbatim and the user can act on it.
+  function rewardError(error: any): string {
+    return error?.response?.data?.message ?? error?.message ?? String(error);
+  }
+
+  router.get('/get_channelpoint_rewards', async (req, res) => {
+    if (!(await requireBroadcaster(res))) {
       return;
     }
 
-    await Axios({
-      url:
-        'https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=' +
-        twitchModule.api.broadcasterUserID,
-      method: 'GET',
-      headers: {
-        'Client-Id': oauth['client-id'],
-        Authorization: ' Bearer ' + oauth.broadcaster_token,
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((response: AxiosResponse) => {
-        res.send(JSON.stringify(response.data));
-      })
-      .catch((error: AxiosError) => {
-        twitchLog('Channel point get error: ', error.message);
-        res.send(JSON.stringify({ error: error.message }));
-        return;
-      });
+    try {
+      // Both populations in one response: `data` is every reward on the channel (what a redeem
+      // node may trigger off), `manageable` the ids Spooder created and is therefore allowed to
+      // edit or delete. The editor needs the distinction to know whether to offer its controls.
+      const all = await twitchModule.api.getCustomRewards(false);
+      const manageable = await twitchModule.api.getCustomRewards(true);
+      res.send({ data: all, manageable: manageable.map((reward) => reward.id) });
+    } catch (error: any) {
+      twitchLog('Channel point get error: ', rewardError(error));
+      res.send({ error: rewardError(error) });
+    }
+  });
+
+  router.post('/create_channelpoint_reward', async (req, res) => {
+    if (!(await requireBroadcaster(res))) {
+      return;
+    }
+
+    try {
+      const reward = await twitchModule.api.createCustomReward(req.body);
+      res.send({ status: 'ok', reward });
+    } catch (error: any) {
+      twitchLog('Channel point create error: ', rewardError(error));
+      res.send({ error: rewardError(error) });
+    }
+  });
+
+  router.post('/update_channelpoint_reward', async (req, res) => {
+    if (!(await requireBroadcaster(res))) {
+      return;
+    }
+    const { id, ...reward } = req.body;
+    if (!id) {
+      res.send({ error: 'No reward id given' });
+      return;
+    }
+
+    try {
+      const updated = await twitchModule.api.updateCustomReward(id, reward);
+      res.send({ status: 'ok', reward: updated });
+    } catch (error: any) {
+      twitchLog('Channel point update error: ', rewardError(error));
+      res.send({ error: rewardError(error) });
+    }
+  });
+
+  router.post('/delete_channelpoint_reward', async (req, res) => {
+    if (!(await requireBroadcaster(res))) {
+      return;
+    }
+    if (!req.body.id) {
+      res.send({ error: 'No reward id given' });
+      return;
+    }
+
+    try {
+      await twitchModule.api.deleteCustomReward(req.body.id);
+      res.send({ status: 'ok' });
+    } catch (error: any) {
+      twitchLog('Channel point delete error: ', rewardError(error));
+      res.send({ error: rewardError(error) });
+    }
   });
 
   router.get('/delete_eventsub', async (req, res) => {
