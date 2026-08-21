@@ -5,6 +5,7 @@ import { KeyedObject, userDir } from '../../../Types';
 import { webLog } from '../../Logging';
 import ConfigService from '../../service/ConfigService';
 import OSCService from '../../service/OSCService';
+import PluginRepoService from '../../service/PluginRepoService';
 import PluginService from '../../service/PluginService';
 import ShareService from '../../service/ShareService';
 import { isLocal, WebService } from '../../service/WebService';
@@ -90,10 +91,35 @@ export function registerGetRoutes(router: express.Router, publicRouter: express.
         hasPublic: thisPlugin.hasPublic,
         pluginMode: thisPlugin.pluginMode,
         devMode: thisPlugin.devMode,
+        repo: PluginRepoService.getRepo(a),
       };
     }
 
     res.send(JSON.stringify(pluginPacks));
+  });
+
+  router.get('/get_plugin_repos', async (req: Request, res: Response) => {
+    res.send({
+      status: 'ok',
+      gitAvailable: await PluginRepoService.isGitAvailable(),
+      repos: PluginRepoService.getRepos(),
+    });
+  });
+
+  // Without ?pluginname= this checks every tracked plugin, same as the scheduled job.
+  router.get('/check_plugin_updates', async (req: Request, res: Response) => {
+    const pluginName = req.query.pluginname as string | undefined;
+    try {
+      if (pluginName) {
+        const update = await PluginRepoService.checkForUpdate(pluginName);
+        res.send({ status: 'ok', updates: { [pluginName]: update } });
+      } else {
+        res.send({ status: 'ok', updates: await PluginRepoService.checkAllForUpdates() });
+      }
+    } catch (e: any) {
+      webLog('Plugin update check failed:', e.message ?? e);
+      res.status(400).send({ status: 'error', message: e.message ?? 'Update check failed' });
+    }
   });
 
   router.get('/get_plugin_settings', async (req: Request, res: Response) => {

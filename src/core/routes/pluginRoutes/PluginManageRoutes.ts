@@ -5,6 +5,7 @@ import path from 'path';
 import { userDir } from '../../../Types';
 import { webLog } from '../../Logging';
 import OSCService from '../../service/OSCService';
+import PluginRepoService, { PluginRepoMode } from '../../service/PluginRepoService';
 import PluginService from '../../service/PluginService';
 
 export function registerManageRoutes(router: express.Router) {
@@ -131,6 +132,65 @@ export function registerManageRoutes(router: express.Router) {
       }
     } catch (e) {
       console.error(e);
+    }
+  });
+
+  // Installs (or reinstalls over the top of) a plugin straight from its Git repo.
+  // Unlike /install_plugin this waits for the whole install so failures come back as a
+  // real error - progress still streams over OSC for the UI to follow.
+  router.post('/install_plugin_from_repo', async (req: Request, res: Response) => {
+    const url = req.body.url as string;
+    const mode = req.body.mode as PluginRepoMode | undefined;
+    const branch = req.body.branch as string | undefined;
+
+    try {
+      const result = await PluginRepoService.installFromUrl({ url, mode, branch });
+      res.send({ status: 'ok', ...result });
+    } catch (e: any) {
+      webLog('Plugin repo install failed:', e.message ?? e);
+      OSCService.sendToTCP('/spooder/plugin/install/complete', {
+        pluginName: url,
+        status: 'failed',
+        message: e.message ?? 'Install failed',
+      });
+      res.status(400).send({ status: 'error', message: e.message ?? 'Install failed' });
+    }
+  });
+
+  router.post('/update_plugin_from_repo', async (req: Request, res: Response) => {
+    const pluginName = req.body.pluginName as string;
+    try {
+      const result = await PluginRepoService.update(pluginName);
+      res.send({ status: 'ok', ...result });
+    } catch (e: any) {
+      webLog(`Plugin update failed for ${pluginName}:`, e.message ?? e);
+      OSCService.sendToTCP('/spooder/plugin/install/complete', {
+        pluginName,
+        status: 'failed',
+        message: e.message ?? 'Update failed',
+      });
+      res.status(400).send({ status: 'error', message: e.message ?? 'Update failed' });
+    }
+  });
+
+  // Swaps a tracked plugin between the prebuilt release and a source checkout. This
+  // reinstalls the plugin from the repo, so it doubles as "give me the source to hack on".
+  router.post('/set_plugin_repo_mode', async (req: Request, res: Response) => {
+    const pluginName = req.body.pluginName as string;
+    const mode = req.body.mode as PluginRepoMode;
+    const branch = req.body.branch as string | undefined;
+
+    if (mode !== 'release' && mode !== 'source') {
+      res.status(400).send({ status: 'error', message: "Mode must be 'release' or 'source'" });
+      return;
+    }
+
+    try {
+      const result = await PluginRepoService.setMode(pluginName, mode, branch);
+      res.send({ status: 'ok', ...result });
+    } catch (e: any) {
+      webLog(`Failed to switch ${pluginName} to ${mode}:`, e.message ?? e);
+      res.status(400).send({ status: 'error', message: e.message ?? 'Mode switch failed' });
     }
   });
 
@@ -269,6 +329,7 @@ export function registerManageRoutes(router: express.Router) {
     }
 
     PluginService.stopPlugin(pluginName);
+    PluginRepoService.remove(pluginName);
 
     const pluginDir = path.join(userDir, 'plugins', pluginName);
     const overlayDir = path.join(userDir, 'web', 'overlay', pluginName);
