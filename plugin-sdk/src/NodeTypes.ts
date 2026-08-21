@@ -46,6 +46,28 @@ export interface TriggerNodeDef {
   defaults: KeyedObject;
   // Ports exposing payload data to downstream nodes once the trigger fires.
   outputs: NodePortDef[];
+  // Present when the owning module can fire this trigger on demand, so the editor offers a
+  // test panel for it. The module supplies the panel (see the WebUI's nodeTestPanel) and the
+  // route that runs it; this only declares that the node is testable and what the panel
+  // should ask for. `params` are the knobs the test accepts - the module interprets the ids.
+  test?: TriggerTestDef;
+}
+
+export interface TriggerTestDef {
+  params: TriggerTestParam[];
+  // Shown above the panel's controls: what firing this test actually does, when that isn't
+  // obvious (a transport it has to switch, a payload the module fills in from the node).
+  note?: string;
+}
+
+export interface TriggerTestParam {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'boolean' | 'select';
+  // For 'select': option value -> display label.
+  selections?: { [value: string]: string };
+  default?: string | number | boolean;
+  description?: string;
 }
 
 export interface ActionNodeDef {

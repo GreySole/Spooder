@@ -1,4 +1,4 @@
-import { ChildProcess, exec, spawn } from 'child_process';
+import { ChildProcess, exec, execFile, spawn } from 'child_process';
 import fs from 'fs';
 import https from 'https';
 import path from 'path';
@@ -6,10 +6,18 @@ import { promisify } from 'util';
 import ModuleService from '../../core/service/ModuleService';
 import { findAvailablePort, WebService } from '../../core/service/WebService';
 import Twitch from './twitch';
+import { getSubscriptionVersion } from './TwitchEventSubTriggers';
 
 //Twitch CLI Download: https://github.com/twitchdev/twitch-cli/releases/latest
 
 const execAsync = promisify(exec);
+// Used for every CLI invocation: argv goes to the process directly, with no shell to quote
+// against. Test arguments originate in the WebUI, so a shell here would make a reward title
+// or username an injection point.
+const execFileAsync = promisify(execFile);
+
+// How long the CLI's local EventSub server stays up after the last test command.
+const TEST_SERVER_IDLE_MS = 60000;
 
 interface PlatformInfo {
   platform: string;
@@ -40,11 +48,15 @@ export default class TwitchCLI {
       clearTimeout(this.testServerTimer);
     }
 
-    // Start 5-minute timer (300000 ms)
+    // The test server hijacks Spooder's EventSub socket, so it isn't left running: it shuts
+    // itself down a minute after the last command. executeCommand restarts this clock on every
+    // trigger, so an active testing session keeps it alive without the user managing it.
     this.testServerTimer = setTimeout(() => {
-      console.log('Test server timeout reached (5 minutes), stopping server...');
+      console.log(
+        `Test server idle for ${TEST_SERVER_IDLE_MS / 1000}s, stopping server and returning to live events...`,
+      );
       this.stopTestServer();
-    }, 60000);
+    }, TEST_SERVER_IDLE_MS);
   }
 
   private resetTestServerTimer(): void {
@@ -53,43 +65,75 @@ export default class TwitchCLI {
     }
   }
 
-  public async testEventCommand(eventName: string, extraArgs: string = ''): Promise<void> {
+  // Fire one mock EventSub notification at Spooder through the Twitch CLI.
+  //
+  // `eventName` is the real EventSub subscription type ('channel.follow'): the CLI accepts a
+  // topic as an alias for its own shorthand on both transports, so nothing here needs a second
+  // naming scheme. `extraArgs` is argv, already vetted by the caller.
+  //
+  // Two flags are always added and are what make the test reach a graph at all. `--to-user` is
+  // the broadcaster the mock event happens to - without it the CLI invents a random id and
+  // OnEventSubReceived drops the event as belonging to another channel. `--version` pins the
+  // same subscription version the transports subscribe with, and is required outright for
+  // channel.update, which the CLI ships in two versions.
+  public async testEventCommand(
+    eventName: string,
+    extraArgs: string[] = [],
+  ): Promise<{ stdout: string; stderr: string }> {
     const twitchModule = this.getModule();
     if (twitchModule.loggedIn === false) {
-      return;
+      throw new Error('Not logged in to Twitch.');
     }
 
-    const useWebhook = twitchModule.oauth.useWebhookTransport;
+    const broadcasterId = await twitchModule.api.getBroadcasterId();
+    const args = [
+      'event',
+      'trigger',
+      eventName,
+      '--to-user',
+      broadcasterId,
+      '--version',
+      getSubscriptionVersion(eventName),
+      ...extraArgs,
+    ];
 
-    try {
-      if (useWebhook) {
-        const publicUrl = WebService.getPublicHTTPUrl();
-        await this.executeCommand(
-          `event trigger ${eventName} -F ${publicUrl}/twitch/webhooks/eventsub ${extraArgs}`,
+    if (twitchModule.oauth.useWebhookTransport) {
+      const publicUrl = WebService.getPublicHTTPUrl();
+      if (!publicUrl) {
+        throw new Error(
+          'No public URL available. Webhook transport needs external hosting to be up.',
         );
-      } else {
-        if (!this.isTestServerRunning()) {
-          const port = await findAvailablePort(8080);
-          await this.startTestServer(port);
-        }
-        await this.executeCommand(`event trigger ${eventName} ${extraArgs} --transport=websocket`);
       }
-    } catch (e) {
-      console.error('Error testing event command:', e);
+      return await this.executeCommand([
+        ...args,
+        '--forward-address',
+        `${publicUrl}/twitch/webhooks/eventsub`,
+      ]);
     }
+
+    // WebSocket transport can't take a mock event from Twitch's own servers, so the CLI hosts
+    // a local EventSub server and Spooder's socket is repointed at it for the duration. Real
+    // events don't arrive while that's true - hence the auto-stop timer, and why the WebUI
+    // reports test mode as a state the user can leave.
+    if (!this.isTestServerRunning()) {
+      const port = await findAvailablePort(8080);
+      await this.startTestServer(port);
+    }
+    return await this.executeCommand([...args, '--transport=websocket']);
   }
 
   private startTestServer(port: number) {
     return new Promise<void>((res, rej) => {
       if (this.testServerProcess) {
         console.log('Test server is already running');
+        res();
         return;
       }
 
       const executablePath = path.resolve(this.cliPath, this.platformInfo.executable);
 
       if (!fs.existsSync(executablePath)) {
-        console.error('Twitch CLI not found. Please ensure it is downloaded and installed.');
+        rej(new Error('Twitch CLI not found. Install it before running a test.'));
         return;
       }
 
@@ -125,7 +169,7 @@ export default class TwitchCLI {
 
       setTimeout(async () => {
         await twitchModule.eventsub.enableTestMode('127.0.0.1', port);
-        // Start the 5-minute timer after test server is ready
+        // Start the idle timer once the server is actually accepting events.
         this.startTestServerTimer();
         res();
       }, 1000);
@@ -442,40 +486,35 @@ export default class TwitchCLI {
     }
   }
 
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-  ): Promise<{ stdout: string; stderr: string }> {
+  // argv rather than a command string: see execFileAsync above. Callers pass each flag and
+  // value as its own element and never quote anything themselves.
+  async executeCommand(args: string[]): Promise<{ stdout: string; stderr: string }> {
     const executablePath = path.resolve(this.cliPath, this.platformInfo.executable);
 
     if (!fs.existsSync(executablePath)) {
       throw new Error('Twitch CLI not found. Please ensure it is downloaded and installed.');
     }
 
-    const fullCommand = `"${executablePath}" ${command} ${args.join(' ')}`;
-    console.log('Executing command:', fullCommand);
+    console.log('Executing Twitch CLI:', executablePath, args.join(' '));
 
     // Reset the test server timer whenever a command is executed
     this.resetTestServerTimer();
 
     try {
-      const result = await execAsync(fullCommand);
-      return result;
+      return await execFileAsync(executablePath, args);
     } catch (error: any) {
-      console.error('Error details:', error.message);
-      if (error.stderr) {
-        console.error('stderr:', error.stderr);
-      }
-      if (error.stdout) {
-        console.error('stdout:', error.stdout);
-      }
-      throw new Error(`Twitch CLI command failed: ${error.message}`);
+      // The CLI reports a bad event name or a rejected flag on stderr and exits non-zero, so
+      // that text is the whole diagnosis - it goes back to the caller rather than only to the
+      // console, where the WebUI could never see it.
+      const detail = String(error.stderr || error.stdout || error.message).trim();
+      console.error('Twitch CLI command failed:', detail);
+      throw new Error(detail || 'Twitch CLI command failed');
     }
   }
 
   async version(): Promise<string> {
     try {
-      const result = await this.executeCommand('version');
+      const result = await this.executeCommand(['version']);
       return result.stdout.trim();
     } catch (error) {
       throw new Error(`Failed to get Twitch CLI version: ${error}`);

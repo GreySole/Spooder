@@ -4,6 +4,7 @@ import { WebService } from '../../core/service/WebService';
 import { triggerExistsAndEnabled } from '../../core/util/EventTriggerUtil';
 import { KeyedObject } from '../../Types';
 import Twitch, { twitchLog } from './twitch';
+import { getSubscriptionVersion } from './TwitchEventSubTriggers';
 
 export default class TwitchEventSubWebhook {
   initialize = async () => {
@@ -82,12 +83,7 @@ export default class TwitchEventSubWebhook {
       eventType = eventType.split('-')[0];
     }
 
-    let version = '1';
-    if (eventType == 'channel.follow' || eventType == 'channel.update') {
-      version = '2';
-    } else if (eventType.startsWith('channel.guest_star')) {
-      version = 'beta';
-    }
+    const version = getSubscriptionVersion(eventType);
 
     return new Promise((res, rej) => {
       Axios({

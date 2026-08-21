@@ -69,19 +69,21 @@ export default class TwitchEventSub {
     await this.eventSubModule!.refreshEventSubs(forceDeleteAll);
   };
 
-  testEventSub = async (eventType: string, extraArgs?: string) => {
+  testEventSub = async (eventType: string, extraArgs: string[] = []) => {
     const twitch = this.getModule();
-    twitch.cli.testEventCommand(eventType, extraArgs);
+    return await twitch.cli.testEventCommand(eventType, extraArgs);
   };
 
+  // Test mode is a WebSocket-transport concept: the socket is pointed at the CLI's local
+  // EventSub server instead of Twitch's. Webhook transport keeps taking real deliveries while
+  // the CLI forwards mock ones to the same public URL, so it has no mode to be in.
   getTestModeStatus = () => {
     const twitch = this.getModule();
     if (twitch.oauth.useWebhookTransport) {
-      const eSubModule = this.eventSubModule as TwitchEventSubWebsocket;
-      return { status: eSubModule.testMode, url: eSubModule.websocketUrl };
-    } else {
       return { status: false, url: '' };
     }
+    const eSubModule = this.eventSubModule as TwitchEventSubWebsocket;
+    return { status: eSubModule?.testMode ?? false, url: eSubModule?.websocketUrl ?? '' };
   };
 
   enableTestMode = async (host: string, port: number) => {

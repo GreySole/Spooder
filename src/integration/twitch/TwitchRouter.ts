@@ -8,6 +8,11 @@ import { userDir } from '../../Types';
 import OnEventSubReceived from './OnEventSubReceived';
 import Twitch, { twitchLog } from './twitch';
 import { eventsubs, scopes } from './TwitchConstants';
+import {
+  buildGenericTestArgs,
+  buildRedeemTestArgs,
+  getTestSpecForNodeId,
+} from './TwitchEventSubTriggers';
 
 export default function getTwitchRouters() {
   const sconfig = ConfigService.getConfig();
@@ -357,22 +362,113 @@ export default function getTwitchRouters() {
   });
 
   router.get('/is_cli_installed', async (req, res) => {
-    const isInstalled = twitchModule.cli.isInstalled();
-    res.send({ installed: isInstalled });
+    // Everything the node test panel needs to describe its own state before the user presses
+    // anything: whether the CLI exists, whether the local test server currently owns the
+    // EventSub connection, and which transport a test would go out over.
+    res.send({
+      installed: twitchModule.cli.isInstalled(),
+      testServerRunning: twitchModule.cli.isTestServerRunning(),
+      useWebhookTransport: twitchModule.oauth.useWebhookTransport === true,
+      loggedIn: twitchModule.loggedIn,
+    });
   });
 
   router.get('/install_cli', async (req, res) => {
-    const installResult = await twitchModule.cli.downloadTwitchCLI();
-    res.send({ installed: installResult });
+    try {
+      await twitchModule.cli.downloadTwitchCLI();
+      res.send({ installed: twitchModule.cli.isInstalled() });
+    } catch (error: any) {
+      twitchLog('Twitch CLI install error: ', error.message);
+      res.send({ installed: false, error: error.message });
+    }
   });
 
-  router.post('/test_eventsub', async (req, res) => {
-    const { type, args } = req.body;
+  router.get('/stop_test_server', (req, res) => {
+    twitchModule.cli.stopTestServer();
+    res.send({ status: 'ok', testServerRunning: twitchModule.cli.isTestServerRunning() });
+  });
+
+  // Fire one node's trigger through the Twitch CLI.
+  //
+  // The client sends the node it wants tested, never a command: `nodeTypeId` selects the
+  // EventSub type and the set of flags that node declared, and `values` are matched against
+  // that set. Anything else in the body is ignored, so the panel can't reach a flag - or a
+  // shell - the node didn't offer.
+  router.post('/test_trigger_node', async (req, res) => {
     if (twitchModule.loggedIn === false) {
       res.send({ error: 'nologin' });
       return;
     }
-    twitchModule.eventsub.testEventSub(type, args);
+    if (!twitchModule.cli.isInstalled()) {
+      res.send({ error: 'Twitch CLI is not installed.' });
+      return;
+    }
+
+    const { nodeTypeId, values, nodeValues } = req.body ?? {};
+    let subscriptionType: string | undefined;
+    let args: string[] = [];
+
+    if (nodeTypeId === 'channel_point_redeem') {
+      subscriptionType = 'channel.channel_points_custom_reward_redemption.add';
+      // The reward id comes off the node, not the panel: a redemption of any other reward
+      // wouldn't match the node's filter, and the CLI invents one when it isn't told, so
+      // testing without a reward picked would send a perfectly valid event that silently
+      // matches nothing.
+      if (!nodeValues?.rewardId) {
+        res.send({ error: 'Pick a reward on this node before testing it.' });
+        return;
+      }
+      args = buildRedeemTestArgs({ ...values, itemId: nodeValues.rewardId });
+    } else if (nodeTypeId === 'eventsub_event') {
+      subscriptionType = String(nodeValues?.type ?? '').trim();
+      if (!/^[a-z0-9_.]+$/i.test(subscriptionType)) {
+        res.send({ error: "Set this node's Subscription Type before testing it." });
+        return;
+      }
+      args = buildGenericTestArgs(values);
+    } else {
+      const testSpec = getTestSpecForNodeId(nodeTypeId);
+      if (!testSpec) {
+        res.send({ error: `'${nodeTypeId}' is not a testable Twitch trigger.` });
+        return;
+      }
+      subscriptionType = testSpec.subscriptionType;
+      args = testSpec.buildArgs(values);
+    }
+
+    try {
+      const result = await twitchModule.eventsub.testEventSub(subscriptionType, args);
+      res.send({
+        status: 'ok',
+        subscriptionType,
+        output: (result?.stdout ?? '').trim(),
+        testServerRunning: twitchModule.cli.isTestServerRunning(),
+      });
+    } catch (error: any) {
+      const message = error?.message ?? String(error);
+      twitchLog('Twitch CLI test error: ', message);
+      res.send({ error: message });
+    }
+  });
+
+  // Kept for the older Twitch-tab test UI, which triggers a bare subscription type with no
+  // node behind it. Same CLI path, minus the per-node flag whitelist.
+  router.post('/test_eventsub', async (req, res) => {
+    if (twitchModule.loggedIn === false) {
+      res.send({ error: 'nologin' });
+      return;
+    }
+    const type = String(req.body?.type ?? '').trim();
+    if (!/^[a-z0-9_.]+$/i.test(type)) {
+      res.send({ error: 'Invalid subscription type.' });
+      return;
+    }
+    try {
+      await twitchModule.eventsub.testEventSub(type);
+      res.send({ status: 'ok' });
+    } catch (error: any) {
+      res.send({ error: error?.message ?? String(error) });
+    }
   });
 
   router.get('/get_eventsubs_by_user', async (req, res) => {

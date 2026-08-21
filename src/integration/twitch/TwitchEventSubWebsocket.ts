@@ -7,6 +7,7 @@ import { websocketTest } from '../../core/util/NetUtil';
 import { KeyedObject } from '../../Types';
 import OnEventSubReceived from './OnEventSubReceived';
 import Twitch, { twitchLog } from './twitch';
+import { getSubscriptionVersion } from './TwitchEventSubTriggers';
 
 const BASE_RECONNECT_DELAY = 2000;
 const MAX_RECONNECT_DELAY = 60000;
@@ -178,12 +179,7 @@ export default class TwitchEventSubWebsocket {
       eventType = eventType.split('-')[0];
     }
 
-    let version = '1';
-    if (eventType == 'channel.follow' || eventType == 'channel.update') {
-      version = '2';
-    } else if (eventType.startsWith('channel.guest_star')) {
-      version = 'beta';
-    }
+    const version = getSubscriptionVersion(eventType);
 
     return new Promise((res, rej) => {
       Axios({
@@ -373,7 +369,10 @@ export default class TwitchEventSubWebsocket {
           this.pendingReconnectSocket = undefined;
           if (oldSocket && oldSocket !== socket) {
             oldSocket.removeAllListeners();
-            if (oldSocket.readyState === WebSocket.OPEN || oldSocket.readyState === WebSocket.CONNECTING) {
+            if (
+              oldSocket.readyState === WebSocket.OPEN ||
+              oldSocket.readyState === WebSocket.CONNECTING
+            ) {
               oldSocket.close();
             }
           }

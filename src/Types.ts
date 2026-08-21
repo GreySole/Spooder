@@ -2,9 +2,32 @@ import { KeyedObject } from '@spooder/plugin-sdk';
 import path from 'path';
 
 export type {
-  IntegrationModule, KeyedObject, OSCMessage, PluginChatInfo, PluginConfigInfo, PluginModule, PluginOscInfo, PluginPublicInfo, PluginSpooderModules, PluginThemeInfo, StreamMessage,
-  NodePortDataType, NodePortDef, NodeFieldDef, NodeForm, TriggerNodeDef, ActionNodeDef, OperationNodeDef, NodeManifest, ActionExecutionContext,
-  EventGraphNode, EventGraphEdge, EventGraph, EventGraphFile
+  IntegrationModule,
+  KeyedObject,
+  OSCMessage,
+  PluginChatInfo,
+  PluginConfigInfo,
+  PluginModule,
+  PluginOscInfo,
+  PluginPublicInfo,
+  PluginSpooderModules,
+  PluginThemeInfo,
+  StreamMessage,
+  NodePortDataType,
+  NodePortDef,
+  NodeFieldDef,
+  NodeForm,
+  TriggerNodeDef,
+  TriggerTestDef,
+  TriggerTestParam,
+  ActionNodeDef,
+  OperationNodeDef,
+  NodeManifest,
+  ActionExecutionContext,
+  EventGraphNode,
+  EventGraphEdge,
+  EventGraph,
+  EventGraphFile,
 } from '@spooder/plugin-sdk';
 
 export const userDir = path.join('./', 'user');

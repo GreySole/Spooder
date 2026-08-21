@@ -14,7 +14,11 @@ import TwitchApi from './TwitchApi';
 import TwitchChat from './TwitchChat';
 import TwitchCLI from './TwitchCLI';
 import TwitchEventSub from './TwitchEventSub';
-import { getTwitchEventSubTriggerNodes } from './TwitchEventSubTriggers';
+import {
+  GENERIC_TEST_PARAMS,
+  getTwitchEventSubTriggerNodes,
+  REDEEM_TEST_PARAMS,
+} from './TwitchEventSubTriggers';
 import getResponseHandlers from './TwitchResponseHandlers';
 import getTwitchRouters from './TwitchRouter';
 
@@ -189,6 +193,10 @@ export default class Twitch implements StreamModuleInterface {
           { id: 'displayName', label: 'Display Name', dataType: 'string' },
           { id: 'userId', label: 'User ID', dataType: 'string' },
         ],
+        test: {
+          params: REDEEM_TEST_PARAMS,
+          note: "The test redeems whichever reward this node is set to, so it matches the node's own filter.",
+        },
       },
       {
         id: 'eventsub_event',
@@ -205,6 +213,10 @@ export default class Twitch implements StreamModuleInterface {
           { id: 'displayName', label: 'Display Name', dataType: 'string' },
           { id: 'userId', label: 'User ID', dataType: 'string' },
         ],
+        test: {
+          params: GENERIC_TEST_PARAMS,
+          note: 'Fires whatever Subscription Type is typed above. The Twitch CLI has to support that type - it covers most, but not all, of them.',
+        },
       },
       ...getTwitchEventSubTriggerNodes(),
     ];
