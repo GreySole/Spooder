@@ -3,6 +3,7 @@ import { spooderLog } from '../Logging';
 import { toArray } from '../util/ArrayUtil';
 import { matchCommand } from '../util/CommandMatchUtil';
 import { matchSearchPattern, patternSlots } from '../util/SearchMatchUtil';
+import { fillTemplate } from '../util/TemplateUtil';
 
 // Concat's inputs, in the order they're joined. A and B are always offered; the rest are
 // `growable`, so the frontend reveals C once A and B hold something, D once C does, and so on -
@@ -94,6 +95,31 @@ const STRING_NODES: OperationNodeDef[] = [
     outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
   },
   {
+    id: 'text',
+    label: 'Text',
+    description:
+      'A block of text, with room to write it in. Use it to keep a long string - a prompt, an announcement - out of the field it feeds, where a one-line box would hide most of it.',
+    category: 'string',
+    // No portType: wiring a value into a literal block would leave nothing for the block to do.
+    form: { text: { label: 'Text', type: 'textarea' } },
+    defaults: { text: '' },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
+  },
+  {
+    id: 'template',
+    label: 'Template',
+    description:
+      'Fills in a block of text: every ${name} in it becomes an input port on this node, so the surrounding wording stays here and only the parts that vary get wired in. Repeating a name reuses the same input. Type into a slot to give it a fixed value instead, and an unfilled slot comes out empty.',
+    category: 'string',
+    // The slot ports aren't listed: which ones exist depends on what's written in the template,
+    // so the frontend derives them from it (buildTemplateForm in nodeDefLookup.ts). They need no
+    // executor support of their own - resolveNodeValues copies every incoming edge onto the
+    // node's values by port id, which is exactly where fillTemplate looks for them.
+    form: { template: { label: 'Template', type: 'textarea' } },
+    defaults: { template: '' },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
+  },
+  {
     id: 'concat',
     label: 'Concat',
     category: 'string',
@@ -119,7 +145,7 @@ const STRING_NODES: OperationNodeDef[] = [
     id: 'sanitize',
     label: 'Sanitize',
     description:
-      "Strips characters out of text. Special Characters removes punctuation and symbols (the default, and what the sanitize() helper in a response script does); Numbers and Letters remove those; Custom Regex removes everything a pattern of your own matches.",
+      'Strips characters out of text. Special Characters removes punctuation and symbols (the default, and what the sanitize() helper in a response script does); Numbers and Letters remove those; Custom Regex removes everything a pattern of your own matches.',
     category: 'string',
     form: {
       text: { label: 'Text', type: 'text', portType: 'string' },
@@ -177,7 +203,7 @@ const STRING_NODES: OperationNodeDef[] = [
     id: 'split_text',
     label: 'Split',
     description:
-      "Breaks text into an array on each occurrence of the separator. An empty separator splits into single characters.",
+      'Breaks text into an array on each occurrence of the separator. An empty separator splits into single characters.',
     category: 'string',
     form: {
       text: { label: 'Text', type: 'text', portType: 'string' },
@@ -222,7 +248,6 @@ const STRING_NODES: OperationNodeDef[] = [
     outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
   },
 ];
-
 
 // A wire-only array input. Every array node takes one of these as its subject.
 function arrayInput(label = 'Array') {
@@ -598,6 +623,10 @@ export default class OperationNodeService {
       }
       case 'trim':
         return { result: String(values.text).trim() };
+      case 'text':
+        return { result: String(values.text ?? '') };
+      case 'template':
+        return { result: fillTemplate(values.template, values) };
       case 'concat':
         // Every slot in order, skipping the ones the node never grew into. Unset slots are
         // absent rather than empty, so they'd stringify to 'undefined' if they weren't dropped.
@@ -664,9 +693,7 @@ export default class OperationNodeService {
         const numeric = String(values.mode ?? '').startsWith('number');
         const descending = String(values.mode ?? '').endsWith('desc');
         items.sort((a, b) => {
-          const order = numeric
-            ? Number(a) - Number(b)
-            : String(a).localeCompare(String(b));
+          const order = numeric ? Number(a) - Number(b) : String(a).localeCompare(String(b));
           return descending ? -order : order;
         });
         return { result: items };

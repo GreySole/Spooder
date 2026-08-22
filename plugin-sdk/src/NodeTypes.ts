@@ -15,7 +15,19 @@ export interface NodeFieldDef {
   // renderer registered by the owning module via ModuleDefinition.fieldRenderers.
   // 'port' is a wire-only input: it draws a labelled socket and nothing else, for values that
   // can only sensibly come from another node (an array, an object) and have no typeable form.
-  type: 'asset' | 'boolean' | 'color' | 'code' | 'select' | 'text' | 'number' | 'custom' | 'port';
+  // 'textarea' is a multi-line block of plain text. It is always edited in the inspector, since
+  // no node card row is tall enough to write a paragraph in - the card shows a preview instead.
+  type:
+    | 'asset'
+    | 'boolean'
+    | 'color'
+    | 'code'
+    | 'select'
+    | 'text'
+    | 'textarea'
+    | 'number'
+    | 'custom'
+    | 'port';
   options?: KeyedObject;
   showif?: { variable: string; condition: string; value: any };
   // When set, this field is also a connectable input port of the given data type:
