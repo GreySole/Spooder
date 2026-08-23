@@ -16,5 +16,5 @@ export interface CommunityModuleInterface {
     nodeId: string,
     values: KeyedObject,
     ctx: ActionExecutionContext,
-  ) => () => void | Promise<void>;
+  ) => () => void | KeyedObject | Promise<void | KeyedObject>;
 }

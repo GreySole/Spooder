@@ -123,11 +123,25 @@ function evaluateOperationNode(
   switch (node.nodeTypeId) {
     case 'get_string_value': {
       const eventName = inputValues.eventName || ctx.eventName;
-      return { value: EventStorageService.getValue(eventName, inputValues.key, 'string', inputValues.defaultValue) };
+      return {
+        value: EventStorageService.getValue(
+          eventName,
+          inputValues.key,
+          'string',
+          inputValues.defaultValue,
+        ),
+      };
     }
     case 'get_number_value': {
       const eventName = inputValues.eventName || ctx.eventName;
-      return { value: EventStorageService.getValue(eventName, inputValues.key, 'number', inputValues.defaultValue) };
+      return {
+        value: EventStorageService.getValue(
+          eventName,
+          inputValues.key,
+          'number',
+          inputValues.defaultValue,
+        ),
+      };
     }
     case 'get_array_value': {
       const eventName = inputValues.eventName || ctx.eventName;
@@ -136,7 +150,14 @@ function evaluateOperationNode(
     }
     case 'get_boolean_value': {
       const eventName = inputValues.eventName || ctx.eventName;
-      return { value: EventStorageService.getValue(eventName, inputValues.key, 'boolean', inputValues.defaultValue) };
+      return {
+        value: EventStorageService.getValue(
+          eventName,
+          inputValues.key,
+          'boolean',
+          inputValues.defaultValue,
+        ),
+      };
     }
     default:
       return OperationNodeService.evaluate(node.nodeTypeId, inputValues);
@@ -150,6 +171,7 @@ function activatedPorts(
   node: EventGraphNode,
   values: KeyedObject,
   ctx: GraphExecutionContext,
+  outputs?: KeyedObject,
 ): string[] {
   if (node.moduleName === 'core' && node.nodeTypeId === 'platform_branch') {
     // The port ids are the stream module names, so the platform is the branch. Unwired, it's
@@ -166,6 +188,15 @@ function activatedPorts(
     }
     return [values.condition ? 'then' : 'else'];
   }
+  // The branches above are decided from the node's inputs, so they can be resolved before it
+  // runs. An action whose branch depends on what actually happened names it in its result
+  // instead - Discord's interaction node follows the button that was clicked, which isn't known
+  // until someone clicks it. Opt-in: a result with no `execPort` keeps the single 'exec' port,
+  // which is every other node.
+  const namedPort = outputs?.execPort;
+  if (typeof namedPort === 'string' && namedPort !== '') {
+    return [namedPort];
+  }
   return ['exec'];
 }
 
@@ -178,7 +209,12 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
       case 'response':
         // A wired 'extra' input overrides what the trigger handed down - that's how a script
         // gets at graph values, e.g. a Search & Match node's matches.
-        return EventResponseCommand(values, ctx.eventName, ctx.streamMessage, values.extra ?? ctx.extra);
+        return EventResponseCommand(
+          values,
+          ctx.eventName,
+          ctx.streamMessage,
+          values.extra ?? ctx.extra,
+        );
       case 'plugin':
         return EventPluginCommand(values, ctx.eventName, ctx.streamMessage, ctx.extra);
       case 'mod':
@@ -199,13 +235,37 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
         // own to run.
         return () => {};
       case 'set_string_value':
-        return () => EventStorageService.setValue(values.eventName || ctx.eventName, values.key, 'string', values.value);
+        return () =>
+          EventStorageService.setValue(
+            values.eventName || ctx.eventName,
+            values.key,
+            'string',
+            values.value,
+          );
       case 'set_number_value':
-        return () => EventStorageService.setValue(values.eventName || ctx.eventName, values.key, 'number', values.value);
+        return () =>
+          EventStorageService.setValue(
+            values.eventName || ctx.eventName,
+            values.key,
+            'number',
+            values.value,
+          );
       case 'set_array_value':
-        return () => EventStorageService.setValue(values.eventName || ctx.eventName, values.key, 'array', values.value);
+        return () =>
+          EventStorageService.setValue(
+            values.eventName || ctx.eventName,
+            values.key,
+            'array',
+            values.value,
+          );
       case 'set_boolean_value':
-        return () => EventStorageService.setValue(values.eventName || ctx.eventName, values.key, 'boolean', values.value);
+        return () =>
+          EventStorageService.setValue(
+            values.eventName || ctx.eventName,
+            values.key,
+            'boolean',
+            values.value,
+          );
       case 'say_in_chat':
         return () => {
           const platform = String(values.platform ?? '');
@@ -223,11 +283,20 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             sayInChat(values.message, platform, channel || undefined);
             return;
           }
-          sayInChat(values.message, ctx.streamMessage.platform, channel || ctx.streamMessage.channel);
+          sayInChat(
+            values.message,
+            ctx.streamMessage.platform,
+            channel || ctx.streamMessage.channel,
+          );
         };
       case 'trigger_event':
         return () =>
-          EventService.runCommands(ctx.streamMessage, values.eventName, ctx.streamMessage.messageType, ctx.extra);
+          EventService.runCommands(
+            ctx.streamMessage,
+            values.eventName,
+            ctx.streamMessage.messageType,
+            ctx.extra,
+          );
       case 'start_timer':
         return () => TimerService.start(values.name, values.duration, values.repeat);
       case 'stop_timer':
@@ -247,7 +316,8 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
         return () =>
           OscLayerService.release(values.dest_udp, values.address, values.slot, ctx.eventName);
       default:
-        return () => spooderLog(`Unknown core node '${node.nodeTypeId}' for event ${ctx.eventName}`);
+        return () =>
+          spooderLog(`Unknown core node '${node.nodeTypeId}' for event ${ctx.eventName}`);
     }
   }
 
@@ -295,7 +365,10 @@ export function entryNodesForDispatch(
 // Nodes whose whole job is choosing a branch: they run no side effect of their own (see the
 // empty thunks in executeGraphNode).
 function isControlFlowNode(node: EventGraphNode): boolean {
-  return node.moduleName === 'core' && (node.nodeTypeId === 'if' || node.nodeTypeId === 'platform_branch');
+  return (
+    node.moduleName === 'core' &&
+    (node.nodeTypeId === 'if' || node.nodeTypeId === 'platform_branch')
+  );
 }
 
 // Returns how many action nodes it actually ran. Callers use that to tell "this event did
@@ -371,18 +444,36 @@ export function walkEventGraph(
     if (!isControlFlowNode(node)) {
       executed++;
     }
+    // Taken once, and only once, however the node finishes. Resolved at call time rather than
+    // up front because activatedPorts consults the node's result, which doesn't exist yet -
+    // and `into` keeps a synchronous node continuing in this loop (as it always has) instead
+    // of recursing into a fresh walk.
+    let branchTaken = false;
+    const takeBranch = (into?: string[]) => {
+      if (branchTaken) {
+        return;
+      }
+      branchTaken = true;
+      const targets = activatedPorts(node, values, ctx, actionOutputs.get(node.id)).flatMap(
+        (port) => outgoing.get(`${nodeId}::${port}`) ?? [],
+      );
+      if (targets.length === 0) {
+        return;
+      }
+      if (into) {
+        into.push(...targets);
+        return;
+      }
+      walkEventGraph(graph, ctx, targets, actionOutputs, completedActions);
+    };
     // A node that throws takes only itself down. It used to take the rest of the branch with it,
     // and now that the cooldown is applied after the walk it would take that too - one bad
     // plugin action shouldn't leave an event uncooled or stop the actions wired after it.
-    const targets = activatedPorts(node, values, ctx).flatMap(
-      (port) => outgoing.get(`${nodeId}::${port}`) ?? [],
-    );
     const runThunk = (): Promise<void> | undefined => {
       try {
-        const result: void | KeyedObject | Promise<void | KeyedObject> = (thunk as () =>
-          | void
-          | KeyedObject
-          | Promise<void | KeyedObject>)();
+        const result: void | KeyedObject | Promise<void | KeyedObject> = (
+          thunk as () => void | KeyedObject | Promise<void | KeyedObject>
+        )();
         if (result && typeof (result as Promise<unknown>).then === 'function') {
           return (result as Promise<KeyedObject | void>)
             .then((outputs) => {
@@ -390,32 +481,41 @@ export function walkEventGraph(
                 actionOutputs.set(node.id, outputs);
               }
               completedActions.add(node.id);
-              if (targets.length > 0) {
-                walkEventGraph(graph, ctx, targets, actionOutputs, completedActions);
-              }
+              takeBranch();
             })
             .catch((e) => {
-              spooderLog(`Node '${node.moduleName}/${node.nodeTypeId}' failed in event ${ctx.eventName}`, e);
+              spooderLog(
+                `Node '${node.moduleName}/${node.nodeTypeId}' failed in event ${ctx.eventName}`,
+                e,
+              );
               completedActions.add(node.id);
-              if (targets.length > 0) {
-                walkEventGraph(graph, ctx, targets, actionOutputs, completedActions);
-              }
+              takeBranch();
             });
         }
         if (result && typeof result === 'object') {
           actionOutputs.set(node.id, result);
         }
-        completedActions.add(node.id);
       } catch (e) {
-        spooderLog(`Node '${node.moduleName}/${node.nodeTypeId}' failed in event ${ctx.eventName}`, e);
+        spooderLog(
+          `Node '${node.moduleName}/${node.nodeTypeId}' failed in event ${ctx.eventName}`,
+          e,
+        );
       }
+      // Marked complete whether it returned or threw, matching the async paths above: a
+      // downstream Promise All waits on this node having finished, not on it having succeeded.
+      completedActions.add(node.id);
+      return undefined;
     };
     if ((node.delay ?? 0) === 0) {
       const pending = runThunk();
       if (!pending) {
-        cursor.push(...targets);
+        takeBranch(cursor);
       }
     } else {
+      // Legacy delay postpones this node's own thunk while the walk continues immediately (see
+      // the note above), so the branch is taken now - and takeBranch's guard is what stops the
+      // deferred thunk taking it a second time when it finishes.
+      takeBranch(cursor);
       setTimeout(runThunk, node.delay);
     }
   }

@@ -1,10 +1,11 @@
-import { ChannelType, Client, Events, Message, TextChannel } from 'discord.js';
+import { ChannelType, Client, ComponentType, Events, Message, TextChannel } from 'discord.js';
 import fs from 'fs';
 import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
 import { KeyedObject, StreamMessage, userDir } from '../../Types';
 import Discord, { discordLog } from './discord';
 import DiscordApi from './DiscordApi';
+import { DiscordButtonDef } from './DiscordButtons';
 import DiscordVoice from './DiscordVoice';
 
 export default class DiscordChat {
@@ -25,20 +26,13 @@ export default class DiscordChat {
     this.client?.on(Events.InteractionCreate, async (interaction) => {
       //discordLog("DISCORD INTERACTION", interaction);
       if (interaction.isButton()) {
-        const streamMessage = this.buildDiscordStreamMessage(
-          interaction.user.id,
-          interaction.user.username,
-          interaction.guildId,
-          interaction.channelId,
-          '',
-          { platformEventData: { customId: interaction.customId } },
-        );
-        EventService.emitTrigger(
-          'discord',
-          'button_clicked',
-          { customIdPrefix: interaction.customId },
-          streamMessage,
-        );
+        // A button posted by a Send Interaction node is owned by that node's collector, which
+        // acknowledges it. Anything else is a leftover - a button from a previous run of the
+        // bot, or one whose node already timed out - and Discord shows the clicker "This
+        // interaction failed" if nobody answers within three seconds, so it is deferred here.
+        if (!this.pendingInteractionMessages.has(interaction.message.id)) {
+          interaction.deferUpdate().catch(() => {});
+        }
         return;
       }
 
@@ -63,6 +57,63 @@ export default class DiscordChat {
         });
       }
     });
+    this.client?.on(Events.MessageReactionAdd, async (reaction, user) => {
+      if (user.id === this.client?.user?.id) {
+        return;
+      }
+      try {
+        // Both arrive partial for any message the bot didn't watch being posted, which is
+        // everything from before this session - fetching fills in the message content, the
+        // channel and the reaction count the node hands downstream.
+        const full = reaction.partial ? await reaction.fetch() : reaction;
+        const message = full.message.partial ? await full.message.fetch() : full.message;
+        const reactor = user.partial ? await user.fetch() : user;
+
+        const emojiId = full.emoji.id ?? '';
+        const emojiName = full.emoji.name ?? '';
+        // One string that identifies either kind of emoji and reads as itself on a node: a
+        // custom emoji is 'name:id' (unique - two guilds can both have a :pepe:), a standard
+        // one is the character. matchesTriggerValues compares the node's picker value against
+        // this, so the picker has to store exactly the same shape.
+        const emoji = emojiId ? `${emojiName}:${emojiId}` : emojiName;
+
+        const streamMessage = this.buildDiscordStreamMessage(
+          reactor.id,
+          reactor.username,
+          message.guildId,
+          message.channelId,
+          message.content ?? '',
+          {
+            platformEventData: {
+              emoji,
+              emojiName,
+              emojiId,
+              emojiMarkup: emojiId
+                ? `<${full.emoji.animated ? 'a' : ''}:${emojiName}:${emojiId}>`
+                : emojiName,
+              isCustom: emojiId !== '',
+              count: full.count ?? 0,
+              messageId: message.id,
+              messageContent: message.content ?? '',
+            },
+          },
+        );
+
+        EventService.emitTrigger(
+          'discord',
+          'reaction_added',
+          {
+            guildId: message.guildId ?? '',
+            channelId: message.channelId,
+            emoji,
+          },
+          streamMessage,
+        );
+      } catch (error) {
+        discordLog('Could not read an added reaction', error);
+      }
+    });
+
     this.client?.on(Events.MessageCreate, async (message: Message) => {
       if (message.author.id == this.client?.user?.id) {
         return;
@@ -90,7 +141,10 @@ export default class DiscordChat {
         message.guildId,
         message.channelId,
         message.content,
-        { respond: (txt: string) => message.reply(txt) },
+        {
+          respond: (txt: string) => message.reply(txt),
+          platformEventData: { messageId: message.id },
+        },
       );
 
       EventService.emitTrigger(
@@ -151,10 +205,107 @@ export default class DiscordChat {
     const client = this.client;
     const targetServer = client?.guilds.cache.get(server);
     const targetChannel = targetServer?.channels.cache.get(channel);
-    if (targetChannel?.isTextBased) {
+    if (targetChannel?.isTextBased()) {
       (targetChannel as TextChannel).send({ content: message, components: components });
     } else {
       discordLog('Tried to send message to a non-text channel', targetChannel?.name);
+    }
+  }
+
+  // Message ids with a Send Interaction node currently collecting on them. The global
+  // InteractionCreate listener above fires for every click, including ones a node's own
+  // collector is about to handle; this is how it tells those apart.
+  private pendingInteractionMessages = new Set<string>();
+
+  // Posts a message with buttons in a channel and resolves when one is clicked, or when the
+  // wait runs out.
+  async sendButtonPrompt(
+    channelId: string,
+    content: string,
+    buttons: DiscordButtonDef[],
+    timeoutSeconds: number,
+  ): Promise<KeyedObject> {
+    if (!channelId) {
+      discordLog('Send Server Interaction has no channel to post in');
+      return { error: 'No channel' };
+    }
+    const channel = await this.client?.channels.fetch(channelId);
+    if (!channel?.isTextBased()) {
+      discordLog('Tried to send an interaction to a non-text channel', channelId);
+      return { error: 'Not a text channel' };
+    }
+    return this.promptOnChannel(channel as TextChannel, content, buttons, timeoutSeconds);
+  }
+
+  // The same prompt, in a DM. Discord has no "message a user" endpoint - a DM is a channel like
+  // any other, it just has to be opened first, and createDM is idempotent for one that already
+  // exists.
+  async sendDirectButtonPrompt(
+    userId: string,
+    content: string,
+    buttons: DiscordButtonDef[],
+    timeoutSeconds: number,
+  ): Promise<KeyedObject> {
+    if (!userId) {
+      discordLog('Send Direct Interaction has no user to message');
+      return { error: 'No user' };
+    }
+    try {
+      const user = await this.api.findUser(userId);
+      const channel = await user.createDM();
+      return await this.promptOnChannel(
+        channel as unknown as TextChannel,
+        content,
+        buttons,
+        timeoutSeconds,
+      );
+    } catch (error) {
+      // Overwhelmingly this is the user having DMs from server members turned off, which is a
+      // setting rather than a fault - the graph gets an error output and its Timed Out branch.
+      discordLog('Could not open a DM with ' + userId, error);
+      return { error: 'Could not DM that user' };
+    }
+  }
+
+  // The interaction has to be answered within three seconds or Discord marks it failed, so the
+  // click is acknowledged with an update that strips the buttons off - which doubles as making
+  // the prompt one-shot. A prompt left clickable after its graph moved on is the sharper edge
+  // of the two: the second click has nothing collecting it.
+  private async promptOnChannel(
+    channel: TextChannel,
+    content: string,
+    buttons: DiscordButtonDef[],
+    timeoutSeconds: number,
+  ): Promise<KeyedObject> {
+    if (buttons.length === 0) {
+      discordLog('An interaction node has no buttons to offer');
+      return { error: 'No buttons' };
+    }
+
+    const rows = this.discordModule.buttons.makeButtons(buttons);
+    const message = await channel.send({ content, components: rows as any[] });
+    this.pendingInteractionMessages.add(message.id);
+
+    try {
+      const interaction = await message.awaitMessageComponent({
+        componentType: ComponentType.Button,
+        time: Math.max(1, timeoutSeconds) * 1000,
+      });
+      await interaction.update({ components: [] });
+      return {
+        messageId: message.id,
+        buttonId: interaction.customId,
+        buttonLabel: buttons.find((b) => b.id === interaction.customId)?.label ?? '',
+        userId: interaction.user.id,
+        username: interaction.user.username,
+      };
+    } catch {
+      // awaitMessageComponent rejects on expiry rather than resolving with nothing, so this is
+      // the timeout path and not an error worth logging as one.
+      await message.edit({ components: [] }).catch(() => {});
+      return { messageId: message.id, timedOut: true };
+    } finally {
+      this.pendingInteractionMessages.delete(message.id);
     }
   }
 
@@ -170,6 +321,11 @@ export default class DiscordChat {
     content: string,
     overrides: Partial<StreamMessage> = {},
   ): StreamMessage {
+    // platformEventData is merged rather than overwritten by `overrides`. A trigger node's
+    // outputs are resolved out of this object (see resolveNodeValues), so a caller adding one
+    // field to it used to silently drop guild/channel/user - which is why Button Clicked's
+    // declared Guild ID and Channel ID outputs never resolved to anything.
+    const { platformEventData, ...rest } = overrides;
     return {
       userId,
       username,
@@ -187,9 +343,43 @@ export default class DiscordChat {
       isVIP: false,
       isFirstMessage: false,
       isReturningChatter: false,
-      platformEventData: { guildId, channelId, userId },
-      ...overrides,
+      ...rest,
+      platformEventData: { guildId, channelId, userId, ...platformEventData },
     };
+  }
+
+  // Replying needs the message itself, and a message can only be fetched through the channel
+  // that holds it - there is no lookup by id alone. Fetched rather than read from cache so a
+  // reply still lands on a message the bot didn't see posted (an older one, or one from before
+  // the last reconnect).
+  async replyToMessage(
+    channelId: string,
+    messageId: string,
+    content: string,
+    mentionAuthor = true,
+  ): Promise<Message | undefined> {
+    if (!channelId || !messageId) {
+      discordLog('Reply needs both a channel ID and a message ID', { channelId, messageId });
+      return undefined;
+    }
+    try {
+      const channel = await this.client?.channels.fetch(channelId);
+      if (!channel?.isTextBased()) {
+        discordLog('Tried to reply in a non-text channel', channelId);
+        return undefined;
+      }
+      const target = await (channel as TextChannel).messages.fetch(messageId);
+      return await target.reply({
+        content,
+        // Discord pings the author of the replied-to message by default. An automation
+        // answering every message in a channel is exactly where that gets unwelcome, so it is
+        // the graph's choice rather than Discord's.
+        allowedMentions: { repliedUser: mentionAuthor },
+      });
+    } catch (error) {
+      discordLog('Failed to reply to message ' + messageId, error);
+      return undefined;
+    }
   }
 
   makeRoleTag(roleId: string) {

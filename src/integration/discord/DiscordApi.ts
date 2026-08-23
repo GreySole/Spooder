@@ -213,11 +213,22 @@ export default class DiscordApi {
             type: c.type,
           };
         });
+        // Custom emoji, for the reaction trigger's picker. `animated` decides the CDN
+        // extension the editor asks for - a .png of an animated emoji is a still frame, and a
+        // .gif of a static one 404s.
+        const emojis = g.emojis.cache.map((e) => {
+          return {
+            id: e.id,
+            name: e.name,
+            animated: e.animated === true,
+          };
+        });
         return {
           id: g.id,
           name: g.name,
           channels: convertArrayToObject(channels, 'id'),
           roles: convertArrayToObject(roles, 'id'),
+          emojis: convertArrayToObject(emojis, 'id'),
         };
       }) || 'None',
       'id',
