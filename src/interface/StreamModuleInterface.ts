@@ -14,7 +14,7 @@ export interface StreamModuleInterface {
     nodeId: string,
     values: KeyedObject,
     ctx: ActionExecutionContext,
-  ) => () => void | Promise<void>;
+  ) => () => void | KeyedObject | Promise<void | KeyedObject>;
   getChannelInfo: (channel?: string) => Promise<KeyedObject>;
   getActiveShares: () => Promise<KeyedObject>;
   getUserInfo: (user?: string) => Promise<KeyedObject>;

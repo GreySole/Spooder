@@ -26,6 +26,17 @@ export function twitchLog(...content: any[]) {
   console.log(logEffects('Bright'), logEffects('FgMagenta'), ...content, logEffects('Reset'));
 }
 
+// A video's thumbnail_url arrives as a template - Twitch leaves literal '%{width}x%{height}'
+// in the path for the caller to fill in, and the URL 404s until it does. Substituted here so
+// the port hands out something an overlay or a chat link can actually load.
+const THUMBNAIL_SIZE = { width: 320, height: 180 };
+
+function sizeThumbnail(url?: string): string {
+  return (url ?? '')
+    .replace('%{width}', String(THUMBNAIL_SIZE.width))
+    .replace('%{height}', String(THUMBNAIL_SIZE.height));
+}
+
 export default class Twitch implements StreamModuleInterface {
   constructor() {
     if (fs.existsSync(userDir + '/settings/eventsub.json')) {
@@ -223,11 +234,159 @@ export default class Twitch implements StreamModuleInterface {
   };
 
   getActionNodes = (): ActionNodeDef[] => {
-    return [];
+    return [
+      {
+        id: 'get_stream_info',
+        label: 'Get Stream Info',
+        description:
+          'Looks up the most recent archived broadcast for a Twitch username. Game, Tags and Content Classification Labels describe the channel as it stands now - Twitch records none of them against the archive itself. The exec output waits until Twitch responds.',
+        form: {
+          username: { label: 'Username', type: 'text', portType: 'string' },
+        },
+        defaults: { username: '' },
+        outputs: [
+          { id: 'id', label: 'Video ID', dataType: 'string' },
+          { id: 'streamId', label: 'Stream ID', dataType: 'string' },
+          { id: 'title', label: 'Title', dataType: 'string' },
+          { id: 'displayName', label: 'Display Name', dataType: 'string' },
+          { id: 'gameName', label: 'Game', dataType: 'string' },
+          { id: 'duration', label: 'Duration', dataType: 'string' },
+          { id: 'createdAt', label: 'Created At', dataType: 'string' },
+          { id: 'url', label: 'URL', dataType: 'string' },
+          { id: 'thumbnailUrl', label: 'Thumbnail URL', dataType: 'string' },
+          { id: 'viewCount', label: 'View Count', dataType: 'number' },
+          { id: 'language', label: 'Language', dataType: 'string' },
+          // Arrays of strings. 'any' is as close as a port type gets - see the array nodes,
+          // which take these as their subject (Array Join turns tags into a chat line).
+          { id: 'tags', label: 'Tags', dataType: 'any' },
+          {
+            id: 'contentClassificationLabels',
+            label: 'Content Classification Labels',
+            dataType: 'any',
+          },
+        ],
+      },
+      {
+        id: 'get_channel_info',
+        label: 'Get Channel Info',
+        description:
+          'Looks up a Twitch username and exposes profile and channel metadata. The exec output waits until Twitch responds.',
+        form: {
+          username: { label: 'Username', type: 'text', portType: 'string' },
+        },
+        defaults: { username: '' },
+        outputs: [
+          { id: 'id', label: 'User ID', dataType: 'string' },
+          { id: 'login', label: 'Login', dataType: 'string' },
+          { id: 'displayName', label: 'Display Name', dataType: 'string' },
+          { id: 'bio', label: 'Bio', dataType: 'string' },
+          { id: 'profileImageUrl', label: 'Profile Image URL', dataType: 'string' },
+          { id: 'offlineImageUrl', label: 'Offline Image URL', dataType: 'string' },
+          { id: 'broadcasterType', label: 'Broadcaster Type', dataType: 'string' },
+          { id: 'gameId', label: 'Game ID', dataType: 'string' },
+          { id: 'gameName', label: 'Game', dataType: 'string' },
+          { id: 'title', label: 'Title', dataType: 'string' },
+          { id: 'language', label: 'Language', dataType: 'string' },
+          { id: 'isBrandedContent', label: 'Branded Content', dataType: 'boolean' },
+          // See get_stream_info: string arrays, and 'any' is the port type for them.
+          { id: 'tags', label: 'Tags', dataType: 'any' },
+          {
+            id: 'contentClassificationLabels',
+            label: 'Content Classification Labels',
+            dataType: 'any',
+          },
+        ],
+      },
+      {
+        id: 'promise_all',
+        label: 'Promise All',
+        description: 'Continues only after every action wired into its exec input has completed.',
+        form: {},
+        defaults: {},
+      },
+      {
+        id: 'shoutout',
+        label: 'Shoutout',
+        description:
+          "Queues a Twitch shoutout. Shoutouts are sent one at a time with Twitch's two-minute rate limit between requests.",
+        form: {
+          username: { label: 'Username', type: 'text', portType: 'string' },
+        },
+        defaults: { username: '' },
+        outputs: [
+          { id: 'username', label: 'Username', dataType: 'string' },
+          { id: 'userId', label: 'User ID', dataType: 'string' },
+        ],
+      },
+    ];
   };
 
-  executeActionNode = (nodeId: string, _values: KeyedObject, ctx: ActionExecutionContext) => {
-    return () => {
+  executeActionNode = (nodeId: string, values: KeyedObject, ctx: ActionExecutionContext) => {
+    return async () => {
+      if (nodeId === 'get_stream_info') {
+        const streamInfo = await this.api.getLastStreamInfo(values.username);
+        const lastStream = streamInfo.lastStream ?? {};
+        const channelInfo = streamInfo.channelInfo ?? {};
+        return {
+          id: lastStream.id ?? '',
+          streamId: lastStream.stream_id ?? '',
+          title: lastStream.title ?? '',
+          displayName: streamInfo.userInfo?.display_name ?? '',
+          // From /channels: a video object carries no game at all, so reading game_name off
+          // the archive - as this did - was always an empty string.
+          gameName: channelInfo.game_name ?? '',
+          duration: lastStream.duration ?? '',
+          createdAt: lastStream.created_at ?? '',
+          url: lastStream.url ?? '',
+          thumbnailUrl: sizeThumbnail(lastStream.thumbnail_url),
+          viewCount: Number(lastStream.view_count ?? 0),
+          language: lastStream.language ?? '',
+          tags: channelInfo.tags ?? [],
+          contentClassificationLabels: channelInfo.content_classification_labels ?? [],
+        };
+      }
+      if (nodeId === 'get_channel_info') {
+        const userInfo = await this.api.getUserInfo(values.username);
+        if (!userInfo?.id) {
+          return {
+            id: '',
+            login: '',
+            displayName: '',
+            bio: userInfo?.error ?? '',
+            profileImageUrl: '',
+            offlineImageUrl: '',
+            broadcasterType: '',
+            gameId: '',
+            gameName: '',
+            title: '',
+            language: '',
+            isBrandedContent: false,
+            tags: [],
+            contentClassificationLabels: [],
+          };
+        }
+        const channelInfo = await this.api.getChannelInfo(userInfo.id);
+        return {
+          id: userInfo.id,
+          login: userInfo.login ?? '',
+          displayName: userInfo.display_name ?? '',
+          bio: userInfo.description ?? '',
+          profileImageUrl: userInfo.profile_image_url ?? '',
+          offlineImageUrl: userInfo.offline_image_url ?? '',
+          broadcasterType: userInfo.broadcaster_type ?? '',
+          gameId: channelInfo.game_id ?? '',
+          gameName: channelInfo.game_name ?? '',
+          title: channelInfo.title ?? '',
+          language: channelInfo.broadcaster_language ?? '',
+          isBrandedContent: channelInfo.is_branded_content === true,
+          tags: channelInfo.tags ?? [],
+          contentClassificationLabels: channelInfo.content_classification_labels ?? [],
+        };
+      }
+      if (nodeId === 'shoutout') {
+        const result = await this.api.queueShoutout(values.username);
+        return { username: result.username, userId: result.userId };
+      }
       spooderLog(`Unknown twitch action node '${nodeId}' for event ${ctx.eventName}`);
     };
   };

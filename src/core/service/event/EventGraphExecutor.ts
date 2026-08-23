@@ -35,6 +35,7 @@ function resolveNodeValues(
   graph: EventGraph,
   node: EventGraphNode,
   ctx: GraphExecutionContext,
+  actionOutputs: Map<string, KeyedObject>,
   depth = 0,
 ): KeyedObject {
   const resolved: KeyedObject = { ...node.values };
@@ -93,10 +94,14 @@ function resolveNodeValues(
         streamMessage.platformEventData?.[edge.fromPort] ?? streamMessage[edge.fromPort];
       continue;
     }
+    if (sourceNode.kind === 'action') {
+      resolved[edge.toPort] = actionOutputs.get(sourceNode.id)?.[edge.fromPort];
+      continue;
+    }
     if (sourceNode.kind !== 'operation') {
       continue;
     }
-    const outputs = evaluateOperationNode(graph, sourceNode, ctx, depth + 1);
+    const outputs = evaluateOperationNode(graph, sourceNode, ctx, actionOutputs, depth + 1);
     resolved[edge.toPort] = outputs[edge.fromPort];
   }
   return resolved;
@@ -106,9 +111,10 @@ function evaluateOperationNode(
   graph: EventGraph,
   node: EventGraphNode,
   ctx: GraphExecutionContext,
+  actionOutputs: Map<string, KeyedObject>,
   depth: number,
 ): KeyedObject {
-  const inputValues = resolveNodeValues(graph, node, ctx, depth);
+  const inputValues = resolveNodeValues(graph, node, ctx, actionOutputs, depth);
 
   // Keyed off nodeTypeId, not node.moduleName: the frontend palette tags operation nodes
   // with their category as moduleName (these three carry category 'storage'), so a
@@ -164,6 +170,9 @@ function activatedPorts(
 }
 
 function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphExecutionContext) {
+  if (node.nodeTypeId === 'promise_all') {
+    return () => {};
+  }
   if (node.moduleName === 'core') {
     switch (node.nodeTypeId) {
       case 'response':
@@ -297,6 +306,8 @@ export function walkEventGraph(
   graph: EventGraph,
   ctx: GraphExecutionContext,
   entryNodeIds?: string[],
+  actionOutputs = new Map<string, KeyedObject>(),
+  completedActions = new Set<string>(),
 ): number {
   let executed = 0;
   const outgoing = buildExecAdjacency(graph);
@@ -308,14 +319,23 @@ export function walkEventGraph(
     if (visited.has(nodeId)) {
       continue;
     }
-    visited.add(nodeId);
 
     const node = graph.nodes.find((n) => n.id === nodeId);
     if (!node || node.kind !== 'action') {
       continue;
     }
 
-    const values = resolveNodeValues(graph, node, ctx);
+    if (node.nodeTypeId === 'promise_all') {
+      const predecessors = graph.edges
+        .filter((edge) => edge.toNode === node.id && edge.toPort === 'exec')
+        .map((edge) => edge.fromNode);
+      if (predecessors.some((predecessor) => !completedActions.has(predecessor))) {
+        continue;
+      }
+    }
+    visited.add(nodeId);
+
+    const values = resolveNodeValues(graph, node, ctx, actionOutputs);
 
     // A 'delay' node defers the rest of the branch rather than itself. The node's own `delay`
     // field (handled below) only postpones that one node's thunk - this loop pushes downstream
@@ -330,7 +350,7 @@ export function walkEventGraph(
         // Counted as having run: the branch is committed, it's just waiting.
         executed++;
         setTimeout(
-          () => walkEventGraph(graph, ctx, targets),
+          () => walkEventGraph(graph, ctx, targets, actionOutputs, completedActions),
           Math.max(0, Number.isFinite(seconds) ? seconds : 0) * 1000,
         );
       }
@@ -354,21 +374,49 @@ export function walkEventGraph(
     // A node that throws takes only itself down. It used to take the rest of the branch with it,
     // and now that the cooldown is applied after the walk it would take that too - one bad
     // plugin action shouldn't leave an event uncooled or stop the actions wired after it.
-    const runThunk = () => {
+    const targets = activatedPorts(node, values, ctx).flatMap(
+      (port) => outgoing.get(`${nodeId}::${port}`) ?? [],
+    );
+    const runThunk = (): Promise<void> | undefined => {
       try {
-        thunk();
+        const result: void | KeyedObject | Promise<void | KeyedObject> = (thunk as () =>
+          | void
+          | KeyedObject
+          | Promise<void | KeyedObject>)();
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          return (result as Promise<KeyedObject | void>)
+            .then((outputs) => {
+              if (outputs && typeof outputs === 'object') {
+                actionOutputs.set(node.id, outputs);
+              }
+              completedActions.add(node.id);
+              if (targets.length > 0) {
+                walkEventGraph(graph, ctx, targets, actionOutputs, completedActions);
+              }
+            })
+            .catch((e) => {
+              spooderLog(`Node '${node.moduleName}/${node.nodeTypeId}' failed in event ${ctx.eventName}`, e);
+              completedActions.add(node.id);
+              if (targets.length > 0) {
+                walkEventGraph(graph, ctx, targets, actionOutputs, completedActions);
+              }
+            });
+        }
+        if (result && typeof result === 'object') {
+          actionOutputs.set(node.id, result);
+        }
+        completedActions.add(node.id);
       } catch (e) {
         spooderLog(`Node '${node.moduleName}/${node.nodeTypeId}' failed in event ${ctx.eventName}`, e);
       }
     };
     if ((node.delay ?? 0) === 0) {
-      runThunk();
+      const pending = runThunk();
+      if (!pending) {
+        cursor.push(...targets);
+      }
     } else {
       setTimeout(runThunk, node.delay);
-    }
-
-    for (const port of activatedPorts(node, values, ctx)) {
-      cursor.push(...(outgoing.get(`${nodeId}::${port}`) ?? []));
     }
   }
 

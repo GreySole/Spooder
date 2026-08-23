@@ -12,6 +12,13 @@ export default class TwitchApi {
   botUsername = '';
   botUserID = '';
   broadcasterUserID = '';
+  private shoutoutQueue: {
+    username: string;
+    resolve: (value: KeyedObject) => void;
+    reject: (reason?: any) => void;
+  }[] = [];
+  private shoutoutQueueRunning = false;
+  private shoutoutAvailableAt = 0;
 
   getModule = () => {
     return ModuleService.getStreamModule('twitch') as Twitch;
@@ -159,6 +166,49 @@ export default class TwitchApi {
         });
     });
   }
+
+  queueShoutout = (username: string): Promise<KeyedObject> => {
+    return new Promise((resolve, reject) => {
+      this.shoutoutQueue.push({ username, resolve, reject });
+      this.processShoutoutQueue();
+    });
+  };
+
+  private processShoutoutQueue = async () => {
+    if (this.shoutoutQueueRunning || this.shoutoutQueue.length === 0) {
+      return;
+    }
+    this.shoutoutQueueRunning = true;
+    const waitMs = Math.max(0, this.shoutoutAvailableAt - Date.now());
+    if (waitMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+
+    const request = this.shoutoutQueue.shift()!;
+    try {
+      if (this.broadcasterUserID === '') {
+        await this.getBroadcasterId();
+      }
+      const targetUserId = await this.getUserId(request.username);
+      const response = await this.callBroadcasterApi(
+        'https://api.twitch.tv/helix/moderator/shoutouts?from_broadcaster_id=' +
+          this.broadcasterUserID +
+          '&to_broadcaster_id=' +
+          targetUserId +
+          '&moderator_id=' +
+          this.broadcasterUserID,
+        undefined,
+        'POST',
+      );
+      this.shoutoutAvailableAt = Date.now() + 120000;
+      request.resolve({ username: request.username, userId: targetUserId, response });
+    } catch (error) {
+      request.reject(error);
+    } finally {
+      this.shoutoutQueueRunning = false;
+      this.processShoutoutQueue();
+    }
+  };
 
   getBotId() {
     return new Promise<string>((res, rej) => {
@@ -505,6 +555,34 @@ export default class TwitchApi {
           }
         });
     });
+  };
+
+  // What a viewer thinks of as "the last stream" is split across two endpoints. /videos carries
+  // the archive itself - title, duration, view count - but no game, tags or classification
+  // labels; those live on /channels, and only as they stand right now rather than as they were
+  // during that broadcast. Twitch exposes no per-VOD equivalent, so the channel's current values
+  // are both the closest available and what a shoutout actually wants to read out.
+  getLastStreamInfo = async (username: string): Promise<KeyedObject> => {
+    const userInfo = await this.getUserInfo(username);
+    // Optional chaining rather than a plain property read: an unknown login comes back from
+    // getUserInfo as undefined (Twitch answers with an empty data array, which it indexes into).
+    if (!userInfo?.id) {
+      return { error: userInfo?.error || `No Twitch user found for ${username}` };
+    }
+
+    const [channelInfo, response] = await Promise.all([
+      // Swallowed rather than awaited alongside: the archive is the point of this call, and
+      // losing it because the channel lookup failed would be the worse trade.
+      this.getChannelInfo(userInfo.id).catch((): KeyedObject => ({})),
+      this.callBroadcasterApi(
+        'https://api.twitch.tv/helix/videos?user_id=' + userInfo.id + '&type=archive&first=1',
+      ),
+    ]);
+    const lastStream = (response as KeyedObject | undefined)?.data?.[0] ?? {
+      error: `No archived streams found for ${username}`,
+    };
+
+    return { userInfo, channelInfo, lastStream };
   };
 
   // Cheermotes change on the order of months (Twitch adds a global set now and then; a channel
