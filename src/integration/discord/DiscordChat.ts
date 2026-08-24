@@ -356,7 +356,6 @@ export default class DiscordChat {
     channelId: string,
     messageId: string,
     content: string,
-    mentionAuthor = true,
   ): Promise<Message | undefined> {
     if (!channelId || !messageId) {
       discordLog('Reply needs both a channel ID and a message ID', { channelId, messageId });
@@ -369,16 +368,44 @@ export default class DiscordChat {
         return undefined;
       }
       const target = await (channel as TextChannel).messages.fetch(messageId);
-      return await target.reply({
-        content,
-        // Discord pings the author of the replied-to message by default. An automation
-        // answering every message in a channel is exactly where that gets unwelcome, so it is
-        // the graph's choice rather than Discord's.
-        allowedMentions: { repliedUser: mentionAuthor },
-      });
+      // Discord's own default for a reply: the author of the message being replied to is
+      // pinged. A reply that doesn't notify the person it answers is a reply in name only, so
+      // the node doesn't offer to turn it off.
+      return await target.reply({ content });
     } catch (error) {
       discordLog('Failed to reply to message ' + messageId, error);
       return undefined;
+    }
+  }
+
+  // Adds a reaction to an existing message as the bot. `emoji` takes any of the shapes the
+  // reaction trigger and the emoji picker deal in: 'name:id' for a custom emoji, the character
+  // itself for a standard one, or the '<:name:id>' markup pasted out of a Discord client -
+  // discord.js resolves all three, so a graph can wire a Reaction Added node straight in here.
+  async reactToMessage(channelId: string, messageId: string, emoji: string): Promise<boolean> {
+    if (!channelId || !messageId || !emoji) {
+      discordLog('React needs a channel ID, a message ID and an emoji', {
+        channelId,
+        messageId,
+        emoji,
+      });
+      return false;
+    }
+    try {
+      const channel = await this.client?.channels.fetch(channelId);
+      if (!channel?.isTextBased()) {
+        discordLog('Tried to react in a non-text channel', channelId);
+        return false;
+      }
+      const target = await (channel as TextChannel).messages.fetch(messageId);
+      await target.react(emoji);
+      return true;
+    } catch (error) {
+      // The usual causes are an emoji from a guild the bot isn't in (Discord answers Unknown
+      // Emoji) and a missing Add Reactions permission in the channel. Neither should take the
+      // rest of the graph down with it.
+      discordLog(`Failed to react with ${emoji} to message ${messageId}`, error);
+      return false;
     }
   }
 

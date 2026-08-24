@@ -432,8 +432,18 @@ const EVENTSUB_TRIGGER_SPECS: EventSubTriggerSpec[] = [
     subscriptionType: 'channel.shoutout.receive',
     label: 'Shoutout Received',
     description: 'Fires when the channel receives a shoutout from another channel.',
+    // The standard trio every other trigger exposes, and here it is the channel that gave the
+    // shoutout. No mapping needed: OnEventSubReceived already falls back to this payload's
+    // from_broadcaster_* fields when building the StreamMessage, which is where these resolve
+    // from - the raw event carries no 'username'/'displayName'/'userId' of its own.
+    //
+    // This replaces the old 'Shoutout From' port, which was from_broadcaster_user_name - a
+    // display name, despite reading like a login. Splitting it into the three says which is
+    // which, and Username is the one an API call wants.
     outputs: [
-      { id: 'from_broadcaster_user_name', label: 'Shoutout From', dataType: 'string' },
+      { id: 'username', label: 'Username', dataType: 'string' },
+      { id: 'displayName', label: 'Display Name', dataType: 'string' },
+      { id: 'userId', label: 'User ID', dataType: 'string' },
       { id: 'viewer_count', label: 'Viewer Count', dataType: 'number' },
     ],
   },

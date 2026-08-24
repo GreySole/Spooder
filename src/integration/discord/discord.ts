@@ -63,8 +63,7 @@ const DEFAULT_INTERACTION_WAIT = 60;
 const INTERACTION_FORM: NodeForm = {
   message: {
     label: 'Message',
-    type: 'code',
-    options: { use_response_processor: true },
+    type: 'textarea',
     portType: 'string',
   },
   buttonCount: { label: 'Button Count', type: 'number' },
@@ -230,8 +229,24 @@ export default class Discord implements CommunityModuleInterface {
         label: 'Message Received',
         description: 'Fires when a message is posted in a server channel or DM.',
         form: {
-          guildId: { label: 'Guild ID (optional filter)', type: 'text' },
-          channelId: { label: 'Channel ID (optional filter)', type: 'text' },
+          // The same pickers the Reaction Added trigger filters with - an 18-digit id says
+          // nothing about what it points at, and a wrong one fails silently at run time. Both
+          // still store a plain id string, so a filter typed in by hand before these were
+          // pickers keeps working (FormDiscordIdSelect shows an unlisted id in manual mode).
+          guildId: {
+            label: 'Guild (optional filter)',
+            type: 'custom',
+            options: { component: 'guildSelect' },
+          },
+          channelId: {
+            label: 'Channel (optional filter)',
+            type: 'custom',
+            options: {
+              component: 'channelIdSelect',
+              guildField: 'guildId',
+              channelTypes: ['text'],
+            },
+          },
           requireMention: { label: 'Require Bot Mention', type: 'boolean' },
         },
         defaults: { guildId: '', channelId: '', requireMention: false },
@@ -302,8 +317,7 @@ export default class Discord implements CommunityModuleInterface {
           userId: { label: 'User ID', type: 'text', portType: 'string' },
           message: {
             label: 'Message',
-            type: 'code',
-            options: { use_response_processor: true },
+            type: 'textarea',
             portType: 'string',
           },
         },
@@ -320,8 +334,7 @@ export default class Discord implements CommunityModuleInterface {
           },
           message: {
             label: 'Message',
-            type: 'code',
-            options: { use_response_processor: true },
+            type: 'textarea',
             portType: 'string',
           },
           // Scoped to the guild the destination points at - a role id from another guild is
@@ -398,14 +411,32 @@ export default class Discord implements CommunityModuleInterface {
           channelId: { label: 'Channel ID', type: 'text', portType: 'string' },
           message: {
             label: 'Message',
-            type: 'code',
-            options: { use_response_processor: true },
+            type: 'textarea',
             portType: 'string',
           },
-          mentionAuthor: { label: 'Ping Author', type: 'boolean' },
         },
-        defaults: { messageId: '', channelId: '', message: '', mentionAuthor: true },
+        defaults: { messageId: '', channelId: '', message: '' },
         outputs: [{ id: 'replyMessageId', label: 'Reply Message ID', dataType: 'string' }],
+      },
+      {
+        id: 'react',
+        label: 'React To Message',
+        description:
+          'Adds a reaction to an existing Discord message as the bot. Left blank, the message and channel are the ones that triggered this event - so a React wired to Reaction Added reacts back to what someone just reacted to. Pick a custom emoji with the browser, or paste/type a standard one into the field.',
+        form: {
+          messageId: { label: 'Message ID', type: 'text', portType: 'string' },
+          channelId: { label: 'Channel ID', type: 'text', portType: 'string' },
+          // Same picker - and therefore the same 'name:id' value - as the Reaction Added
+          // trigger's filter, so that node's Emoji output can be wired straight in. No guild
+          // field to scope it to here, so the browser offers every emoji the bot can see.
+          emoji: {
+            label: 'Emoji',
+            type: 'custom',
+            options: { component: 'emojiSelect', placeholder: 'Emoji or :name:id' },
+            portType: 'string',
+          },
+        },
+        defaults: { messageId: '', channelId: '', emoji: '' },
       },
       {
         id: 'voice_join',
@@ -544,15 +575,19 @@ export default class Discord implements CommunityModuleInterface {
             const messageId = values.messageId || eventData.messageId || '';
             const channelId =
               values.channelId || eventData.channelId || ctx.streamMessage.channel || '';
-            const sent = await this.chat.replyToMessage(
-              channelId,
-              messageId,
-              response.response,
-              // Compared against false rather than read as truthy: an untouched switch comes
-              // through undefined, and that should mean Discord's own default (ping), not off.
-              values.mentionAuthor !== false,
-            );
+            const sent = await this.chat.replyToMessage(channelId, messageId, response.response);
             return { replyMessageId: sent?.id ?? '' };
+          }
+          case 'react': {
+            // Both ids fall back to the message this event fired for, the same way Reply does:
+            // reacting to the triggering message is the common case, and it keeps the node
+            // useful with nothing wired into it.
+            const eventData = ctx.streamMessage.platformEventData ?? {};
+            const messageId = values.messageId || eventData.messageId || '';
+            const channelId =
+              values.channelId || eventData.channelId || ctx.streamMessage.channel || '';
+            await this.chat.reactToMessage(channelId, messageId, String(values.emoji ?? '').trim());
+            break;
           }
           case 'voice_join':
             this.voice.joinVoiceChannel(values.guildId, values.channelId);

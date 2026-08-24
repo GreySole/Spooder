@@ -70,18 +70,38 @@ const MATH_NODES: OperationNodeDef[] = [
     outputs: [{ id: 'result', label: 'Result', dataType: 'number' }],
   },
   {
+    // Still 'random_int' because the id is what saved graphs store: renaming it would leave
+    // every node anyone has already placed unresolvable. Only the label and the decimals
+    // field grew.
     id: 'random_int',
-    label: 'Random Integer',
-    description: 'A random whole number between min and max, inclusive.',
+    label: 'Random Number',
+    description:
+      'A random number between min and max, inclusive. Decimals says how many decimal places ' +
+      'the result may have - 0 (the default) gives whole numbers, 2 gives values like 3.47.',
     category: 'math',
     form: {
       min: { label: 'Min', type: 'number', portType: 'number' },
       max: { label: 'Max', type: 'number', portType: 'number' },
+      decimals: { label: 'Decimals', type: 'number', portType: 'number' },
     },
-    defaults: { min: 1, max: 6 },
+    defaults: { min: 1, max: 6, decimals: 0 },
     outputs: [{ id: 'result', label: 'Result', dataType: 'number' }],
   },
 ];
+
+// How many decimal places Random Number is allowed to land on. Anything unreadable as a count
+// - an empty field, a node saved before the field existed - means whole numbers, the node's
+// original behaviour. The ceiling keeps min/max * 10^decimals inside the range integers are
+// exact in; past it the grid arithmetic would start rounding on its own.
+const MAX_RANDOM_DECIMALS = 10;
+
+function randomDecimals(value: unknown): number {
+  const decimals = Number(value);
+  if (!Number.isFinite(decimals)) {
+    return 0;
+  }
+  return Math.min(Math.max(Math.floor(decimals), 0), MAX_RANDOM_DECIMALS);
+}
 
 const STRING_NODES: OperationNodeDef[] = [
   {
@@ -617,9 +637,14 @@ export default class OperationNodeService {
       case 'divide':
         return { result: Number(values.a) / Number(values.b) };
       case 'random_int': {
-        const min = Number(values.min);
-        const max = Number(values.max);
-        return { result: Math.floor(min + Math.random() * (max - min + 1)) };
+        // Picked on a grid of 10^-decimals steps rather than by scaling a raw float, so max is
+        // as reachable as min and the two ends stay symmetric. At 0 decimals the grid is the
+        // whole numbers, which is exactly what this node did before it grew the field.
+        const decimals = randomDecimals(values.decimals);
+        const scale = 10 ** decimals;
+        const min = Math.round(Number(values.min) * scale);
+        const max = Math.round(Number(values.max) * scale);
+        return { result: (min + Math.floor(Math.random() * (max - min + 1))) / scale };
       }
       case 'trim':
         return { result: String(values.text).trim() };
