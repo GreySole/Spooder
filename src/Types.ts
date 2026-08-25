@@ -11,6 +11,7 @@ export type {
   PluginOscInfo,
   PluginPublicInfo,
   PluginSpooderModules,
+  PluginStore,
   PluginThemeInfo,
   StreamMessage,
   NodePortDataType,

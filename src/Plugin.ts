@@ -26,6 +26,7 @@ import childProcess from 'child_process';
 import chmodr from 'chmodr';
 import { sayInChat } from './core/service/EventService';
 import { pluginLog } from './core/Logging';
+import PluginStoreService from './core/service/PluginStoreService';
 import ShareService from './core/service/ShareService';
 import { webJoin } from './core/util/PathUtil';
 
@@ -276,6 +277,15 @@ export default class Plugin {
       };
 
       this.pluginModule.getLocalFilePath = getLocalFilePath;
+      // Durable storage for anything that accumulates at runtime. The underlying database
+      // file is not opened until the plugin actually writes something.
+      const store = PluginStoreService.forPlugin(this.dirname);
+      this.pluginModule.store = store;
+      this.pluginModule.initStorage = (...collections: string[]) => store.init(...collections);
+      this.pluginModule.getData = <T = unknown>(collection: string, key: string) =>
+        store.get<T>(collection, key);
+      this.pluginModule.setData = (collection: string, key: string, value: unknown) =>
+        store.set(collection, key, value);
       this.pluginModule.getSettings = () => {
         const settingsPath = getLocalFilePath('settings.json');
         if (!fs.existsSync(settingsPath)) {
@@ -596,6 +606,10 @@ export default class Plugin {
   async destroy() {
     await this.pluginModule?.onDestroy?.();
     this.pluginModule = undefined;
+
+    // Release the store's file handle before anything can delete or archive this plugin's
+    // folder - an open SQLite connection leaves -wal/-shm sidecars orphaned behind it.
+    PluginStoreService.close(this.dirname);
 
     if (this.require) {
       if (this.modulePath) {

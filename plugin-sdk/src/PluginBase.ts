@@ -1,3 +1,4 @@
+import { NoopPluginStore, PluginStore } from './PluginStore';
 import {
     KeyedObject,
     OSCMessage,
@@ -47,6 +48,11 @@ export default class PluginBase implements Partial<PluginModule> {
     sayInChat: (_message: string, _platform: string, _channel: string): void => {},
   };
   settings: KeyedObject = {};
+  /**
+   * Durable record storage for this plugin, replaced by Spooder at load time. Prefer it over
+   * JSON side files for anything that grows at runtime - see PluginStore for the reasoning.
+   */
+  store: PluginStore = new NoopPluginStore();
 
   registerPluginApi(
     _router: 'local' | 'public',
@@ -69,6 +75,24 @@ export default class PluginBase implements Partial<PluginModule> {
 
   getLocalFilePath(_filePath: string): string {
     return '';
+  }
+
+  /**
+   * Declare the storage collections this plugin uses. Call from onLoad, before the first
+   * read or write; after that, getData and setData handle the rest.
+   */
+  initStorage(...collections: string[]): void {
+    this.store.init(...collections);
+  }
+
+  /** Read one stored record. Undefined when the collection or key holds nothing. */
+  getData<T = unknown>(collection: string, key: string): T | undefined {
+    return this.store.get<T>(collection, key);
+  }
+
+  /** Write one stored record, replacing whatever was under that collection and key. */
+  setData(collection: string, key: string, value: unknown): void {
+    this.store.set(collection, key, value);
   }
 
   getSettings(): KeyedObject | undefined {

@@ -7,6 +7,20 @@ import { webLog } from '../../Logging';
 import OSCService from '../../service/OSCService';
 import PluginRepoService, { PluginRepoMode } from '../../service/PluginRepoService';
 import PluginService from '../../service/PluginService';
+import PluginStoreService from '../../service/PluginStoreService';
+
+/**
+ * True for the plugin's SQLite store and its -wal/-shm sidecars, wherever adm-zip hands
+ * them to us - the paths arrive with either separator depending on platform.
+ */
+function isPluginStoreFile(filename: string): boolean {
+  const normalized = filename.replace(/\\/g, '/');
+  return (
+    normalized.includes(`/${PluginStoreService.dbDirname}/`) ||
+    normalized.startsWith(`${PluginStoreService.dbDirname}/`) ||
+    normalized.includes(PluginStoreService.dbFilename)
+  );
+}
 
 export function registerManageRoutes(router: express.Router) {
   router.post('/create_plugin', async (req: Request, res: Response) => {
@@ -229,7 +243,13 @@ export function registerManageRoutes(router: express.Router) {
     if (fs.existsSync(pluginDir)) {
       if (includeSource) {
         zip.addLocalFolder(pluginDir, '/plugin', (filename) => {
-          return !filename.includes('node_modules') && !filename.includes('settings.json');
+          // The store folder is the user's own accumulated records, not plugin content -
+          // same reasoning that keeps settings.json out of an export.
+          return (
+            !filename.includes('node_modules') &&
+            !filename.includes('settings.json') &&
+            !isPluginStoreFile(filename)
+          );
         });
       }
 
@@ -244,7 +264,13 @@ export function registerManageRoutes(router: express.Router) {
       if (fs.existsSync(buildDir)) {
         webLog('Adding build directory for plugin: ' + pluginName);
         zip.addLocalFolder(buildDir, '/plugin/build', (filename) => {
-          return !filename.includes('node_modules') && !filename.includes('settings.json');
+          // The store folder is the user's own accumulated records, not plugin content -
+          // same reasoning that keeps settings.json out of an export.
+          return (
+            !filename.includes('node_modules') &&
+            !filename.includes('settings.json') &&
+            !isPluginStoreFile(filename)
+          );
         });
 
         if (!includeSource) {

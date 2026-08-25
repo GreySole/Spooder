@@ -1,3 +1,5 @@
+import { PluginStore } from './PluginStore';
+
 export interface KeyedObject {
   [key: string]: any;
 }
@@ -135,6 +137,10 @@ export interface PluginModule {
   getOverlayUrl: () => string;
   getUtilityUrl: () => string;
   settings?: KeyedObject;
+  store: PluginStore;
+  initStorage: (...collections: string[]) => void;
+  getData: <T = unknown>(collection: string, key: string) => T | undefined;
+  setData: (collection: string, key: string, value: unknown) => void;
   onSettings?: (settings: KeyedObject) => void;
   onLoad?: () => void;
   onDestroy?: () => void;

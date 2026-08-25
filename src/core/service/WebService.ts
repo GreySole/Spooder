@@ -29,32 +29,53 @@ import ShareService from './ShareService';
 import MotherwolfTunnel from './webui/Motherwolf';
 import Ngrok from './webui/Ngrok';
 
+// Private ranges that count as "on my network". Anything else is treated as the open
+// internet and gets the public router.
+function isPrivateAddress(address: string) {
+  // Node reports IPv4 peers on a dual-stack socket as ::ffff:192.168.1.5.
+  const addr = address.trim().replace(/^::ffff:/i, '');
+  return (
+    addr === '::1' ||
+    addr === 'localhost' ||
+    addr.startsWith('127.') ||
+    addr.startsWith('192.168.') ||
+    addr.startsWith('10.') ||
+    // 172.16.0.0 - 172.31.255.255
+    /^172\.(1[6-9]|2\d|3[01])\./.test(addr)
+  );
+}
+
 export function isLocal(req: Request) {
-  if (req.headers['x-forwarded-for'] === undefined) {
-    const remoteAddress = req.hostname || req.headers.host;
+  const forwardedFor = req.headers['x-forwarded-for'];
+
+  if (forwardedFor === undefined) {
+    // No proxy in front, so the TCP peer is the client. Use the socket address rather
+    // than req.hostname/Host: the Host header is chosen by the caller, so trusting it
+    // let anyone reach the local router just by claiming to be 192.168.x.x.
+    const remoteAddress = req.socket?.remoteAddress;
     if (!remoteAddress) {
-      console.log('Remote address is undefined', req);
+      console.log('Remote address is undefined', req.path);
       return false;
     }
-    const isLocal =
-      remoteAddress.startsWith('localhost') ||
-      remoteAddress.startsWith('192.168.') ||
-      remoteAddress.startsWith('10.');
-    return isLocal;
+    return isPrivateAddress(remoteAddress);
   }
 
-  const remoteAddress = Array.isArray(req.headers['x-forwarded-for'])
-    ? (req.headers['x-forwarded-for'][0] as string)
-    : (req.headers['x-forwarded-for'] as string);
+  // Behind the tunnel. The proxy appends the real client to whatever X-Forwarded-For the
+  // client sent, so the rightmost entry is the only one the client could not forge -
+  // reading the leftmost let an external caller prepend a LAN IP and be treated as local.
+  const chain = (Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  const remoteAddress = chain[chain.length - 1];
 
   if (remoteAddress == null) {
     console.log('Remote adderess null', req.ip);
     return false;
   }
-  const isLocal =
-    remoteAddress.startsWith('127.0.0.1') ||
-    remoteAddress.startsWith('192.168.') ||
-    remoteAddress.startsWith('10.');
+
+  const isLocal = isPrivateAddress(remoteAddress);
 
   if (isLocal == false) {
     logToFile(
@@ -121,6 +142,7 @@ export class WebService {
     const webDir = path.join(userDir, 'web');
     const overlayDir = path.join(userDir, 'web', 'overlay');
     const utilityDir = path.join(userDir, 'web', 'utility');
+    const publicPageDir = path.join(userDir, 'web', 'public');
     const assetDir = path.join(userDir, 'web', 'assets');
     const iconDir = path.join(userDir, 'web', 'icons');
 
@@ -138,6 +160,12 @@ export class WebService {
 
     if (!fs.existsSync(utilityDir)) {
       fs.mkdirSync(utilityDir);
+    }
+
+    // Plugin public pages are static-served from here at /plugin, and Plugin.ts reads
+    // hasPublic off this folder, so it has to exist on a fresh install like the rest.
+    if (!fs.existsSync(publicPageDir)) {
+      fs.mkdirSync(publicPageDir);
     }
 
     if (!fs.existsSync(assetDir)) {
@@ -199,6 +227,10 @@ export class WebService {
       router.use('/plugin', express.static(userDir + '/web/public'));
       router.use('/assets', express.static(userDir + '/web/assets'));
       router.use('/icons', express.static(userDir + '/web/icons'));
+      // Browser bundles shared by plugin pages (public-bundle.js). Mounted on /shared
+      // ahead of the overlay folder below - express static falls through on a miss, so
+      // the overlay's own osc-bundle.js still resolves off the same prefix.
+      router.use('/shared', express.static(frontendDir + '/shared'));
       router.use(
         '/shared',
         express.static(frontendDir + '/overlay', {
@@ -264,6 +296,9 @@ export class WebService {
       publicRouter.use('/plugin', express.static(userDir + '/web/public'));
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));
       publicRouter.use('/icons', express.static(userDir + '/web/icons'));
+      // Same shared bundles on the public/tunnel side - plugin public pages are
+      // reachable from here too, so they need public-bundle.js served alongside.
+      publicRouter.use('/shared', express.static(frontendDir + '/shared'));
       publicRouter.use(
         '/shared',
         express.static(frontendDir + '/overlay', {

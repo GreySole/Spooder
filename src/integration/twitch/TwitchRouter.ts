@@ -550,6 +550,34 @@ export default function getTwitchRouters() {
     }
   }
 
+  // Local counterpart to the public /viewer/validate below. WebService dispatches by
+  // isLocal(req), so a page opened over localhost or the LAN address never reaches the
+  // public router - without this the endpoint simply 404s there, the page's fetch throws,
+  // and it falls into a Twitch login it can never complete, because the callback comes
+  // back to the same local address and 404s again.
+  //
+  // Anyone routed here already has the unauthenticated local router, which hands out
+  // /config, /server and /recovery, so there is no identity left to protect at this point.
+  // Answer as the broadcaster and let plugin public pages be developed over the LAN.
+  router.post('/viewer/validate', async (req: Request, res: Response) => {
+    const homeChannel = twitchModule.api.homeChannel;
+    if (!homeChannel) {
+      res.send({ status: 'error', message: 'Broadcaster not validated yet' });
+      return;
+    }
+
+    try {
+      const userInfo = await twitchModule.api.getUserInfo(homeChannel);
+      if (!userInfo || userInfo.error) {
+        res.send({ status: 'error', message: userInfo?.error ?? 'No user info' });
+        return;
+      }
+      res.send({ status: 'ok', data: userInfo });
+    } catch (e) {
+      res.send({ status: 'error', message: (e as Error)?.message ?? 'Local validate failed' });
+    }
+  });
+
   publicRouter.post('/viewer/validate', async (req: Request, res: Response) => {
     if (req.cookies.access_token && req.cookies.public_module) {
       const token = req.cookies.access_token;

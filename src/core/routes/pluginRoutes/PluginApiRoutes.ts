@@ -45,7 +45,11 @@ export function registerApiRoutes(router: express.Router, publicRouter: express.
       : req.params.apiPath;
     if (pluginApi.local.get[apiPath]) {
       pluginApi.local.get[apiPath](req, res);
+      return;
     }
+    // Without this the handler falls through having sent nothing, leaving the caller's
+    // request open until it times out rather than telling it the route does not exist.
+    res.status(404).json({ error: `No plugin API route for ${apiPath}` });
   });
 
   router.post('/api/*apiPath', (req: Request, res: Response) => {
@@ -54,7 +58,11 @@ export function registerApiRoutes(router: express.Router, publicRouter: express.
       : req.params.apiPath;
     if (pluginApi.local.post[apiPath]) {
       pluginApi.local.post[apiPath](req, res);
+      return;
     }
+    // Without this the handler falls through having sent nothing, leaving the caller's
+    // request open until it times out rather than telling it the route does not exist.
+    res.status(404).json({ error: `No plugin API route for ${apiPath}` });
   });
 
   publicRouter.get('/api/*apiPath', (req: Request, res: Response) => {
@@ -63,7 +71,11 @@ export function registerApiRoutes(router: express.Router, publicRouter: express.
       : req.params.apiPath;
     if (pluginApi.public.get[apiPath]) {
       pluginApi.public.get[apiPath](req, res);
+      return;
     }
+    // Without this the handler falls through having sent nothing, leaving the caller's
+    // request open until it times out rather than telling it the route does not exist.
+    res.status(404).json({ error: `No plugin API route for ${apiPath}` });
   });
 
   publicRouter.post('/api/*apiPath', (req: Request, res: Response) => {
@@ -72,6 +84,10 @@ export function registerApiRoutes(router: express.Router, publicRouter: express.
       : req.params.apiPath;
     if (pluginApi.public.post[apiPath]) {
       pluginApi.public.post[apiPath](req, res);
+      return;
     }
+    // Without this the handler falls through having sent nothing, leaving the caller's
+    // request open until it times out rather than telling it the route does not exist.
+    res.status(404).json({ error: `No plugin API route for ${apiPath}` });
   });
 }
