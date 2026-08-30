@@ -1,9 +1,16 @@
-import { sayInChat } from '../../core/service/EventService';
+import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
+import { buildMockStreamMessage } from '../../core/util/ResponseUtil';
+import { KeyedObject } from '../../Types';
 import OBS from './obs';
 
+// How many consecutive polls have to show new skipped frames before the stream counts as
+// bleeding, and how many clean polls in a row bring it back to normal. Polls are one second
+// apart, so these are effectively seconds.
+const BLEED_POLLS = 5;
+const RECOVERY_POLLS = 5;
+
 export default class ObsStreamMonitor {
-  streamReconnecting = false;
   streamBleeding = false;
   streamBleedCount = 0;
   streamNormalCount = 0;
@@ -11,62 +18,62 @@ export default class ObsStreamMonitor {
   monitorInterval: NodeJS.Timeout | null = null;
   constructor() {}
 
+  // The monitor only reports - what happens on a run of dropped frames is up to whatever event
+  // graphs listen for the trigger.
+  private emit(triggerNodeId: string, payload: KeyedObject) {
+    const streamMessage = buildMockStreamMessage('');
+    streamMessage.platformEventData = payload;
+    EventService.emitTrigger('obs', triggerNodeId, payload, streamMessage);
+  }
+
   startMonitoring() {
+    // A fresh output starts from a clean slate: skipped-frame counts reset with it, so carrying
+    // the last stream's totals over would read every frame as newly skipped.
+    this.stopMonitoring();
+    this.streamBleeding = false;
+    this.streamBleedCount = 0;
+    this.streamNormalCount = 0;
+    this.skippedFrames = 0;
+
     const obs = ModuleService.getControlModule('obs') as OBS;
     const obsWebsocket = obs.websocket;
     this.monitorInterval = setInterval(() => {
       obsWebsocket
         .call('GetStreamStatus')
         .then((data: any) => {
-          if (data.outputReconnecting) {
-            if (this.streamReconnecting == false) {
-              this.streamReconnecting = true;
-              console.log('OBS Stream: Reconnecting...');
-              if (obs.settings.disconnectAlert) {
-                sayInChat('Stream is reconnecting...');
-              }
-            }
-          } else {
-            if (this.streamReconnecting == true) {
-              this.streamReconnecting = false;
-              console.log('OBS Stream: Connection restored.');
-              if (obs.settings.disconnectAlert) {
-                sayInChat('Stream is back online! Refresh your browser to catch up!');
-              }
-            }
-          }
+          const frames = {
+            skippedFrames: data.outputSkippedFrames ?? 0,
+            totalFrames: data.outputTotalFrames ?? 0,
+          };
 
-          if (this.streamReconnecting) {
+          // Frames skipped while the output is reconnecting say nothing about how the stream is
+          // holding up, so the count only moves while the connection is up. The reconnect itself
+          // is OBS's own StreamStateChanged event, not something to poll for.
+          if (data.outputReconnecting) {
             return;
           }
 
-          if (data.skippedFrames > this.skippedFrames) {
-            this.skippedFrames = data.skippedFrames;
+          if (frames.skippedFrames > this.skippedFrames) {
+            this.skippedFrames = frames.skippedFrames;
             this.streamBleedCount += 1;
           } else {
             if (this.streamBleeding) {
               this.streamNormalCount += 1;
-              if (this.streamNormalCount >= 5) {
+              if (this.streamNormalCount >= RECOVERY_POLLS) {
                 this.streamBleeding = false;
                 this.streamNormalCount = 0;
                 this.streamBleedCount = 0;
                 console.log('OBS Stream: Stream has stabilized.');
-                if (obs.settings.frameDropAlert) {
-                  sayInChat(
-                    'Looks like the stream has stabilized. Refresh your browser to catch up!',
-                  );
-                }
+                this.emit('stream_frame_drops', { isDropping: false, ...frames });
               }
             }
           }
 
-          if (this.streamBleedCount >= 5 && this.streamBleeding == false) {
+          if (this.streamBleedCount >= BLEED_POLLS && this.streamBleeding == false) {
             this.streamBleeding = true;
 
             console.log('OBS Stream: Detected skipped frames. Stream may be lagging.');
-            if (obs.settings.frameDropAlert) {
-              sayInChat('Warning: Stream is experiencing skipped frames. Viewers may notice lag.');
-            }
+            this.emit('stream_frame_drops', { isDropping: true, ...frames });
           }
         })
         .catch(() => {

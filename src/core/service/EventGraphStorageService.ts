@@ -11,12 +11,15 @@ import {
 import { spooderLog } from '../Logging';
 import { migrateEventsFileToGraphs } from '../util/EventGraphMigration';
 
+// Stamped into PRAGMA user_version once the JSON import has been considered, so the decision
+// is recorded in the database itself rather than inferred from the file's existence.
+const MIGRATION_VERSION = 1;
+
 export default class EventGraphStorageService {
   private static db: DatabaseSync;
 
   static initialize() {
     const dbPath = userDir + '/settings/events.db';
-    const isNewDb = !fs.existsSync(dbPath);
 
     EventGraphStorageService.db = new DatabaseSync(dbPath);
     EventGraphStorageService.db.exec(`
@@ -62,10 +65,41 @@ export default class EventGraphStorageService {
     `);
 
     EventGraphStorageService.addMissingColumns();
+    EventGraphStorageService.migrateIfNeeded();
+  }
 
-    if (isNewDb) {
+  /**
+   * Decides whether events.json still needs importing.
+   *
+   * The file's existence cannot answer that. `new DatabaseSync(path)` creates the file before
+   * a single row is written, so any crash between opening the database and finishing the
+   * import leaves a real file holding an empty schema - and a gate on existsSync then skips
+   * the import forever, silently. An upgrade that built the schema without populating it
+   * lands in exactly the same state.
+   *
+   * So gate on the data instead, and record the outcome in user_version:
+   *  - version 0 + no events  -> import (fresh install, or an import that never completed)
+   *  - version 0 + has events -> already migrated by an earlier build; adopt, do not re-import
+   *  - version >= 1           -> settled; an empty table now means the user deleted their
+   *                              events, and must not resurrect them from a stale events.json
+   */
+  private static migrateIfNeeded() {
+    const db = EventGraphStorageService.db;
+    const version = Number(Object.values(db.prepare('PRAGMA user_version').get() ?? {})[0] ?? 0);
+    if (version >= MIGRATION_VERSION) {
+      return;
+    }
+
+    const eventCount = Number(
+      Object.values(db.prepare('SELECT COUNT(*) AS c FROM events').get() ?? {})[0] ?? 0,
+    );
+    if (eventCount === 0) {
+      // saveAll replaces the whole store inside one transaction, so a crash part-way rolls
+      // back to empty and leaves user_version at 0 - the next start simply tries again.
       EventGraphStorageService.migrateFromJson();
     }
+
+    db.exec(`PRAGMA user_version = ${MIGRATION_VERSION}`);
   }
 
   // CREATE TABLE IF NOT EXISTS leaves an existing table exactly as it was, so a column added to

@@ -9,12 +9,15 @@ import OSCService from '../service/OSCService';
 import { json } from 'express';
 
 export function ConfigRoutes() {
-  const sconfig = ConfigService.getConfig();
   const router = Router();
   const publicRouter = Router();
 
+  // Read per request, not captured once at route setup: saveConfig ends in refreshConfig,
+  // which replaces the config object entirely, so a captured reference goes stale the first
+  // time anything is saved. The config tab loads its form from here, and a stale read would
+  // have it save back a snapshot from before (say) a UDP server was added elsewhere.
   router.get('/server_config', (req: Request, res: Response) => {
-    res.send(sconfig);
+    res.send(ConfigService.getConfig());
   });
 
   router.post('/save_config', async (req: Request, res: Response) => {
@@ -50,6 +53,20 @@ export function ConfigRoutes() {
   router.get('/udp_clients', (req: Request, res: Response) => {
     const udpClients = OSCService.getUdpServers();
     res.send(udpClients);
+  });
+
+  // Separate from /save_config so the node inspector's UDP panel can add a destination
+  // without posting the whole config back - and without the public-hosting restart that
+  // /save_config triggers, which would drop overlay connections mid-stream.
+  router.post('/save_udp_servers', (req: Request, res: Response) => {
+    if (req.body == null || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).send({ status: 'error', message: 'Expected a UDP server map.' });
+      return;
+    }
+
+    OSCService.saveUdpServers(req.body);
+    res.send({ status: 'ok' });
+    webLog('UDP Servers Saved!');
   });
 
   return {

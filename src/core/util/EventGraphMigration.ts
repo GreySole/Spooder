@@ -294,6 +294,24 @@ export function upgradeGraphNodes(graphs: { [eventId: string]: EventGraph }): nu
       changed++;
       return { ...node, moduleName: 'core' };
     });
+
+    // Arg Count arrived after these nodes were saved, and a chat trigger migrated from the flat
+    // event format never carried one either. Everything that reads it already treats absent as
+    // zero, but the card's number input binds the raw value - undefined renders as a blank box
+    // rather than the 0 the node actually behaves as - so the default is written in.
+    graph.nodes = graph.nodes.map((node) => {
+      if (node.nodeTypeId !== 'chat_command' || node.values?.argCount != null) {
+        return node;
+      }
+      changed++;
+      return { ...node, values: { ...node.values, argCount: 0 } };
+    });
+
+    // Timing last, and in this order: lifting a delayed node out of the chain works on the
+    // shape a 0.5 event was migrated into, and expanding an OSC Send then hangs its release
+    // off wherever that left it.
+    changed += convertLegacyDelays(graph);
+    changed += upgradeOscSendNodes(graph);
   }
 
   return changed;
@@ -384,4 +402,180 @@ function rewriteMatchingTrigger(
       graph.edges.push(dataEdge(searchId, 'matches', target.id, 'extra'));
     }
   }
+}
+
+// --- 0.5 -> node-graph upgrades for timing and OSC sends -------------------------------
+
+function delayNode(seconds: number, position: { x: number; y: number }): EventGraphNode {
+  return {
+    id: uuidv4(),
+    kind: 'action',
+    moduleName: 'core',
+    nodeTypeId: 'delay',
+    values: { seconds },
+    position,
+  };
+}
+
+// Exec edges into / out of a node, by the generic 'exec' port only. A node lifted out of a
+// chain below keeps any named-port edges (an 'if' node's then/else) exactly where they are.
+function execEdgesInto(graph: EventGraph, nodeId: string) {
+  return graph.edges.filter((e) => e.toNode === nodeId && e.toPort === 'exec');
+}
+
+function execEdgesOutOf(graph: EventGraph, nodeId: string) {
+  return graph.edges.filter((e) => e.fromNode === nodeId && e.fromPort === 'exec');
+}
+
+// A 0.5 event's commands each carried a `delay` in milliseconds, and the executor still
+// honors it (see EventGraphExecutor) - but it is an offset from the start of the event, not a
+// pause in the chain: the walk continues immediately and only that one command is postponed.
+// Three commands delayed 3199ms in a row all fire at 3.199s, not at 3.2/6.4/9.6s.
+//
+// So the delay can't simply become a Delay node in front of the command - that would defer
+// everything after it too, and the offsets would compound. Instead the delayed node is lifted
+// out of the chain onto a branch of its own: whatever ran before it now runs straight into
+// whatever ran after it, and the node hangs off that same predecessor behind a Delay. Absolute
+// timing is preserved exactly, and the delay is finally visible on the canvas.
+//
+// Consecutive nodes sharing one delay are lifted together, as one branch behind one Delay
+// node, which is the shape a 0.5 event that fired several commands at the same offset had.
+function convertLegacyDelays(graph: EventGraph): number {
+  let changed = 0;
+  // graph.nodes is in chain order for migrated events, which is the order the runs below are
+  // found in; a hand-built graph still converts correctly, just one node per branch.
+  for (const node of [...graph.nodes]) {
+    const delayMs = node.delay ?? 0;
+    if (delayMs <= 0) {
+      continue;
+    }
+
+    // The run this node starts: itself, plus each following node that is its only exec
+    // successor, shares its delay, and is entered from nowhere else.
+    const run = [node];
+    for (;;) {
+      const outs = execEdgesOutOf(graph, run[run.length - 1].id);
+      if (outs.length !== 1) {
+        break;
+      }
+      const next = graph.nodes.find((n) => n.id === outs[0].toNode);
+      if (!next || (next.delay ?? 0) !== delayMs || execEdgesInto(graph, next.id).length !== 1) {
+        break;
+      }
+      run.push(next);
+    }
+
+    const inEdges = execEdgesInto(graph, node.id);
+    const outEdges = execEdgesOutOf(graph, run[run.length - 1].id);
+    const delay = delayNode(delayMs / 1000, {
+      x: node.position.x - 200,
+      y: node.position.y,
+    });
+
+    graph.nodes.push(delay);
+    graph.edges = graph.edges.filter((e) => !inEdges.includes(e) && !outEdges.includes(e));
+    // The chain closes over the gap the run leaves, then the run hangs off the same
+    // predecessors behind the Delay. A run with no predecessor (an orphan, or the graph's
+    // own entry) just gains the Delay in front of it, which becomes the new entry.
+    for (const inEdge of inEdges) {
+      for (const outEdge of outEdges) {
+        graph.edges.push(execEdge(inEdge.fromNode, outEdge.toNode));
+      }
+      graph.edges.push(execEdge(inEdge.fromNode, delay.id));
+    }
+    graph.edges.push(execEdge(delay.id, node.id));
+
+    for (const runNode of run) {
+      delete runNode.delay;
+      changed++;
+    }
+  }
+  return changed;
+}
+
+// The OSC Send node was three nodes in one. 'timed' sent a value, held the address for a
+// duration, then sent an off value - arbitrating by `priority` against other events driving
+// the same address, and restoring their value rather than switching off when it lost. That is
+// exactly OSC Claim/OSC Release (see OscLayerService, which was written to replace it), so a
+// timed send becomes Claim -> Delay -> Release. 'button-press' sent an off value 500ms later,
+// which is a Delay and a second send. 'oneshot' was already just the send.
+//
+// The expansion hangs off the send's own exec port alongside whatever it already ran into:
+// the old node started its off-timer and let the chain carry on immediately, so the release
+// must not block what follows.
+function upgradeOscSendNodes(graph: EventGraph): number {
+  let changed = 0;
+  for (const node of [...graph.nodes]) {
+    if (node.moduleName !== 'core' || node.nodeTypeId !== 'software') {
+      continue;
+    }
+    const values = node.values ?? {};
+    // Already upgraded: the legacy fields are what identifies a node that still needs it.
+    if (
+      values.etype == null &&
+      values.duration == null &&
+      values.valueOff == null &&
+      values.priority == null
+    ) {
+      continue;
+    }
+
+    const { etype, duration, valueOff, priority, ...send } = values;
+    const seconds = Number(duration);
+    const holdSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+    const below = { x: node.position.x + 240, y: node.position.y + 110 };
+
+    if (etype === 'timed') {
+      // The node keeps its id so every edge already pointing at it still lands on the claim.
+      node.nodeTypeId = 'osc_claim';
+      node.values = {
+        dest_udp: send.dest_udp,
+        address: send.address,
+        slot: '',
+        value: send.valueOn,
+        releaseValue: valueOff,
+        priority: Number(priority) || 0,
+      };
+      const release: EventGraphNode = {
+        id: uuidv4(),
+        kind: 'action',
+        moduleName: 'core',
+        nodeTypeId: 'osc_release',
+        values: { dest_udp: send.dest_udp, address: send.address, slot: '' },
+        position: { x: below.x + 240, y: below.y },
+      };
+      graph.nodes.push(release);
+      if (holdSeconds > 0) {
+        const hold = delayNode(holdSeconds, below);
+        graph.nodes.push(hold);
+        graph.edges.push(execEdge(node.id, hold.id), execEdge(hold.id, release.id));
+      } else {
+        graph.edges.push(execEdge(node.id, release.id));
+      }
+      changed++;
+      continue;
+    }
+
+    node.values = send;
+
+    if (etype === 'button-press') {
+      // 500ms was hard-coded in the old executor, not configurable.
+      const hold = delayNode(0.5, below);
+      const off: EventGraphNode = {
+        id: uuidv4(),
+        kind: 'action',
+        moduleName: 'core',
+        nodeTypeId: 'software',
+        values: { dest_udp: send.dest_udp, address: send.address, valueOn: valueOff },
+        position: { x: below.x + 240, y: below.y },
+      };
+      graph.nodes.push(hold, off);
+      graph.edges.push(execEdge(node.id, hold.id), execEdge(hold.id, off.id));
+    }
+
+    // 'oneshot' (and anything unrecognised) is the send it always was; the legacy fields are
+    // simply dropped, which the destructure above already did.
+    changed++;
+  }
+  return changed;
 }

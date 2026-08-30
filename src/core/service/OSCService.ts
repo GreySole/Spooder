@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { KeyedObject, SpooderOSCMessageOptions, userDir } from '../../Types';
 import { oscLog } from '../Logging';
-import ConfigService from './ConfigService';
+import ConfigService, { UdpServerObject } from './ConfigService';
 import ModuleService from './ModuleService';
 import OscChannelServer from './osc/OscChannelServer';
 import OscUdpServer from './osc/OscUdpServer';
@@ -96,5 +96,19 @@ export default class OSCService {
 
   static getUdpServers() {
     return ConfigService.getConfig().network.osc.udp_servers;
+  }
+
+  // Replaces the whole destination map, the way saveTunnels does - the webui edits the list as
+  // a unit and posts it back. Nothing here has to be restarted: sendToUDP reads the map on
+  // every send, so a destination added now is usable on the next OSC Send with no reconnect.
+  static saveUdpServers(udpServers: UdpServerObject) {
+    const config = ConfigService.getConfig();
+    ConfigService.saveConfig({
+      ...config,
+      network: {
+        ...config.network,
+        osc: { ...config.network.osc, udp_servers: udpServers },
+      },
+    });
   }
 }

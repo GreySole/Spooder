@@ -16,6 +16,61 @@ import { websocketTest } from '../../core/util/NetUtil';
 import { EventService } from '../../core/service/EventService';
 import ObsStreamMonitor from './ObsStreamMonitor';
 
+// OBS's stream output states, named for the Stream State Changed trigger. The raw
+// OBS_WEBSOCKET_OUTPUT_* strings are what the websocket sends, and a graph shouldn't have to
+// know them - the node filters on these names and hands out booleans instead.
+export const STREAM_STATE_NAMES: KeyedObject = {
+  OBS_WEBSOCKET_OUTPUT_STARTING: 'starting',
+  OBS_WEBSOCKET_OUTPUT_STARTED: 'started',
+  OBS_WEBSOCKET_OUTPUT_STOPPING: 'stopping',
+  OBS_WEBSOCKET_OUTPUT_STOPPED: 'stopped',
+  OBS_WEBSOCKET_OUTPUT_RECONNECTING: 'reconnecting',
+  OBS_WEBSOCKET_OUTPUT_RECONNECTED: 'reconnected',
+};
+
+const STREAM_STATE_SELECTIONS: KeyedObject = {
+  any: 'Any',
+  starting: 'Starting',
+  started: 'Started',
+  stopping: 'Stopping',
+  stopped: 'Stopped',
+  reconnecting: 'Reconnecting',
+  reconnected: 'Reconnected',
+};
+
+// Filename date presets for the Set Recording Name node. These are OBS's own format tokens and
+// go into the filename format verbatim: OBS expands them when a recording starts, so what lands
+// on disk is the time of that recording rather than the time the node ran.
+const DATE_FORMAT_SELECTIONS: KeyedObject = {
+  '%CCYY-%MM-%DD': 'Date (2026-08-25)',
+  '%CCYY-%MM-%DD %hh-%mm-%ss': 'Date and Time (2026-08-25 14-30-52)',
+  '%DD-%MM-%CCYY': 'Day First (25-08-2026)',
+  '%MM-%DD-%CCYY': 'Month First (08-25-2026)',
+  '%hh-%mm-%ss': 'Time (14-30-52)',
+  custom: 'Custom',
+};
+
+// Joins the title and the date format into one filename format. Either half can be missing - a
+// node with no title is just a date - and the separator is only worth writing when there are
+// two sides to keep apart.
+export function buildRecordingName(values: KeyedObject) {
+  const title = String(values.title ?? '').trim();
+  const format = String(
+    (values.dateFormat === 'custom' ? values.dateCustom : values.dateFormat) ?? '',
+  ).trim();
+
+  if (values.datePosition == null || values.datePosition === 'none' || format === '') {
+    return title;
+  }
+  if (title === '') {
+    return format;
+  }
+  const separator = String(values.separator ?? '');
+  return values.datePosition === 'before'
+    ? format + separator + title
+    : title + separator + format;
+}
+
 export default class OBS implements ControlModuleInterface {
   constructor() {
     if (fs.existsSync(userDir + '/settings/obs.json')) {
@@ -67,20 +122,32 @@ export default class OBS implements ControlModuleInterface {
       {
         id: 'stream_state_changed',
         label: 'Stream State Changed',
-        description: 'Fires when streaming starts, stops, or reconnects.',
+        description:
+          'Fires when streaming starts, stops, drops into reconnecting, or comes back. Leave State on Any to catch every one of those and tell them apart from the outputs.',
         form: {
           state: {
             label: 'State',
             type: 'select',
-            options: {
-              selections: { any: 'Any', started: 'Started', stopped: 'Stopped', reconnecting: 'Reconnecting' },
-            },
+            options: { selections: STREAM_STATE_SELECTIONS },
           },
         },
         defaults: { state: 'any' },
         outputs: [
-          { id: 'outputActive', label: 'Output Active', dataType: 'boolean' },
-          { id: 'outputState', label: 'Output State', dataType: 'string' },
+          { id: 'isStreaming', label: 'Is Streaming', dataType: 'boolean' },
+          { id: 'isReconnecting', label: 'Is Reconnecting', dataType: 'boolean' },
+        ],
+      },
+      {
+        id: 'stream_frame_drops',
+        label: 'Stream Frame Drops',
+        description:
+          'Fires once the stream has been skipping frames for several seconds, and again once it stabilizes. Is Dropping says which of the two just happened.',
+        form: {},
+        defaults: {},
+        outputs: [
+          { id: 'isDropping', label: 'Is Dropping', dataType: 'boolean' },
+          { id: 'skippedFrames', label: 'Skipped Frames', dataType: 'number' },
+          { id: 'totalFrames', label: 'Total Frames', dataType: 'number' },
         ],
       },
     ];
@@ -155,6 +222,60 @@ export default class OBS implements ControlModuleInterface {
         defaults: { scene: '', item: '', valueOn: true, etype: 'single', valueOff: false, duration: '0' },
         supportsTimed: true,
       },
+      {
+        id: 'setrecordingname',
+        label: 'Set Recording Name',
+        description:
+          "Sets the filename format new recordings are saved under. OBS reads it when a recording starts, so this only affects the next one - and it sticks until something sets it back, which is what Reset To Default is for. The date is written as OBS format tokens and left for OBS to fill in at record time, so every recording gets its own timestamp rather than the one this node ran at.",
+        form: {
+          etype: {
+            label: 'Mode',
+            type: 'select',
+            options: { selections: { set: 'Set Name', reset: 'Reset To Default' } },
+          },
+          title: {
+            label: 'Title',
+            type: 'text',
+            portType: 'string',
+            showif: { variable: 'etype', condition: 'equals', value: 'set' },
+          },
+          datePosition: {
+            label: 'Date',
+            type: 'select',
+            options: {
+              selections: { none: 'No Date', before: 'Before Title', after: 'After Title' },
+            },
+            showif: { variable: 'etype', condition: 'equals', value: 'set' },
+          },
+          dateFormat: {
+            label: 'Date Format',
+            type: 'select',
+            options: {
+              selections: DATE_FORMAT_SELECTIONS,
+            },
+            showif: { variable: 'datePosition', condition: 'notEquals', value: 'none' },
+          },
+          dateCustom: {
+            label: 'Custom Date Format',
+            type: 'text',
+            portType: 'string',
+            showif: { variable: 'dateFormat', condition: 'equals', value: 'custom' },
+          },
+          separator: {
+            label: 'Separator',
+            type: 'text',
+            showif: { variable: 'datePosition', condition: 'notEquals', value: 'none' },
+          },
+        },
+        defaults: {
+          etype: 'set',
+          title: '',
+          datePosition: 'none',
+          dateFormat: '%CCYY-%MM-%DD',
+          dateCustom: '',
+          separator: '_',
+        },
+      },
     ];
   };
 
@@ -217,6 +338,25 @@ export default class OBS implements ControlModuleInterface {
             );
           }
           break;
+        case 'setrecordingname': {
+          if (values.etype == 'reset') {
+            this.websocket.setRecordingNameToDefault().catch((e) => {
+              spooderLog(`Failed to reset the OBS recording name for ${ctx.eventName}`, e);
+            });
+            break;
+          }
+          const fileName = buildRecordingName(values);
+          if (fileName === '') {
+            spooderLog(
+              `Set Recording Name for ${ctx.eventName} came out empty, so OBS was left alone.`,
+            );
+            break;
+          }
+          this.websocket.setRecordingName(fileName).catch((e) => {
+            spooderLog(`Failed to set the OBS recording name for ${ctx.eventName}`, e);
+          });
+          break;
+        }
         default:
           spooderLog(`Unknown obs action node '${nodeId}' for event ${ctx.eventName}`);
       }
@@ -281,8 +421,4 @@ export default class OBS implements ControlModuleInterface {
   }
 
   deckClients = [] as any[];
-  streamReconnecting = false;
-  streamBleeding = false;
-  streamBleedCount = 0;
-  skippedFrames = 0;
 }

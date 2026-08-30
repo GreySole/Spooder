@@ -4,7 +4,7 @@ import { EventService } from '../../core/service/EventService';
 import ModuleService from '../../core/service/ModuleService';
 import { buildMockStreamMessage } from '../../core/util/ResponseUtil';
 import { KeyedObject } from '../../Types';
-import OBS from './obs';
+import OBS, { STREAM_STATE_NAMES } from './obs';
 import onObsOscMessage from './onObsOscMessage';
 import { sendToObsChannel } from './ObsOsc';
 
@@ -60,14 +60,18 @@ export default class ObsWebsocket {
         }
         sendToTCP('/obs/event/StreamStateChanged', JSON.stringify(data));
 
+        // OBS reports the state as OBS_WEBSOCKET_OUTPUT_*; the trigger node filters on the short
+        // name and reads the two states worth branching on as booleans.
+        const state = STREAM_STATE_NAMES[data.outputState] ?? String(data.outputState);
+        const isReconnecting = state === 'reconnecting';
+        if (isReconnecting || state === 'reconnected') {
+          console.log(`OBS Stream: ${isReconnecting ? 'Reconnecting...' : 'Connection restored.'}`);
+        }
+
+        const payload = { state, isStreaming: data.outputActive === true, isReconnecting };
         const streamMessage = buildMockStreamMessage('');
-        streamMessage.platformEventData = { outputActive: data.outputActive, outputState: data.outputState };
-        EventService.emitTrigger(
-          'obs',
-          'stream_state_changed',
-          { state: data.outputActive ? 'started' : 'stopped' },
-          streamMessage,
-        );
+        streamMessage.platformEventData = payload;
+        EventService.emitTrigger('obs', 'stream_state_changed', payload, streamMessage);
       });
       obsClient.on('RecordStateChanged', (data: KeyedObject) => {
         sendToTCP('/obs/event/RecordStateChanged', JSON.stringify(data));
@@ -116,55 +120,24 @@ export default class ObsWebsocket {
     onObsOscMessage(message);
   }
 
-  setRecordingNameToStream() {
-    return new Promise(async (res, rej) => {
-      let defaultFileName: any = (await this.call('GetProfileParameter', {
-        parameterCategory: 'Output',
-        parameterName: 'FilenameFormatting',
-      })) ?? { defaultParameterValue: '' };
-
-      const firstStreamModule = ModuleService.getStreamModule('twitch');
-
-      let channelInfo = await firstStreamModule.getChannelInfo();
-      console.log(channelInfo);
-      if (channelInfo == null) {
-        console.log("COULDN'T GET CHANNEL INFO");
-        return;
-      }
-      let title = channelInfo.title;
-      let splitTitle = title;
-      if (title.includes('|')) {
-        splitTitle = title.split('|')[0];
-      }
-
-      splitTitle = splitTitle.replaceAll(/[`!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/g, '');
-
-      let recordingTitle = defaultFileName.defaultParameterValue.split(' ')[0] + '_' + splitTitle;
-
-      if (channelInfo) {
-        await this.call('SetProfileParameter', {
-          parameterCategory: 'Output',
-          parameterName: 'FilenameFormatting',
-          parameterValue: recordingTitle,
-        });
-        res(recordingTitle);
-      }
+  // OBS applies FilenameFormatting when a recording starts, so setting this mid-recording only
+  // takes effect on the next one.
+  async setRecordingName(name: string) {
+    await this.call('SetProfileParameter', {
+      parameterCategory: 'Output',
+      parameterName: 'FilenameFormatting',
+      parameterValue: name,
     });
+    return name;
   }
 
-  setRecordingNameToDefault() {
-    return new Promise(async (res, rej) => {
-      let defaultFileName: any = await this.call('GetProfileParameter', {
-        parameterCategory: 'Output',
-        parameterName: 'FilenameFormatting',
-      });
-      await this.call('SetProfileParameter', {
-        parameterCategory: 'Output',
-        parameterName: 'FilenameFormatting',
-        parameterValue: defaultFileName.defaultParameterValue,
-      });
-      res(defaultFileName.defaultParameterValue);
-    });
+  async setRecordingNameToDefault() {
+    const defaultFileName: any = (await this.call('GetProfileParameter', {
+      parameterCategory: 'Output',
+      parameterName: 'FilenameFormatting',
+    })) ?? { defaultParameterValue: '' };
+
+    return this.setRecordingName(defaultFileName.defaultParameterValue);
   }
 
   async getInputList() {

@@ -6,7 +6,6 @@ export default function ObsControlRouter() {
   const router = Router();
   const obs = ModuleService.getControlModule('obs') as OBS;
   const obsWebsocket = obs.websocket;
-  const obsSettings = obs.settings;
 
   function obsSuccess(data: any, res: Response) {
     res.send({ data, status: 'ok' });
@@ -45,9 +44,6 @@ export default function ObsControlRouter() {
 
   //Recording
   router.get('/start_record', async (req, res) => {
-    if (obsSettings.recordRename) {
-      await obsWebsocket.setRecordingNameToStream();
-    }
     obsWebsocket
       .call('StartRecord')
       .then((data) => obsSuccess(data, res))
@@ -55,9 +51,6 @@ export default function ObsControlRouter() {
   });
 
   router.get('/stop_record', async (req, res) => {
-    if (obsSettings.recordRename) {
-      await obsWebsocket.setRecordingNameToDefault();
-    }
     obsWebsocket
       .call('StopRecord')
       .then((data) => obsSuccess(data, res))

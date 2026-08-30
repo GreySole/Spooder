@@ -17,12 +17,12 @@ export interface GraphExecutionContext {
   eventName: string;
   streamMessage: StreamMessage;
   extra: KeyedObject;
-  // Preserved verbatim from the caller (ChatUtil/OnEventSubReceived/OSC handling) so
-  // 'software' nodes retain their original isChat/isOSC-dependent behavior.
+  // Preserved verbatim from the caller (ChatUtil/OnEventSubReceived/OSC handling): which
+  // triggers a dispatch may enter the graph through is decided from these.
   isChat: boolean;
   isOSC: boolean;
-  // The legacy flat-shaped event (derived view), passed through unchanged so
-  // EventSoftwareCommand's `event.triggers.osc.handletype` read keeps working as-is.
+  // The legacy flat-shaped event (derived view), passed through unchanged for the trigger
+  // bookkeeping that still reads it.
   event: KeyedObject;
   activeEvents: KeyedObject;
 }
@@ -220,15 +220,7 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
       case 'mod':
         return EventModCommand(values, ctx.eventName, ctx.streamMessage, ctx.extra);
       case 'software':
-        return EventSoftwareCommand(
-          values,
-          ctx.isChat,
-          ctx.isOSC,
-          ctx.event,
-          ctx.activeEvents,
-          ctx.streamMessage,
-          ctx.eventName,
-        );
+        return EventSoftwareCommand(values);
       case 'if':
       case 'platform_branch':
         // Branching itself happens in activatedPorts(); neither node has a side effect of its

@@ -47,12 +47,15 @@ function decodeRow(row: KeyedObject): any {
   return undefined;
 }
 
+// See EventGraphStorageService for why the import is gated on this rather than on whether the
+// database file happens to exist.
+const MIGRATION_VERSION = 1;
+
 export default class EventStorageService {
   private static db: DatabaseSync;
 
   static initialize() {
     const dbPath = userDir + '/settings/eventstorage.db';
-    const isNewDb = !fs.existsSync(dbPath);
 
     EventStorageService.db = new DatabaseSync(dbPath);
     EventStorageService.db.exec(`
@@ -67,9 +70,30 @@ export default class EventStorageService {
       ) WITHOUT ROWID;
     `);
 
-    if (isNewDb) {
+    EventStorageService.migrateIfNeeded();
+  }
+
+  /**
+   * Gated on stored data plus user_version rather than on the file existing - the database
+   * file is created by the open above, so a crash before the import finished would otherwise
+   * suppress it permanently. Importing only into an empty table means the retry cannot
+   * clobber values a running instance has since written.
+   */
+  private static migrateIfNeeded() {
+    const db = EventStorageService.db;
+    const version = Number(Object.values(db.prepare('PRAGMA user_version').get() ?? {})[0] ?? 0);
+    if (version >= MIGRATION_VERSION) {
+      return;
+    }
+
+    const rowCount = Number(
+      Object.values(db.prepare('SELECT COUNT(*) AS c FROM event_values').get() ?? {})[0] ?? 0,
+    );
+    if (rowCount === 0) {
       EventStorageService.migrateFromJson();
     }
+
+    db.exec(`PRAGMA user_version = ${MIGRATION_VERSION}`);
   }
 
   private static migrateFromJson() {

@@ -29,11 +29,11 @@ interface OSCConfig {
   osc_tcp_port: number;
 }
 
-interface UdpServerObject {
+export interface UdpServerObject {
   [key: string]: UdpClient;
 }
 
-interface UdpClient {
+export interface UdpClient {
   name: string;
   ip: string;
   port: number;

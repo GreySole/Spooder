@@ -371,7 +371,10 @@ export default class Plugin {
         return '';
       };
 
-      this.pluginModule.pluginLog = (content: any[]) => {
+      // Rest params, not a single array: the SDK declares pluginLog(...content), so plugins
+      // call it like console.log. Taking one array here spread the first argument's characters
+      // and dropped the rest.
+      this.pluginModule.pluginLog = (...content: any[]) => {
         pluginLog(this.dirname, ...content);
       };
 

@@ -1,7 +1,6 @@
 import { Request, Response, Router } from 'express';
-import fs from 'fs';
 import ModuleService from '../../core/service/ModuleService';
-import { KeyedObject, userDir } from '../../Types';
+import { KeyedObject } from '../../Types';
 import OBS from './obs';
 import ObsControlRouter from './ObsControlRouter';
 import ObsFetchRouter from './ObsFetchRouter';
@@ -15,18 +14,11 @@ export default function getObsRouters() {
     res.send({ connected: obsModule.websocket.connected });
   });
 
+  // Output behaviour that used to live here as settings - chat alerts on reconnects and dropped
+  // frames, renaming the recording file after the stream title - is now built from OBS trigger
+  // and action nodes, so there is nothing left to save.
   router.get('/get_output_settings', (req: Request, res: Response) => {
     res.send(obsModule.settings);
-  });
-
-  router.post('/save_output_settings', (req: Request, res: Response) => {
-    let newSettings = req.body;
-    obsModule.settings.recordRename = newSettings.recordRename;
-    obsModule.settings.frameDropAlert = newSettings.frameDropAlert;
-    obsModule.settings.disconnectAlert = newSettings.disconnectAlert;
-    fs.writeFileSync(userDir + '/settings/obs.json', JSON.stringify(obsModule.settings), 'utf-8');
-
-    res.send({ status: 'ok' });
   });
 
   router.post('/connect', async (req: Request, res: Response) => {

@@ -14,10 +14,11 @@ interface OscClaim {
 
 // Shared ownership of an OSC address, so overlapping events don't clobber each other.
 //
-// This is the node-graph replacement for the OSC Send node's `priority` field (see
-// event/EventSoftwareCommand.ts, which keeps that behavior for already-saved events). The
-// problem it solves: several effects drive the same address (e.g. a pitch shifter), and when
-// a short one ends it must not reset a value a longer, higher-priority one is still holding.
+// This replaced the OSC Send node's `priority` field, which is gone: saved timed sends were
+// rewritten into Claim -> Delay -> Release by upgradeOscSendNodes (EventGraphMigration.ts).
+// The problem it solves: several effects drive the same address (e.g. a pitch shifter), and
+// when a short one ends it must not reset a value a longer, higher-priority one is still
+// holding.
 //
 // Whoever holds the highest priority decides the value. Releasing hands the address back to
 // the next-highest holder rather than switching it off.
