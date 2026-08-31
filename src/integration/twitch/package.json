@@ -5,7 +5,7 @@
     "type": "stream",
     "file": "twitch.ts"
   },
-  "version": "0.5.10",
+  "version": "0.6.0",
   "private": true,
   "dependencies": {
     "axios": "^1.11.0",

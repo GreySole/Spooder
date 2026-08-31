@@ -5,7 +5,7 @@
     "type": "control",
     "file": "obs.ts"
   },
-  "version": "0.5.10",
+  "version": "0.6.0",
   "private": true,
   "dependencies": {
     "obs-websocket-js": "^5.0.0"

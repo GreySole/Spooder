@@ -1,0 +1,55 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The build as a contributor runs it: every integration module checked out.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+  # The same build with no submodules at all, which is what `git clone` gives someone who
+  # forgets `--recursive`. Core must never import a module's source directly - modules talk to
+  # core through the interfaces in src/interface and core reaches them through ModuleService -
+  # and this job is what keeps that true. If it fails, something in src/core or src/spooder.ts
+  # has taken a dependency on src/integration/*.
+  build-without-modules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build without integration modules
+        run: npm run build

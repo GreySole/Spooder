@@ -538,6 +538,8 @@ export function getTwitchEventSubTriggerNodes(): TriggerNodeDef[] {
     form: {},
     defaults: {},
     outputs: spec.outputs,
+    // What core's legacy-format migration keys off of, in place of reaching into this file.
+    legacyTriggerType: spec.subscriptionType,
     test: {
       params: testParamsForSpec(spec).map(resolveTestParam),
       note:
@@ -610,24 +612,6 @@ export function buildGenericTestArgs(values: KeyedObject | undefined): string[] 
   return buildTestArgs(COMMON_TEST_PARAMS, values);
 }
 
-const NODE_ID_TO_SUBSCRIPTION_TYPE: { [nodeTypeId: string]: string } = Object.fromEntries(
-  EVENTSUB_TRIGGER_SPECS.map((spec) => [spec.nodeTypeId, spec.subscriptionType]),
-);
-
-const SUBSCRIPTION_TYPE_TO_NODE_ID: { [subscriptionType: string]: string } = Object.fromEntries(
-  EVENTSUB_TRIGGER_SPECS.map((spec) => [spec.subscriptionType, spec.nodeTypeId]),
-);
-
-// Real Twitch EventSub `type` string a dedicated trigger node represents, e.g.
-// 'follow' -> 'channel.follow'. Used when flattening a graph node into the legacy
-// `triggers.twitch.type` shape that subscription refresh/dispatch already key off of.
-export function getSubscriptionTypeForNodeId(nodeTypeId: string): string | undefined {
-  return NODE_ID_TO_SUBSCRIPTION_TYPE[nodeTypeId];
-}
-
-// Inverse of getSubscriptionTypeForNodeId - used when migrating legacy flat events (or the
-// generic 'eventsub_event' node's freeform type field) back into a graph, so data that
-// already names a real subscription type lands on its dedicated node where one exists.
-export function getNodeIdForSubscriptionType(subscriptionType: string): string | undefined {
-  return SUBSCRIPTION_TYPE_TO_NODE_ID[subscriptionType];
-}
+// The node id <-> subscription type mapping core's legacy-format migration needs is published
+// on each trigger node as `legacyTriggerType` (see getTwitchEventSubTriggerNodes), so core
+// reads it through ModuleService instead of importing this file.

@@ -5,15 +5,14 @@
   "main": "spooder.ts",
   "workspaces": [
     "plugin-sdk",
-    "src/integration/twitch",
-    "src/integration/discord",
-    "src/integration/obs"
+    "src/integration/*"
   ],
   "scripts": {
     "start": "node --enable-source-maps dist/spooder.js",
     "dev": "tsx --enable-source-maps src/spooder.ts",
     "init": "tsx --enable-source-maps src/spooder.ts -i",
     "safe": "tsx --enable-source-maps src/spooder.ts -s",
+    "prebuild": "node buildScripts/check-modules.js",
     "build": "tsc -p tsconfig.build.json && node buildScripts/copy-integration-manifests.js"
   },
   "author": "Grey Sole",

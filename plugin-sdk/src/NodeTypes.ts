@@ -58,6 +58,11 @@ export interface TriggerNodeDef {
   defaults: KeyedObject;
   // Ports exposing payload data to downstream nodes once the trigger fires.
   outputs: NodePortDef[];
+  // The trigger type string this node stood for in the pre-graph flat event format, e.g. the
+  // 'follow' node's 'channel.follow'. Declared here so the migration between the two formats
+  // can be driven by the module that owns the node instead of core importing the module's own
+  // tables - which is what lets a module live in its own repo and be absent at compile time.
+  legacyTriggerType?: string;
   // Present when the owning module can fire this trigger on demand, so the editor offers a
   // test panel for it. The module supplies the panel (see the WebUI's nodeTestPanel) and the
   // route that runs it; this only declares that the node is testable and what the panel

@@ -1,6 +1,73 @@
 import { v4 as uuidv4 } from 'uuid';
-import { EventGraph, EventGraphEdge, EventGraphFile, EventGraphNode, KeyedObject } from '../../Types';
-import { getNodeIdForSubscriptionType, getSubscriptionTypeForNodeId } from '../../integration/twitch/TwitchEventSubTriggers';
+import { EventGraph, EventGraphEdge, EventGraphFile, EventGraphNode, KeyedObject, TriggerNodeDef } from '../../Types';
+import ModuleService from '../service/ModuleService';
+
+// The legacy flat format names a module's own trigger type string ('channel.follow'); a graph
+// names a node ('follow'). That mapping belongs to whichever module owns the node, so it is
+// read off the trigger defs the modules publish rather than imported from one of them - core
+// has to compile with any module absent for modules to live in their own repos.
+//
+// Looked up lazily, never at import time: ModuleService is only populated once modules have
+// registered, and going through it eagerly here would also close an import cycle.
+interface LegacyTriggerMaps {
+  toNodeId: { [moduleName: string]: { [legacyTriggerType: string]: string } };
+  toLegacyType: { [moduleName: string]: { [nodeTypeId: string]: string } };
+}
+
+let legacyTriggerMaps: LegacyTriggerMaps | null = null;
+
+function buildLegacyTriggerMaps(): LegacyTriggerMaps {
+  if (legacyTriggerMaps) {
+    return legacyTriggerMaps;
+  }
+
+  const maps: LegacyTriggerMaps = { toNodeId: {}, toLegacyType: {} };
+  let modules: { [moduleName: string]: { getTriggerNodes: () => TriggerNodeDef[] } } = {};
+  try {
+    modules = {
+      ...ModuleService.getStreamModules(),
+      ...ModuleService.getCommunityModules(),
+      ...ModuleService.getControlModules(),
+    };
+  } catch (e) {
+    // Nothing has registered yet (init mode, a test importing this in isolation). Fall through
+    // with empty maps - a legacy trigger type then lands on the module's freeform node, the
+    // same outcome an unrecognized type already had.
+    modules = {};
+  }
+
+  let found = false;
+  for (const moduleName in modules) {
+    for (const node of modules[moduleName].getTriggerNodes() ?? []) {
+      if (!node.legacyTriggerType) {
+        continue;
+      }
+      (maps.toNodeId[moduleName] ??= {})[node.legacyTriggerType] = node.id;
+      (maps.toLegacyType[moduleName] ??= {})[node.id] = node.legacyTriggerType;
+      found = true;
+    }
+  }
+
+  // Only cache a result that actually saw a module, so an early call can't freeze the maps
+  // empty for the rest of the process.
+  if (found) {
+    legacyTriggerMaps = maps;
+  }
+  return maps;
+}
+
+// Legacy trigger type -> the dedicated node standing for it, e.g. 'channel.follow' -> 'follow'.
+function nodeIdForLegacyTriggerType(moduleName: string, legacyTriggerType: string | undefined) {
+  if (!legacyTriggerType) {
+    return undefined;
+  }
+  return buildLegacyTriggerMaps().toNodeId[moduleName]?.[legacyTriggerType];
+}
+
+// Inverse: the trigger type string a dedicated node flattens back down to.
+function legacyTriggerTypeForNodeId(moduleName: string, nodeTypeId: string) {
+  return buildLegacyTriggerMaps().toLegacyType[moduleName]?.[nodeTypeId];
+}
 
 function execEdge(fromNode: string, toNode: string): EventGraphEdge {
   return { id: uuidv4(), fromNode, fromPort: 'exec', toNode, toPort: 'exec' };
@@ -97,7 +164,7 @@ function triggerToCallbackNode(triggerType: string, triggerConfig: KeyedObject, 
   // Land on the dedicated node for this subscription type where one exists (e.g.
   // 'channel.follow' -> 'follow'), so re-editing a migrated event shows the typed node
   // instead of the freeform 'eventsub_event' escape hatch.
-  const dedicatedNodeId = getNodeIdForSubscriptionType(triggerConfig.type);
+  const dedicatedNodeId = nodeIdForLegacyTriggerType('twitch', triggerConfig.type);
   if (dedicatedNodeId) {
     return { ...base, moduleName: 'twitch', nodeTypeId: dedicatedNodeId, values: {} };
   }
@@ -213,8 +280,12 @@ export function reconstructFlatEventFromGraph(graph: EventGraph): KeyedObject {
       };
     } else if (node.moduleName === 'twitch' && node.nodeTypeId === 'eventsub_event') {
       triggers.twitch = { enabled: true, ...node.values };
-    } else if (node.moduleName === 'twitch' && getSubscriptionTypeForNodeId(node.nodeTypeId)) {
-      triggers.twitch = { enabled: true, type: getSubscriptionTypeForNodeId(node.nodeTypeId), ...node.values };
+    } else if (legacyTriggerTypeForNodeId(node.moduleName, node.nodeTypeId)) {
+      triggers[node.moduleName] = {
+        enabled: true,
+        type: legacyTriggerTypeForNodeId(node.moduleName, node.nodeTypeId),
+        ...node.values,
+      };
     } else {
       // Generic path for community/control module triggers (OBS, Discord, etc.), matched by
       // EventService.emitTrigger()/matchesTriggerValues() via triggers[moduleName].nodeTypeId

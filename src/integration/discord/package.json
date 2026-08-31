@@ -5,7 +5,7 @@
     "type": "community",
     "file": "discord.ts"
   },
-  "version": "0.5.10",
+  "version": "0.6.0",
   "private": true,
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
