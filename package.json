@@ -19,7 +19,6 @@
   "license": "GPL-3.0",
   "dependencies": {
     "@ngrok/ngrok": "^1.5.2",
-    "@snazzah/davey": "^0.1.10",
     "@spooder/osc-js": "^2.4.6",
     "@vercel/ncc": "^0.38.3",
     "adm-zip": "^0.5.9",
