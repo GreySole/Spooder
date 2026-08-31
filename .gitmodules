@@ -30,3 +30,15 @@
 	path = plugin-sdk/samples/js
 	url = https://github.com/GreySole/Spooder-Sample-Plugin-JS.git
 	branch = 0.5.0-dev
+[submodule "src/integration/twitch"]
+	path = src/integration/twitch
+	url = https://github.com/GreySole/Spooder-Twitch-Module.git
+	branch = 0.6.0-dev
+[submodule "src/integration/discord"]
+	path = src/integration/discord
+	url = https://github.com/GreySole/Spooder-Discord-Module.git
+	branch = 0.6.0-dev
+[submodule "src/integration/obs"]
+	path = src/integration/obs
+	url = https://github.com/GreySole/Spooder-OBS-Module.git
+	branch = 0.6.0-dev
