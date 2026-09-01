@@ -120,6 +120,17 @@ export default class WebUIUpdateService {
     } finally {
       WebUIUpdateService.updating = false;
     }
+
+    // Module UIs are downloaded the same way and on the same schedule - to a user there is no
+    // difference between the WebUI being out of date and a module's tab being out of date.
+    // Imported lazily so ModuleUIService's route back to ModuleService is never part of load
+    // order, the same reason PluginRepoService is loaded that way in ConfigService.
+    try {
+      const { default: ModuleUIService } = await import('./ModuleUIService');
+      await ModuleUIService.checkForUpdate(force);
+    } catch (e: any) {
+      spooderLog('Module UI update check failed:', e.message ?? e);
+    }
   }
 
   private static async checkModule(mod: WebUIModule, force: boolean) {

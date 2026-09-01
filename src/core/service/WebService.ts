@@ -223,6 +223,12 @@ export class WebService {
           },
         }),
       );
+      // Module UIs are federated remotes downloaded by ModuleUIService, served as directories
+      // because a remote is an entry plus chunks that resolve relative to their own URL.
+      //
+      // Mounted per module rather than serving user/modules wholesale: only the `web` folder
+      // is public, so anything else a module keeps beside it stays server-side.
+      router.use('/modules/:moduleName', moduleUIStatic);
       router.use('/utility', express.static(userDir + '/web/utility'));
       router.use('/plugin', express.static(userDir + '/web/public'));
       router.use('/assets', express.static(userDir + '/web/assets'));
@@ -505,4 +511,28 @@ function mergeDirectories(sourceDir: string, destDir: string) {
       fs.moveSync(srcPath, destPath, { overwrite: true });
     }
   });
+}
+
+// One express.static per module, built on first request and reused. Serving each module's
+// `web` folder individually keeps the rest of user/modules/<name>/ off the network, and the
+// name is checked against a strict pattern so a request can never walk out of that folder.
+const moduleStaticHandlers: { [moduleName: string]: express.RequestHandler } = {};
+
+function moduleUIStatic(req: Request, res: Response, next: NextFunction) {
+  // Express 5 types a route param as string | string[]; anything but a plain safe name is
+  // rejected by the pattern below and falls through to the 404 handler.
+  const moduleName = String(req.params.moduleName ?? '');
+  if (!/^[a-z0-9_-]+$/.test(moduleName)) {
+    next();
+    return;
+  }
+  if (!moduleStaticHandlers[moduleName]) {
+    // Same layout ModuleUIService installs into. Built here rather than imported from it,
+    // because WebService <- ModuleService <- ModuleUIService would close an import cycle.
+    moduleStaticHandlers[moduleName] = express.static(
+      path.join(userDir, 'modules', moduleName, 'web'),
+      { index: false },
+    );
+  }
+  moduleStaticHandlers[moduleName](req, res, next);
 }

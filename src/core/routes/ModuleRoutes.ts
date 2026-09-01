@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import ModuleService from '../service/ModuleService';
+import ModuleUIService from '../service/ModuleUIService';
 import { KeyedObject } from '../../Types';
 
 export default function ModuleRoutes() {
@@ -20,6 +21,12 @@ export default function ModuleRoutes() {
       if (mod) {
       }
     }
+  });
+
+  // The module UIs installed on this Spooder, as federation remotes the WebUI can register.
+  // Its loader calls this on boot; an empty list simply means no module tabs.
+  router.get('/ui', (req: Request, res: Response) => {
+    res.send(ModuleUIService.getInstalled());
   });
 
   router.get('/get_response_handlers', (req: Request, res: Response) => {
