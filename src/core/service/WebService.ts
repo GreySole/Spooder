@@ -17,6 +17,7 @@ import { ConfigRoutes } from '../routes/ConfigRoutes';
 import { EventRoutes } from '../routes/EventRoutes';
 import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes';
 import ModuleRoutes from '../routes/ModuleRoutes';
+import RegistryRoutes from '../routes/RegistryRoutes';
 import { OverlayContainerRoutes } from '../routes/OverlayContainerRoutes';
 import { PluginRoutes } from '../routes/PluginRoutes';
 import { PublicRoutes } from '../routes/PublicRoutes';
@@ -331,6 +332,11 @@ export class WebService {
 
       const moduleRoutes = ModuleRoutes();
       router.use('/module', moduleRoutes.local);
+
+      // The catalogue of installable modules and plugins, behind the local router: browsing
+      // what could be installed is an owner's decision, not something a share link exposes.
+      const registryRoutes = RegistryRoutes();
+      router.use('/registry', registryRoutes.local);
 
       const eventRoutes = EventRoutes();
       router.use('/events', eventRoutes.local);

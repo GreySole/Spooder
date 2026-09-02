@@ -2,6 +2,11 @@
     "extends": "./tsconfig.json",
     "compilerOptions": {
         "noEmit": false,
+        // tsc emits JavaScript even when typechecking fails. That is survivable while a person
+        // is watching the output, but a module installed at runtime triggers this build - and a
+        // module that does not compile would otherwise write broken output over a working dist
+        // for the next start to run.
+        "noEmitOnError": true,
         "allowImportingTsExtensions": false,
         "outDir": "./dist",
         "rootDir": "./src",

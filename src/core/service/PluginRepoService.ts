@@ -6,6 +6,7 @@ import nodeSchedule from 'node-schedule';
 import path from 'path';
 import { userDir } from '../../Types';
 import { spooderLog } from '../Logging';
+import { downloadToFile } from '../util/DownloadUtil';
 import { compareVersions } from '../util/VersionUtil';
 import ConfigService from './ConfigService';
 import OSCService from './OSCService';
@@ -297,6 +298,10 @@ export default class PluginRepoService {
     url: string;
     mode?: PluginRepoMode;
     branch?: string | null;
+    // Set when a registry pinned this release and recorded the hash a reviewer checked. A
+    // plugin runs in-process with the user's tokens, so this is the one point where that
+    // record can still stop a swapped artifact.
+    sha256?: string | null;
   }): Promise<InstallResult> {
     const url = normalizeRepoUrl(options.url);
     const mode: PluginRepoMode = options.mode === 'source' ? 'source' : 'release';
@@ -305,7 +310,7 @@ export default class PluginRepoService {
     const result =
       mode === 'source'
         ? await PluginRepoService.installFromSource(url, branch)
-        : await PluginRepoService.installFromRelease(url);
+        : await PluginRepoService.installFromRelease(url, undefined, options.sha256 ?? null);
 
     PluginRepoService.recordInstall({
       pluginName: result.pluginName,
@@ -429,6 +434,7 @@ export default class PluginRepoService {
   private static async installFromRelease(
     url: string,
     knownPluginName?: string,
+    expectedSha256?: string | null,
   ): Promise<InstallResult> {
     const gh = parseGitHubRepo(url);
     if (!gh) {
@@ -452,13 +458,7 @@ export default class PluginRepoService {
 
     try {
       progress(label, `Downloading ${release.version}...`);
-      const response = await Axios({
-        url: release.assetUrl,
-        method: 'GET',
-        responseType: 'arraybuffer',
-        headers: { Accept: 'application/octet-stream', 'User-Agent': 'Spooder' },
-      });
-      fs.writeFileSync(zipPath, Buffer.from(response.data));
+      await downloadToFile(release.assetUrl, zipPath, expectedSha256 ?? null);
 
       progress(label, 'Extracting...');
       new AdmZip(zipPath).extractAllTo(scratch, true);

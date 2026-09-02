@@ -1,6 +1,7 @@
 import AdmZip from 'adm-zip';
 import Axios from 'axios';
 import fs from 'fs-extra';
+import { downloadToFile } from '../util/DownloadUtil';
 import path from 'path';
 import { userDir } from '../../Types';
 import { spooderLog } from '../Logging';
@@ -41,6 +42,8 @@ interface ModuleUIRepo {
 interface ReleaseInfo {
   version: string;
   assetUrl: string;
+  // Present only when the registry pinned this release; a 'latest' entry has no reviewed hash.
+  sha256?: string | null;
 }
 
 const MANIFEST_FILENAME = 'mf-manifest.json';
@@ -193,17 +196,12 @@ export default class ModuleUIService {
   }
 
   private static async downloadAndInstall(repo: ModuleUIRepo, release: ReleaseInfo) {
-    const response = await Axios({
-      url: release.assetUrl,
-      method: 'GET',
-      responseType: 'arraybuffer',
-      headers: { Accept: 'application/octet-stream' },
-    });
-
     const dest = moduleUIDir(repo.key);
     const zipPath = path.join(userDir, 'modules', repo.key, `${repo.key}-web.zip`);
-    fs.ensureDirSync(path.dirname(zipPath));
-    fs.writeFileSync(zipPath, Buffer.from(response.data));
+
+    // Verified when the registry pinned a hash for this artifact. An entry tracking `latest`
+    // has nothing to check against, which is the trade that setting makes explicit.
+    await downloadToFile(release.assetUrl, zipPath, release.sha256 ?? null);
 
     try {
       // Extract beside the live directory and swap, so a failed download never leaves a
