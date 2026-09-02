@@ -29,6 +29,26 @@ export default function ModuleRoutes() {
     res.send(ModuleUIService.getInstalled());
   });
 
+  // Which modules this Spooder actually has loaded. The WebUI needs it because a module's
+  // frontend can be compiled into the bundle while its backend is not installed - uninstalling
+  // the backend cannot remove a tab that is baked into the page. Without this the tab stays,
+  // and every call it makes 404s.
+  router.get('/loaded', (req: Request, res: Response) => {
+    try {
+      res.send(
+        Object.keys({
+          ...ModuleService.getStreamModules(),
+          ...ModuleService.getCommunityModules(),
+          ...ModuleService.getControlModules(),
+        }),
+      );
+    } catch (e) {
+      // Asked before any module registered. An empty list would hide every tab, so say
+      // nothing is known instead and let the WebUI keep showing what it has.
+      res.status(503).send({ error: 'Modules are still loading.' });
+    }
+  });
+
   router.get('/get_response_handlers', (req: Request, res: Response) => {
     const handlers = ModuleService.getResponseHandlers();
 

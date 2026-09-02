@@ -77,6 +77,32 @@ export default class ModuleInstallService {
     return path.join(integrationDir, name);
   }
 
+  /**
+   * Whether this module's folder is a live git checkout - a submodule someone is developing
+   * in, rather than an installed copy.
+   *
+   * Installing over one replaces its working tree with a plain folder and removing one deletes
+   * it outright, in both cases leaving the parent repo with a broken gitlink and the work
+   * gone. So those are refused.
+   *
+   * The test is whether `.git` is actually there, not whether .gitmodules mentions the path.
+   * A clone made without `--recursive` lists the submodule but has nothing checked out, and
+   * installing into that empty directory destroys nothing - which is exactly how you would set
+   * up a machine to test installing modules for real.
+   */
+  static isDevelopmentCheckout(name: string): boolean {
+    return fs.existsSync(path.join(ModuleInstallService.moduleDir(name), '.git'));
+  }
+
+  private static refuseIfDevelopmentCheckout(name: string, verb: string) {
+    if (ModuleInstallService.isDevelopmentCheckout(name)) {
+      throw new Error(
+        `'${name}' is checked out as a git submodule for development, so Spooder will not ` +
+          `${verb} it. Use git in src/integration/${name} instead.`,
+      );
+    }
+  }
+
   static isInstalled(name: string): boolean {
     return fs.existsSync(path.join(ModuleInstallService.moduleDir(name), 'package.json'));
   }
@@ -103,6 +129,7 @@ export default class ModuleInstallService {
         `Spooder is already installing ${ModuleInstallService.busy}. Wait for that to finish.`,
       );
     }
+    ModuleInstallService.refuseIfDevelopmentCheckout(name, 'overwrite');
 
     ModuleInstallService.busy = name;
     const dest = ModuleInstallService.moduleDir(name);
@@ -180,6 +207,7 @@ export default class ModuleInstallService {
     if (!ModuleInstallService.isInstalled(name)) {
       throw new Error(`${name} is not installed.`);
     }
+    ModuleInstallService.refuseIfDevelopmentCheckout(name, 'remove');
 
     ModuleInstallService.busy = name;
     try {
