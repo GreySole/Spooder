@@ -1,1 +1,0 @@
-body{background-color:#000}.background{z-index:-1;width:100vw;height:100vh;position:fixed;top:0;left:0}.container{z-index:1;justify-content:center;align-items:center;width:100vw;height:100vh;display:flex;position:relative}.content{border:2px solid var(--button-border-color)}.plugin-button.start{border-radius:10px 0 0 10px}.plugin-button.end{border-radius:0 10px 10px 0}
