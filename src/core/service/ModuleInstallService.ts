@@ -185,6 +185,10 @@ export default class ModuleInstallService {
     try {
       progress(name, 'Removing...');
       fs.removeSync(ModuleInstallService.moduleDir(name));
+      // The downloaded tab too. Leaving it behind means Spooder keeps serving a remote for a
+      // module it no longer has, and reinstalling later would silently reuse whatever version
+      // happened to be sitting there.
+      fs.removeSync(path.join(userDir, 'modules', name));
 
       progress(name, 'Rebuilding...');
       await run('npm', ['install', '--no-audit', '--no-fund'], 'npm install', 10 * 60 * 1000);

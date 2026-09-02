@@ -7,6 +7,7 @@ import { userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import { compareVersions } from '../util/VersionUtil';
 import ModuleService from './ModuleService';
+import RegistryService from './RegistryService';
 
 // A module has two halves in different places. Its backend half is TypeScript compiled into
 // dist by Spooder's own build, so it ships with Spooder. Its WebUI half is a Module Federation
@@ -129,6 +130,38 @@ export default class ModuleUIService {
     return repos;
   }
 
+  /**
+   * The exact release a registry pinned, by tag and asset name. Returned with the reviewed
+   * hash attached, which is the whole point: the generated tag archive and the uploaded asset
+   * are different bytes, so only the named asset can satisfy that hash.
+   */
+  static async getPinnedRelease(
+    repo: ModuleUIRepo,
+    version: string,
+    assetName: string | undefined,
+    sha256: string | null,
+  ): Promise<ReleaseInfo | null> {
+    try {
+      const response = await Axios({
+        url: `https://api.github.com/repos/${repo.repoOwner}/${repo.repoName}/releases/tags/v${version}`,
+        method: 'GET',
+        headers: { Accept: 'application/vnd.github+json' },
+      });
+      const assets: any[] = response.data?.assets ?? [];
+      const asset = assetName ? assets.find((a) => a.name === assetName) : assets[0];
+      if (!asset?.browser_download_url) {
+        spooderLog(
+          `${repo.repoName} v${version} has no asset '${assetName ?? '(first)'}'; ignoring the registry pin.`,
+        );
+        return null;
+      }
+      return { version, assetUrl: asset.browser_download_url, sha256 };
+    } catch (e: any) {
+      spooderLog(`Could not read ${repo.repoName} v${version}:`, e.message);
+      return null;
+    }
+  }
+
   static async getLatestRelease(repo: ModuleUIRepo): Promise<ReleaseInfo | null> {
     try {
       const response = await Axios({
@@ -177,7 +210,20 @@ export default class ModuleUIService {
 
   private static async checkModule(repo: ModuleUIRepo, force: boolean) {
     const localVersion = ModuleUIService.getLocalVersion(repo.key);
-    const release = await ModuleUIService.getLatestRelease(repo);
+
+    // A registry pin wins over the repo's newest release: a pinned entry means someone
+    // reviewed that exact artifact, and following 'latest' here would quietly undo that for
+    // half the module. Falls back to latest for a module no enabled registry pins - which
+    // includes anything installed straight from a URL.
+    const pinned = await RegistryService.getPinnedWebUI(repo.key);
+    const release = pinned?.version
+      ? await ModuleUIService.getPinnedRelease(
+          repo,
+          pinned.version,
+          pinned.asset,
+          pinned.sha256 ?? null,
+        )
+      : await ModuleUIService.getLatestRelease(repo);
 
     if (!release) {
       return;
@@ -193,6 +239,21 @@ export default class ModuleUIService {
     );
     await ModuleUIService.downloadAndInstall(repo, release);
     spooderLog(`${repo.repoName} updated to ${release.version}`);
+  }
+
+  /**
+   * Installs one module's UI directly, for the case where the module was just installed and
+   * its backend is not loaded yet - getModuleUIRepos() only sees loaded modules, so waiting
+   * for the scheduled check would leave a module with no tab until after the restart.
+   */
+  static async installFor(
+    key: string,
+    repoFullName: string,
+    release: ReleaseInfo,
+  ): Promise<string> {
+    const [repoOwner, repoName] = repoFullName.split('/');
+    await ModuleUIService.downloadAndInstall({ key, repoOwner, repoName }, release);
+    return release.version;
   }
 
   private static async downloadAndInstall(repo: ModuleUIRepo, release: ReleaseInfo) {

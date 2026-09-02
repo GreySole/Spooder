@@ -10,10 +10,9 @@ import { getRestartCapability, requestRestart } from '../util/AppUtil';
 // What the Modules tab reads. The catalogue on its own is not enough to draw a card - whether
 // something is already installed, and whether this Spooder can run it, decide what the button
 // says - so that is resolved here rather than making the frontend ask three more questions.
-// A module installs from source, so the artifact is the tag's zipball rather than a built
-// asset. GitHub serves one for every tag, which means a module repo needs no release workflow
-// of its own to be installable.
-async function resolveSourceZip(artifact: RegistryArtifact, track: string): Promise<string> {
+// Resolves a registry artifact to the URL of the asset a reviewer actually approved. Serves
+// both halves of a module: the backend's source zip and the WebUI's federated bundle.
+async function resolveReleaseAsset(artifact: RegistryArtifact, track: string): Promise<string> {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'Spooder' };
   const tag = track === 'pinned' && artifact.version ? `tags/v${artifact.version}` : 'latest';
 
@@ -140,16 +139,37 @@ export default function RegistryRoutes() {
           return;
         }
         // Source, not a bundle: the module is compiled here by the build Spooder already has.
-        const zipUrl = await resolveSourceZip(entry.server, entry.track);
+        const zipUrl = await resolveReleaseAsset(entry.server, entry.track);
         const result = await ModuleInstallService.install({
           name: entry.id,
           zipUrl,
           version: entry.server.version ?? null,
           sha256: entry.track === 'pinned' ? (entry.server.sha256 ?? null) : null,
         });
+        // Fetch the tab too, while we know which version the registry pinned. The scheduled
+        // check would not do it: that only looks at loaded modules, and this one is not loaded
+        // until the restart - so the module would arrive with no tab and look half broken.
+        let webuiWarning: string | null = null;
+        if (entry.webui) {
+          try {
+            const uiUrl = await resolveReleaseAsset(entry.webui, entry.track);
+            await ModuleUIService.installFor(entry.id, entry.webui.repo, {
+              version: entry.webui.version ?? result.version ?? '0.0.0',
+              assetUrl: uiUrl,
+              sha256: entry.track === 'pinned' ? (entry.webui.sha256 ?? null) : null,
+            });
+          } catch (e: any) {
+            // The backend is installed and working; only the tab is missing, which the
+            // catalogue already has a state for. Reported, not rolled back.
+            webuiWarning =
+              e.message ?? 'The module installed, but its tab could not be downloaded.';
+          }
+        }
+
         res.send({
           status: 'ok',
           ...result,
+          webuiWarning,
           // How the restart will happen, so the page can say "reconnecting" or "start Spooder
           // again" rather than guessing.
           restartVia: getRestartCapability(),

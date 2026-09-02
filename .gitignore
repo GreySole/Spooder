@@ -130,3 +130,4 @@ dist
 .pnp.*
 backend/.well-known/acme-challenge/wiuaU6lkOPP4bFPn-Up9wIoJFiVHr0VzwKNqDDVE_5s
 .vscode/settings.json
+webui/*/build/

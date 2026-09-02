@@ -384,6 +384,30 @@ export default class RegistryService {
     }
   }
 
+  /**
+   * The WebUI artifact a registry pins for a module, or null when no enabled registry pins one.
+   *
+   * This is what lets a pinned entry mean the same thing for both halves of a module. Without
+   * it the backend installs the reviewed version while the tab quietly follows whatever the
+   * repo published most recently - two different notions of "pinned" under one entry.
+   *
+   * Reads the cached catalogue rather than forcing a fetch: this runs inside the update check,
+   * which is already on a schedule, and a registry that cannot be reached should fall back to
+   * the module's own manifest rather than block the update.
+   */
+  static async getPinnedWebUI(moduleId: string): Promise<RegistryArtifact | null> {
+    try {
+      const catalogue = await RegistryService.getCatalogue(false);
+      const entry = catalogue.entries.find((e) => e.id === moduleId && e.kind === 'module');
+      if (!entry || entry.track !== 'pinned' || !entry.webui?.version) {
+        return null;
+      }
+      return entry.webui;
+    } catch (e) {
+      return null;
+    }
+  }
+
   private static cachedVersion: string | null = null;
 
   /**
