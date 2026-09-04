@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs, { existsSync } from 'fs';
 import path from 'path';
 import { CommunityModuleInterface } from '../../interface/CommunityModuleInterface';
 import { ControlModuleInterface } from '../../interface/ControlModuleInterface';
@@ -40,6 +40,10 @@ export default class ModuleService {
 
       (async () => {
         const integrationPath = path.join(__dirname, '../../integration');
+        if(!existsSync(integrationPath)){
+          onAllModulesLoaded();
+          return;
+        }
         const files = await fs.promises.readdir(integrationPath);
         console.log('Found integration files', files);
         await Promise.allSettled(
