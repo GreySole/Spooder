@@ -1,0 +1,13 @@
+{
+  "name": "@spooder/homeassistant",
+  "spooder_module": {
+    "name": "homeassistant",
+    "type": "control",
+    "file": "homeassistant.ts"
+  },
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "mqtt": "^5.10.1"
+  }
+}
