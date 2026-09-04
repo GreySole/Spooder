@@ -17,7 +17,22 @@ import OSCService from './OSCService';
 // module with native dependencies, since npm compiles those for the platform it is on. A
 // bundler cannot inline sodium-native or @discordjs/opus at all.
 
-const integrationDir = path.join(__dirname, '../../integration');
+// npm and the build both run from the Spooder root, two levels above the compiled service.
+function projectRoot(): string {
+  return path.resolve(__dirname, '../../..');
+}
+
+// Deliberately not derived from this file's own __dirname. ModuleService reads modules from
+// wherever the currently running code lives - src/integration under tsx, dist/integration
+// under compiled node - and that split is correct for reading whatever already works. Writing
+// is different: a module's downloaded source always has to land in src/integration so tsc
+// picks it up (tsconfig.build.json's rootDir and include only ever span src/**). Computing this
+// from __dirname the same way ModuleService does would put freshly downloaded .ts source into
+// dist/integration whenever Spooder itself happens to be running compiled - a location nothing
+// ever compiles or copies a manifest from, so the module would silently never load. Anchoring
+// to projectRoot() instead means an install always lands somewhere the next build will find it,
+// regardless of which mode the installing process happens to be running in.
+const integrationDir = path.join(projectRoot(), 'src', 'integration');
 const stagingRoot = path.join(userDir, 'tmp', 'module-install');
 
 export interface ModuleInstallResult {
@@ -34,11 +49,6 @@ function progress(name: string, message: string) {
     message,
   });
   spooderLog(`[module install] ${name}: ${message}`);
-}
-
-// npm and the build both run from the Spooder root, two levels above the compiled service.
-function projectRoot(): string {
-  return path.resolve(__dirname, '../../..');
 }
 
 function run(command: string, args: string[], label: string, timeoutMs: number): Promise<void> {
