@@ -63,21 +63,35 @@ export default class WebUIUpdateService {
     return fs.existsSync(path.join('.', 'webui', 'main', 'build', 'index.html'));
   }
 
+  // The in-flight first download, shared by every caller. ConfigService.refreshConfig() runs
+  // at boot immediately before spooder.ts's own awaited call, and InitSchedule() below fires
+  // this as a fire-and-forget safety net - so two calls landing back to back is the normal
+  // case, not an edge case. checkForUpdate()'s own reentrancy guard resolves a second caller
+  // immediately without waiting for the first to finish, which is fine for a periodic check
+  // but wrong here: whoever is awaiting "is the UI ready" needs the real answer, not whichever
+  // call happened to arrive second. Caching the promise means every caller awaits the same
+  // download rather than racing to see who asked first.
+  private static initialDownload: Promise<void> | null = null;
+
   /**
    * Downloads the WebUI if it is not already present, otherwise resolves immediately.
    *
-   * Called and awaited once at boot, before WebService starts accepting connections - a
-   * checkout with no build must not start serving an empty directory while the download
-   * happens in the background, or the first request (and the manager app's own "is it ready
-   * yet" check) would hit a 404 that looks like a broken install rather than one still
-   * finishing.
+   * Called and awaited at boot, before WebService starts accepting connections - a checkout
+   * with no build must not start serving an empty directory while the download happens in the
+   * background, or the first request (and the manager app's own "is it ready yet" check) would
+   * hit a 404 that looks like a broken install rather than one still finishing.
    */
-  static async ensureInitialDownload(): Promise<void> {
+  static ensureInitialDownload(): Promise<void> {
     if (WebUIUpdateService.hasWebUI()) {
-      return;
+      return Promise.resolve();
     }
-    spooderLog('No WebUI build found; downloading the latest release before starting.');
-    await WebUIUpdateService.checkForUpdate(true);
+    if (!WebUIUpdateService.initialDownload) {
+      spooderLog('No WebUI build found; downloading the latest release before starting.');
+      WebUIUpdateService.initialDownload = WebUIUpdateService.checkForUpdate(true).finally(() => {
+        WebUIUpdateService.initialDownload = null;
+      });
+    }
+    return WebUIUpdateService.initialDownload;
   }
 
   static InitSchedule() {
