@@ -10,6 +10,7 @@ import PluginService from './core/service/PluginService';
 import ShareService from './core/service/ShareService';
 import UserService from './core/service/UserService';
 import { WebService } from './core/service/WebService';
+import WebUIUpdateService from './core/service/WebUIUpdateService';
 import { userDir, KeyedObject } from './Types';
 import { connectToIPC, sendToApp } from './core/util/AppUtil';
 import { spooderLog } from './core/Logging';
@@ -64,37 +65,45 @@ if (initMode) {
   ConfigService.refreshOverlayContainer();
   new ShareService();
 
-  new WebService();
-  WebService.waitForInitialization()
+  // Awaited before the server starts: a checkout with no webui/main/build has nothing to
+  // serve, and starting WebService before the download finishes would answer the first
+  // request - including the manager app's own readiness check - with an empty page instead
+  // of the one that is a few seconds away from existing.
+  WebUIUpdateService.ensureInitialDownload()
+    .catch((e) => spooderLog('Initial WebUI download failed:', e.message ?? e))
     .then(() => {
-      new ModuleService(async () => {
-        new EventService();
-        new ModerationService();
-        new OSCService();
-        new MonitorService();
-        new UserService();
-        console.log('Logging into modules');
-        if (!safeMode) {
-          await ModuleService.autoLoginModules();
-        } else {
-          spooderLog('Safe mode enabled, skipping module auto login');
-        }
-        console.log('Initializing plugins');
-        new PluginService();
+      new WebService();
+      WebService.waitForInitialization()
+        .then(() => {
+          new ModuleService(async () => {
+            new EventService();
+            new ModerationService();
+            new OSCService();
+            new MonitorService();
+            new UserService();
+            console.log('Logging into modules');
+            if (!safeMode) {
+              await ModuleService.autoLoginModules();
+            } else {
+              spooderLog('Safe mode enabled, skipping module auto login');
+            }
+            console.log('Initializing plugins');
+            new PluginService();
 
-        console.log('Refreshing share users');
-        if (!safeMode) {
-          ShareService.refreshShareUsers();
-        } else {
-          spooderLog('Safe mode enabled, skipping share user refresh');
-        }
+            console.log('Refreshing share users');
+            if (!safeMode) {
+              ShareService.refreshShareUsers();
+            } else {
+              spooderLog('Safe mode enabled, skipping share user refresh');
+            }
 
-        console.log('Starting Public Hosting');
-        WebService.startPublicHosting();
-        sendToApp({ type: 'status', message: 'ready' });
-      });
-    })
-    .catch((error) => {
-      console.error('Failed to initialize WebService:', error);
+            console.log('Starting Public Hosting');
+            WebService.startPublicHosting();
+            sendToApp({ type: 'status', message: 'ready' });
+          });
+        })
+        .catch((error) => {
+          console.error('Failed to initialize WebService:', error);
+        });
     });
 }

@@ -52,11 +52,49 @@ export default class WebUIUpdateService {
   private static job: any = null;
   private static updating: boolean = false;
 
+  /**
+   * True once webui/main/build has a page in it. webui_update.enabled defaults to false, and
+   * that setting governs whether Spooder keeps itself *current* - it says nothing about
+   * whether there is a UI at all. A checkout with no build (a fresh clone, or one set up by an
+   * external installer that only runs `npm install && npm run build`) has no app to serve
+   * regardless of that setting.
+   */
+  static hasWebUI(): boolean {
+    return fs.existsSync(path.join('.', 'webui', 'main', 'build', 'index.html'));
+  }
+
+  /**
+   * Downloads the WebUI if it is not already present, otherwise resolves immediately.
+   *
+   * Called and awaited once at boot, before WebService starts accepting connections - a
+   * checkout with no build must not start serving an empty directory while the download
+   * happens in the background, or the first request (and the manager app's own "is it ready
+   * yet" check) would hit a 404 that looks like a broken install rather than one still
+   * finishing.
+   */
+  static async ensureInitialDownload(): Promise<void> {
+    if (WebUIUpdateService.hasWebUI()) {
+      return;
+    }
+    spooderLog('No WebUI build found; downloading the latest release before starting.');
+    await WebUIUpdateService.checkForUpdate(true);
+  }
+
   static InitSchedule() {
     if (WebUIUpdateService.job) {
       WebUIUpdateService.job.cancel();
       WebUIUpdateService.job = null;
     }
+
+    // A safety net, not the primary path - spooder.ts awaits ensureInitialDownload() before
+    // the server starts. This only matters if that first attempt failed and something later
+    // calls InitSchedule again (e.g. a config save) while the build is still missing.
+    if (!WebUIUpdateService.hasWebUI()) {
+      WebUIUpdateService.ensureInitialDownload().catch((e) =>
+        spooderLog('WebUI download failed:', e.message ?? e),
+      );
+    }
+
     const settings = ConfigService.getConfig().webui_update;
     if (settings?.enabled) {
       WebUIUpdateService.job = nodeSchedule.scheduleJob(settings.schedule, () => {
