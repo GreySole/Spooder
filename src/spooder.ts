@@ -58,7 +58,15 @@ const initMode = ConfigService.getFlags().initMode;
 const safeMode = ConfigService.getFlags().safeMode;
 
 if (initMode) {
-  new ModuleService(() => {});
+  // ModuleService's own constructor is what starts the init wizard's WebService, deep inside
+  // src/core/init/module.ts - this branch never reaches ConfigService.refreshConfig(), so
+  // nothing downloads webui/init/build unless it happens here. Awaited first, so that server
+  // never comes up serving a directory that does not exist yet.
+  WebUIUpdateService.ensureInitUIDownload()
+    .catch((e) => spooderLog('Initial Init UI download failed:', e.message ?? e))
+    .then(() => {
+      new ModuleService(() => {});
+    });
 } else {
   ConfigService.refreshConfig();
   ConfigService.refreshThemes();

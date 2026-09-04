@@ -52,15 +52,23 @@ export default class WebUIUpdateService {
   private static job: any = null;
   private static updating: boolean = false;
 
-  /**
-   * True once webui/main/build has a page in it. webui_update.enabled defaults to false, and
-   * that setting governs whether Spooder keeps itself *current* - it says nothing about
-   * whether there is a UI at all. A checkout with no build (a fresh clone, or one set up by an
-   * external installer that only runs `npm install && npm run build`) has no app to serve
-   * regardless of that setting.
-   */
+  // True once the named UI has a page in it. webui_update.enabled defaults to false, and that
+  // setting governs whether Spooder keeps itself *current* - it says nothing about whether
+  // there is a UI at all. A checkout with no build (a fresh clone, or one set up by an external
+  // installer that only runs `npm install && npm run build`) has no app to serve regardless.
+  private static hasBuild(name: string): boolean {
+    return fs.existsSync(path.join('.', 'webui', name, 'build', 'index.html'));
+  }
+
   static hasWebUI(): boolean {
-    return fs.existsSync(path.join('.', 'webui', 'main', 'build', 'index.html'));
+    return WebUIUpdateService.hasBuild('main');
+  }
+
+  // The setup wizard Spooder serves before it has a config.json - a different WebService
+  // instance, started from src/core/init/module.ts rather than spooder.ts, but it is exactly
+  // as unable to serve a UI it has never downloaded.
+  static hasInitUI(): boolean {
+    return WebUIUpdateService.hasBuild('init');
   }
 
   // The in-flight first download, shared by every caller. ConfigService.refreshConfig() runs
@@ -70,19 +78,13 @@ export default class WebUIUpdateService {
   // immediately without waiting for the first to finish, which is fine for a periodic check
   // but wrong here: whoever is awaiting "is the UI ready" needs the real answer, not whichever
   // call happened to arrive second. Caching the promise means every caller awaits the same
-  // download rather than racing to see who asked first.
+  // download rather than racing to see who asked first - and since checkForUpdate(true) always
+  // fetches every module in one pass, that one shared download satisfies whichever single
+  // build a particular caller was actually waiting on.
   private static initialDownload: Promise<void> | null = null;
 
-  /**
-   * Downloads the WebUI if it is not already present, otherwise resolves immediately.
-   *
-   * Called and awaited at boot, before WebService starts accepting connections - a checkout
-   * with no build must not start serving an empty directory while the download happens in the
-   * background, or the first request (and the manager app's own "is it ready yet" check) would
-   * hit a 404 that looks like a broken install rather than one still finishing.
-   */
-  static ensureInitialDownload(): Promise<void> {
-    if (WebUIUpdateService.hasWebUI()) {
+  private static ensureDownloaded(hasIt: () => boolean): Promise<void> {
+    if (hasIt()) {
       return Promise.resolve();
     }
     if (!WebUIUpdateService.initialDownload) {
@@ -92,6 +94,28 @@ export default class WebUIUpdateService {
       });
     }
     return WebUIUpdateService.initialDownload;
+  }
+
+  /**
+   * Downloads the main WebUI if it is not already present, otherwise resolves immediately.
+   *
+   * Called and awaited at boot, before WebService starts accepting connections - a checkout
+   * with no build must not start serving an empty directory while the download happens in the
+   * background, or the first request (and the manager app's own "is it ready yet" check) would
+   * hit a 404 that looks like a broken install rather than one still finishing.
+   */
+  static ensureInitialDownload(): Promise<void> {
+    return WebUIUpdateService.ensureDownloaded(WebUIUpdateService.hasWebUI);
+  }
+
+  /**
+   * Same as ensureInitialDownload, gating on the init wizard's build instead of the main UI's -
+   * for the boot path a checkout with no config.json takes, which serves webui/init/build from
+   * an entirely separate WebService instance and would otherwise never trigger a download at
+   * all, since it never reaches ConfigService.refreshConfig().
+   */
+  static ensureInitUIDownload(): Promise<void> {
+    return WebUIUpdateService.ensureDownloaded(WebUIUpdateService.hasInitUI);
   }
 
   static InitSchedule() {
