@@ -5,7 +5,7 @@ import PluginService from '../service/PluginService';
 import ModuleInstallService from '../service/ModuleInstallService';
 import PluginRepoService from '../service/PluginRepoService';
 import RegistryService, { RegistryArtifact, SourcedEntry } from '../service/RegistryService';
-import { getRestartCapability, requestRestart } from '../util/AppUtil';
+import { getRestartCapability, requestRestart, withLoading } from '../util/AppUtil';
 
 // What the Modules tab reads. The catalogue on its own is not enough to draw a card - whether
 // something is already installed, and whether this Spooder can run it, decide what the button
@@ -117,81 +117,86 @@ export default function RegistryRoutes() {
   // which artifact to fetch.
   router.post('/install', async (req: Request, res: Response) => {
     const id = String(req.body?.id ?? '');
-    try {
-      const catalogue = await RegistryService.getCatalogue(false);
-      const entry = catalogue.entries.find((e) => e.id === id);
-      if (!entry) {
-        res.status(404).send({ error: `'${id}' is not in any registry you have turned on.` });
-        return;
-      }
-
-      const spooderVersion = RegistryService.getSpooderVersion();
-      if (!RegistryService.isCompatible(entry, spooderVersion)) {
-        res.status(400).send({
-          error: `${entry.name} needs Spooder ${entry.spooder}, and this is ${spooderVersion}.`,
-        });
-        return;
-      }
-
-      if (entry.kind === 'module') {
-        if (!entry.server) {
-          res.status(400).send({ error: `${entry.name} has no backend to install.` });
+    // Wrapped as one operation even though a module install is really two calls (backend, then
+    // its webui tab) - without this, the busy icon would drop between them since each call is
+    // separately wrapped at the service level.
+    await withLoading(async () => {
+      try {
+        const catalogue = await RegistryService.getCatalogue(false);
+        const entry = catalogue.entries.find((e) => e.id === id);
+        if (!entry) {
+          res.status(404).send({ error: `'${id}' is not in any registry you have turned on.` });
           return;
         }
-        // Source, not a bundle: the module is compiled here by the build Spooder already has.
-        const zipUrl = await resolveReleaseAsset(entry.server, entry.track);
-        const result = await ModuleInstallService.install({
-          name: entry.id,
-          zipUrl,
-          version: entry.server.version ?? null,
-          sha256: entry.track === 'pinned' ? (entry.server.sha256 ?? null) : null,
-        });
-        // Fetch the tab too, while we know which version the registry pinned. The scheduled
-        // check would not do it: that only looks at loaded modules, and this one is not loaded
-        // until the restart - so the module would arrive with no tab and look half broken.
-        let webuiWarning: string | null = null;
-        if (entry.webui) {
-          try {
-            const uiUrl = await resolveReleaseAsset(entry.webui, entry.track);
-            await ModuleUIService.installFor(entry.id, entry.webui.repo, {
-              version: entry.webui.version ?? result.version ?? '0.0.0',
-              assetUrl: uiUrl,
-              sha256: entry.track === 'pinned' ? (entry.webui.sha256 ?? null) : null,
-            });
-          } catch (e: any) {
-            // The backend is installed and working; only the tab is missing, which the
-            // catalogue already has a state for. Reported, not rolled back.
-            webuiWarning =
-              e.message ?? 'The module installed, but its tab could not be downloaded.';
-          }
+
+        const spooderVersion = RegistryService.getSpooderVersion();
+        if (!RegistryService.isCompatible(entry, spooderVersion)) {
+          res.status(400).send({
+            error: `${entry.name} needs Spooder ${entry.spooder}, and this is ${spooderVersion}.`,
+          });
+          return;
         }
 
-        res.send({
-          status: 'ok',
-          ...result,
-          webuiWarning,
-          // How the restart will happen, so the page can say "reconnecting" or "start Spooder
-          // again" rather than guessing.
-          restartVia: getRestartCapability(),
+        if (entry.kind === 'module') {
+          if (!entry.server) {
+            res.status(400).send({ error: `${entry.name} has no backend to install.` });
+            return;
+          }
+          // Source, not a bundle: the module is compiled here by the build Spooder already has.
+          const zipUrl = await resolveReleaseAsset(entry.server, entry.track);
+          const result = await ModuleInstallService.install({
+            name: entry.id,
+            zipUrl,
+            version: entry.server.version ?? null,
+            sha256: entry.track === 'pinned' ? (entry.server.sha256 ?? null) : null,
+          });
+          // Fetch the tab too, while we know which version the registry pinned. The scheduled
+          // check would not do it: that only looks at loaded modules, and this one is not loaded
+          // until the restart - so the module would arrive with no tab and look half broken.
+          let webuiWarning: string | null = null;
+          if (entry.webui) {
+            try {
+              const uiUrl = await resolveReleaseAsset(entry.webui, entry.track);
+              await ModuleUIService.installFor(entry.id, entry.webui.repo, {
+                version: entry.webui.version ?? result.version ?? '0.0.0',
+                assetUrl: uiUrl,
+                sha256: entry.track === 'pinned' ? (entry.webui.sha256 ?? null) : null,
+              });
+            } catch (e: any) {
+              // The backend is installed and working; only the tab is missing, which the
+              // catalogue already has a state for. Reported, not rolled back.
+              webuiWarning =
+                e.message ?? 'The module installed, but its tab could not be downloaded.';
+            }
+          }
+
+          res.send({
+            status: 'ok',
+            ...result,
+            webuiWarning,
+            // How the restart will happen, so the page can say "reconnecting" or "start Spooder
+            // again" rather than guessing.
+            restartVia: getRestartCapability(),
+          });
+          return;
+        }
+
+        if (!entry.plugin) {
+          res.status(400).send({ error: `${entry.name} has no plugin artifact to install.` });
+          return;
+        }
+
+        const result = await PluginRepoService.installFromUrl({
+          url: `https://github.com/${entry.plugin.repo}`,
+          mode: 'release',
+          // Only a pinned entry has a reviewed hash; 'latest' is the trade that setting makes.
+          sha256: entry.track === 'pinned' ? (entry.plugin.sha256 ?? null) : null,
         });
-        return;
+        res.send({ status: 'ok', ...result });
+      } catch (e: any) {
+        res.status(400).send({ error: e.message ?? 'Install failed.' });
       }
-
-      if (!entry.plugin) {
-        res.status(400).send({ error: `${entry.name} has no plugin artifact to install.` });
-        return;
-      }
-
-      const result = await PluginRepoService.installFromUrl({
-        url: `https://github.com/${entry.plugin.repo}`,
-        mode: 'release',
-        // Only a pinned entry has a reviewed hash; 'latest' is the trade that setting makes.
-        sha256: entry.track === 'pinned' ? (entry.plugin.sha256 ?? null) : null,
-      });
-      res.send({ status: 'ok', ...result });
-    } catch (e: any) {
-      res.status(400).send({ error: e.message ?? 'Install failed.' });
-    }
+    });
   });
 
   // Removing a module is the same shape of operation as installing one - it changes what the

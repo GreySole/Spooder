@@ -11,6 +11,7 @@ import { ControlModuleInterface } from '../../interface/ControlModuleInterface';
 import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { frontendDir, userDir } from '../../Types';
 import { logToFile, spooderLog, webLog } from '../Logging';
+import { sendToApp } from '../util/AppUtil';
 import { BackupRestoreRoutes } from '../routes/BackupRestoreRoutes';
 import { ChangelogRoutes } from '../routes/ChangelogRoutes';
 import { ConfigRoutes } from '../routes/ConfigRoutes';
@@ -403,6 +404,17 @@ export class WebService {
       'Spooder Web UI is running at',
       'http://localhost:' + expressPort + ' and http://' + suggestedNet + ':' + expressPort,
     );
+
+    // Lets the manager app open a browser window the moment there is a page to load, rather
+    // than waiting on the full module/plugin/share init chain that follows this - that chain
+    // can take a while and has nothing to do with whether the server can serve a page yet.
+    // Fires for both the init wizard and the main app, since both go through this same method.
+    sendToApp({
+      type: 'status',
+      message: 'server_running',
+      url: `http://localhost:${expressPort}`,
+      port: expressPort,
+    });
   }
 
   public static getServer() {

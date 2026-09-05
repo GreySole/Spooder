@@ -5,6 +5,7 @@ import fs from 'fs-extra';
 import { KeyedObject, userDir } from '../../Types';
 import OSCService from './OSCService';
 import { spooderLog, webLog } from '../Logging';
+import { withLoading } from '../util/AppUtil';
 import childProcess from 'child_process';
 import Plugin from '../../Plugin';
 import { createRequire } from 'module';
@@ -250,188 +251,190 @@ export default class PluginService {
   }
 
   static async installPluginFromTemp(pluginDirName: string, options?: KeyedObject) {
-    if (options == null) {
-      options = {
-        createInfo: null,
-        overlay: true,
-      };
-    }
-    console.log('Installing plugin from temp', options);
-    OSCService.sendToTCP('/spooder/plugin/install/progress', {
-      pluginName: pluginDirName,
-      status: 'progress',
-      message: 'Copying folders...',
-    });
-    const tempDir = path.join(userDir, 'tmp', pluginDirName);
+    return withLoading(async () => {
+      if (options == null) {
+        options = {
+          createInfo: null,
+          overlay: true,
+        };
+      }
+      console.log('Installing plugin from temp', options);
+      OSCService.sendToTCP('/spooder/plugin/install/progress', {
+        pluginName: pluginDirName,
+        status: 'progress',
+        message: 'Copying folders...',
+      });
+      const tempDir = path.join(userDir, 'tmp', pluginDirName);
 
-    const tempPluginDir = fs.existsSync(path.resolve(tempDir, 'plugin'))
-      ? path.resolve(tempDir, 'plugin')
-      : path.resolve(tempDir, 'command');
+      const tempPluginDir = fs.existsSync(path.resolve(tempDir, 'plugin'))
+        ? path.resolve(tempDir, 'plugin')
+        : path.resolve(tempDir, 'command');
 
-    webLog('Temp plugin dir:', tempPluginDir);
+      webLog('Temp plugin dir:', tempPluginDir);
 
-    if (!fs.existsSync(path.resolve(tempPluginDir))) {
-      webLog('No plugin folder in temp directory');
-      return {
-        status: false,
-        message: 'No plugin folder in temp directory',
-      };
-    }
+      if (!fs.existsSync(path.resolve(tempPluginDir))) {
+        webLog('No plugin folder in temp directory');
+        return {
+          status: false,
+          message: 'No plugin folder in temp directory',
+        };
+      }
 
-    // Extract the plugin name from package.json
-    let finalPluginName = pluginDirName; // Default fallback
-    let pluginMetaPath = '';
-    if (fs.existsSync(path.resolve(tempPluginDir, 'package.json'))) {
-      pluginMetaPath = path.resolve(tempPluginDir, 'package.json');
-    } else if (fs.existsSync(path.resolve(tempPluginDir, 'build', 'manifest.json'))) {
-      pluginMetaPath = path.resolve(tempPluginDir, 'build', 'manifest.json');
-    }
+      // Extract the plugin name from package.json
+      let finalPluginName = pluginDirName; // Default fallback
+      let pluginMetaPath = '';
+      if (fs.existsSync(path.resolve(tempPluginDir, 'package.json'))) {
+        pluginMetaPath = path.resolve(tempPluginDir, 'package.json');
+      } else if (fs.existsSync(path.resolve(tempPluginDir, 'build', 'manifest.json'))) {
+        pluginMetaPath = path.resolve(tempPluginDir, 'build', 'manifest.json');
+      }
 
-    if (fs.existsSync(pluginMetaPath)) {
-      try {
-        let thisPackage = JSON.parse(
-          fs.readFileSync(pluginMetaPath, {
-            encoding: 'utf-8',
-          }),
-        );
-
-        if (options.createInfo != null) {
-          thisPackage.name = options.createInfo.name;
-          thisPackage.display_name = options.createInfo.display_name || thisPackage.name;
-          thisPackage.author = options.createInfo.author;
-          thisPackage.description = options.createInfo.description;
-          fs.writeFileSync(
-            path.resolve(tempPluginDir, 'package.json'),
-            JSON.stringify(thisPackage),
+      if (fs.existsSync(pluginMetaPath)) {
+        try {
+          let thisPackage = JSON.parse(
+            fs.readFileSync(pluginMetaPath, {
+              encoding: 'utf-8',
+            }),
           );
-        }
 
-        // Use the name from package.json as the final plugin directory name
-        if (thisPackage.name) {
-          finalPluginName = thisPackage.name;
-        }
-      } catch (e) {
-        webLog("Something went wrong with applying create info to the plugin's package.json", e);
-      }
-    }
-
-    // Define directories using the final plugin name
-    const pluginDir = path.join(userDir, 'plugins', finalPluginName);
-    const settingsFormFile = path.join(pluginDir, 'settings-form.json');
-    const overlayDir = path.join(userDir, 'web', 'overlay', finalPluginName);
-    const utilityDir = path.join(userDir, 'web', 'utility', finalPluginName);
-    const publicDir = path.join(userDir, 'web', 'public', finalPluginName);
-    const settingsDir = path.join(userDir, 'web', 'settings', finalPluginName);
-    const assetsDir = path.join(userDir, 'web', 'assets', finalPluginName);
-    const iconDir = path.join(userDir, 'web', 'icons', finalPluginName + '.png');
-
-    if (fs.existsSync(path.resolve(tempPluginDir, 'node_modules'))) {
-      fs.rmSync(path.resolve(tempPluginDir, 'node_modules'), { recursive: true });
-    }
-
-    if (fs.existsSync(pluginDir)) {
-      mergeDirectories(path.resolve(tempPluginDir), pluginDir);
-    } else {
-      await fs.move(path.resolve(tempPluginDir), pluginDir, { overwrite: true });
-    }
-
-    chmodr(pluginDir, 0o777, (err) => {
-      if (err) throw err;
-    });
-
-    if (fs.existsSync(path.resolve(tempDir, 'overlay')) && options.overlay == true) {
-      await fs.move(path.resolve(tempDir, 'overlay'), overlayDir, { overwrite: true });
-
-      chmodr(overlayDir, 0o777, (err) => {
-        if (err) throw err;
-      });
-    }
-
-    if (fs.existsSync(path.resolve(tempDir, 'utility')) && options.utility == true) {
-      await fs.move(path.resolve(tempDir, 'utility'), utilityDir, { overwrite: true });
-
-      chmodr(utilityDir, 0o777, (err) => {
-        if (err) throw err;
-      });
-    }
-
-    if (fs.existsSync(path.resolve(tempDir, 'public')) && options.public == true) {
-      await fs.move(path.resolve(tempDir, 'public'), publicDir, { overwrite: true });
-
-      chmodr(publicDir, 0o777, (err) => {
-        if (err) throw err;
-      });
-    }
-
-    if (fs.existsSync(path.resolve(tempDir, 'settings'))) {
-      await fs.move(path.resolve(tempDir, 'settings'), settingsDir, { overwrite: true });
-
-      chmodr(settingsDir, 0o777, (err) => {
-        if (err) throw err;
-      });
-    }
-
-    if (fs.existsSync(path.resolve(tempDir, 'assets'))) {
-      if (fs.existsSync(assetsDir)) {
-        mergeDirectories(path.resolve(tempDir, 'assets'), assetsDir);
-      } else {
-        await fs.move(path.resolve(tempDir, 'assets'), assetsDir, { overwrite: true });
-      }
-
-      chmodr(assetsDir, 0o777, (err) => {
-        if (err) throw err;
-      });
-    } else {
-      fs.mkdirSync(assetsDir, { recursive: true });
-    }
-
-    if (fs.existsSync(path.resolve(tempDir, 'icon.png'))) {
-      await fs.move(path.resolve(tempDir, 'icon.png'), iconDir, { overwrite: true });
-
-      chmodr(iconDir, 0o777, (err) => {
-        if (err) throw err;
-      });
-    }
-
-    if (fs.existsSync(settingsFormFile)) {
-      // Read the settings form file to get defaults
-      try {
-        const settingsFormContent = JSON.parse(
-          fs.readFileSync(settingsFormFile, { encoding: 'utf8' }),
-        );
-        if (settingsFormContent.defaults && settingsFormContent.form) {
-          const settingsFile = path.join(pluginDir, 'settings.json');
-
-          // Only create settings.json if it doesn't exist
-          if (!fs.existsSync(settingsFile)) {
-            // Process defaults to handle subform types
-            const processedDefaults = processDefaultsForSubforms(
-              settingsFormContent.defaults,
-              settingsFormContent.form,
+          if (options.createInfo != null) {
+            thisPackage.name = options.createInfo.name;
+            thisPackage.display_name = options.createInfo.display_name || thisPackage.name;
+            thisPackage.author = options.createInfo.author;
+            thisPackage.description = options.createInfo.description;
+            fs.writeFileSync(
+              path.resolve(tempPluginDir, 'package.json'),
+              JSON.stringify(thisPackage),
             );
-            fs.writeFileSync(settingsFile, JSON.stringify(processedDefaults, null, 2));
-            webLog(`Created default settings.json for plugin: ${finalPluginName}`);
           }
-        }
-      } catch (e) {
-        webLog(`Error creating default settings for plugin ${finalPluginName}:`, e);
-      }
-    }
 
-    webLog('Plugin added successfully!');
-    fs.rm(tempDir, { recursive: true });
-    await PluginService.installPluginDependencies(finalPluginName, pluginDir);
-    PluginService.refreshAllPlugins();
-    OSCService.sendToTCP('/spooder/plugin/install/complete', {
-      pluginName: finalPluginName,
-      status: 'complete',
-      message: 'Complete!',
+          // Use the name from package.json as the final plugin directory name
+          if (thisPackage.name) {
+            finalPluginName = thisPackage.name;
+          }
+        } catch (e) {
+          webLog("Something went wrong with applying create info to the plugin's package.json", e);
+        }
+      }
+
+      // Define directories using the final plugin name
+      const pluginDir = path.join(userDir, 'plugins', finalPluginName);
+      const settingsFormFile = path.join(pluginDir, 'settings-form.json');
+      const overlayDir = path.join(userDir, 'web', 'overlay', finalPluginName);
+      const utilityDir = path.join(userDir, 'web', 'utility', finalPluginName);
+      const publicDir = path.join(userDir, 'web', 'public', finalPluginName);
+      const settingsDir = path.join(userDir, 'web', 'settings', finalPluginName);
+      const assetsDir = path.join(userDir, 'web', 'assets', finalPluginName);
+      const iconDir = path.join(userDir, 'web', 'icons', finalPluginName + '.png');
+
+      if (fs.existsSync(path.resolve(tempPluginDir, 'node_modules'))) {
+        fs.rmSync(path.resolve(tempPluginDir, 'node_modules'), { recursive: true });
+      }
+
+      if (fs.existsSync(pluginDir)) {
+        mergeDirectories(path.resolve(tempPluginDir), pluginDir);
+      } else {
+        await fs.move(path.resolve(tempPluginDir), pluginDir, { overwrite: true });
+      }
+
+      chmodr(pluginDir, 0o777, (err) => {
+        if (err) throw err;
+      });
+
+      if (fs.existsSync(path.resolve(tempDir, 'overlay')) && options.overlay == true) {
+        await fs.move(path.resolve(tempDir, 'overlay'), overlayDir, { overwrite: true });
+
+        chmodr(overlayDir, 0o777, (err) => {
+          if (err) throw err;
+        });
+      }
+
+      if (fs.existsSync(path.resolve(tempDir, 'utility')) && options.utility == true) {
+        await fs.move(path.resolve(tempDir, 'utility'), utilityDir, { overwrite: true });
+
+        chmodr(utilityDir, 0o777, (err) => {
+          if (err) throw err;
+        });
+      }
+
+      if (fs.existsSync(path.resolve(tempDir, 'public')) && options.public == true) {
+        await fs.move(path.resolve(tempDir, 'public'), publicDir, { overwrite: true });
+
+        chmodr(publicDir, 0o777, (err) => {
+          if (err) throw err;
+        });
+      }
+
+      if (fs.existsSync(path.resolve(tempDir, 'settings'))) {
+        await fs.move(path.resolve(tempDir, 'settings'), settingsDir, { overwrite: true });
+
+        chmodr(settingsDir, 0o777, (err) => {
+          if (err) throw err;
+        });
+      }
+
+      if (fs.existsSync(path.resolve(tempDir, 'assets'))) {
+        if (fs.existsSync(assetsDir)) {
+          mergeDirectories(path.resolve(tempDir, 'assets'), assetsDir);
+        } else {
+          await fs.move(path.resolve(tempDir, 'assets'), assetsDir, { overwrite: true });
+        }
+
+        chmodr(assetsDir, 0o777, (err) => {
+          if (err) throw err;
+        });
+      } else {
+        fs.mkdirSync(assetsDir, { recursive: true });
+      }
+
+      if (fs.existsSync(path.resolve(tempDir, 'icon.png'))) {
+        await fs.move(path.resolve(tempDir, 'icon.png'), iconDir, { overwrite: true });
+
+        chmodr(iconDir, 0o777, (err) => {
+          if (err) throw err;
+        });
+      }
+
+      if (fs.existsSync(settingsFormFile)) {
+        // Read the settings form file to get defaults
+        try {
+          const settingsFormContent = JSON.parse(
+            fs.readFileSync(settingsFormFile, { encoding: 'utf8' }),
+          );
+          if (settingsFormContent.defaults && settingsFormContent.form) {
+            const settingsFile = path.join(pluginDir, 'settings.json');
+
+            // Only create settings.json if it doesn't exist
+            if (!fs.existsSync(settingsFile)) {
+              // Process defaults to handle subform types
+              const processedDefaults = processDefaultsForSubforms(
+                settingsFormContent.defaults,
+                settingsFormContent.form,
+              );
+              fs.writeFileSync(settingsFile, JSON.stringify(processedDefaults, null, 2));
+              webLog(`Created default settings.json for plugin: ${finalPluginName}`);
+            }
+          }
+        } catch (e) {
+          webLog(`Error creating default settings for plugin ${finalPluginName}:`, e);
+        }
+      }
+
+      webLog('Plugin added successfully!');
+      fs.rm(tempDir, { recursive: true });
+      await PluginService.installPluginDependencies(finalPluginName, pluginDir);
+      PluginService.refreshAllPlugins();
+      OSCService.sendToTCP('/spooder/plugin/install/complete', {
+        pluginName: finalPluginName,
+        status: 'complete',
+        message: 'Complete!',
+      });
+      return {
+        status: 'OK',
+        message: '',
+        pluginName: finalPluginName,
+      };
     });
-    return {
-      status: 'OK',
-      message: '',
-      pluginName: finalPluginName,
-    };
   }
 
   static installPluginDependencies(pluginDirName: string, pluginPath: string, packagename = '') {
@@ -446,28 +449,30 @@ export default class PluginService {
       status: 'progress',
       message: 'Installing dependencies...',
     });
-    return new Promise((res, rej) => {
-      childProcess.exec(
-        'npm install' + packagename,
-        {
-          cwd: pluginPath,
-        },
-        (error: any, out: any, err: any) => {
-          if (error) {
-            rej(error);
-            return;
-          }
-          res('OK');
-        },
-      );
-    }).catch((error) => {
-      console.log('INSTALL DEPS FAILED');
-      OSCService.sendToTCP('/spooder/plugin/install/complete', {
-        pluginName: pluginDirName,
-        status: 'failed',
-        message: error.message,
-      });
-    });
+    return withLoading(() =>
+      new Promise((res, rej) => {
+        childProcess.exec(
+          'npm install' + packagename,
+          {
+            cwd: pluginPath,
+          },
+          (error: any, out: any, err: any) => {
+            if (error) {
+              rej(error);
+              return;
+            }
+            res('OK');
+          },
+        );
+      }).catch((error) => {
+        console.log('INSTALL DEPS FAILED');
+        OSCService.sendToTCP('/spooder/plugin/install/complete', {
+          pluginName: pluginDirName,
+          status: 'failed',
+          message: error.message,
+        });
+      }),
+    );
   }
 }
 

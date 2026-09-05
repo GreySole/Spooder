@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { userDir } from '../../Types';
 import { spooderLog } from '../Logging';
+import { beginLoading, endLoading } from '../util/AppUtil';
 import { downloadToFile } from '../util/DownloadUtil';
 import OSCService from './OSCService';
 
@@ -142,6 +143,7 @@ export default class ModuleInstallService {
     ModuleInstallService.refuseIfDevelopmentCheckout(name, 'overwrite');
 
     ModuleInstallService.busy = name;
+    beginLoading();
     const dest = ModuleInstallService.moduleDir(name);
     const staging = path.join(stagingRoot, `${name}-${Date.now()}`);
     const zipPath = path.join(stagingRoot, `${name}.zip`);
@@ -203,6 +205,7 @@ export default class ModuleInstallService {
       fs.removeSync(staging);
       fs.removeSync(zipPath);
       ModuleInstallService.busy = null;
+      endLoading();
     }
   }
 
@@ -220,6 +223,7 @@ export default class ModuleInstallService {
     ModuleInstallService.refuseIfDevelopmentCheckout(name, 'remove');
 
     ModuleInstallService.busy = name;
+    beginLoading();
     try {
       progress(name, 'Removing...');
       fs.removeSync(ModuleInstallService.moduleDir(name));
@@ -236,6 +240,7 @@ export default class ModuleInstallService {
       return { name, restartRequired: true };
     } finally {
       ModuleInstallService.busy = null;
+      endLoading();
     }
   }
 

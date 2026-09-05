@@ -1,6 +1,7 @@
 import AdmZip from 'adm-zip';
 import { userDir } from '../../Types';
 import { webLog } from '../Logging';
+import { withLoading } from '../util/AppUtil';
 import ConfigService from './ConfigService';
 import fs from 'fs-extra';
 import path from 'path';
@@ -327,41 +328,43 @@ export default class BackupRestoreService {
   }
 
   static async restoreSettings(selections: { [key: string]: boolean }) {
-    if (!fs.existsSync(userDir + '/tmp')) {
-      fs.mkdirSync(userDir + '/tmp', { recursive: true });
-    }
-
-    const tempDir = path.join(userDir, 'tmp');
-    const tempBackupDirectory = path.join(tempDir, '_active_settings_backup');
-    const tempBackupFileName = '_active_settings_backup.zip';
-
-    const zip = new AdmZip(path.join(tempDir, tempBackupFileName));
-    zip.extractAllTo(tempDir);
-    for (let s in selections) {
-      if (selections[s] !== true) {
-        continue;
+    return withLoading(async () => {
+      if (!fs.existsSync(userDir + '/tmp')) {
+        fs.mkdirSync(userDir + '/tmp', { recursive: true });
       }
-      webLog('CHECKING', s + '.json');
-      if (fs.existsSync(path.join(tempDir, s + '.json'))) {
-        webLog('OVERWRITE ' + s + '.json');
-        fs.copySync(path.join(tempDir, s + '.json'), path.join(userDir, 'settings', s + '.json'), {
-          overwrite: true,
-        });
-      } else {
-        webLog(path.join(tempDir, s + '.json'), 'NOT FOUND');
+
+      const tempDir = path.join(userDir, 'tmp');
+      const tempBackupDirectory = path.join(tempDir, '_active_settings_backup');
+      const tempBackupFileName = '_active_settings_backup.zip';
+
+      const zip = new AdmZip(path.join(tempDir, tempBackupFileName));
+      zip.extractAllTo(tempDir);
+      for (let s in selections) {
+        if (selections[s] !== true) {
+          continue;
+        }
+        webLog('CHECKING', s + '.json');
+        if (fs.existsSync(path.join(tempDir, s + '.json'))) {
+          webLog('OVERWRITE ' + s + '.json');
+          fs.copySync(path.join(tempDir, s + '.json'), path.join(userDir, 'settings', s + '.json'), {
+            overwrite: true,
+          });
+        } else {
+          webLog(path.join(tempDir, s + '.json'), 'NOT FOUND');
+        }
       }
-    }
 
-    if (fs.existsSync(tempBackupDirectory)) {
-      await fs.rm(tempBackupDirectory, { recursive: true });
-    }
+      if (fs.existsSync(tempBackupDirectory)) {
+        await fs.rm(tempBackupDirectory, { recursive: true });
+      }
 
-    if (fs.existsSync(tempBackupFileName)) {
-      await fs.rm(tempBackupFileName);
-    }
+      if (fs.existsSync(tempBackupFileName)) {
+        await fs.rm(tempBackupFileName);
+      }
 
-    webLog('COMPLETE');
-    return { status: 'SUCCESS' };
+      webLog('COMPLETE');
+      return { status: 'SUCCESS' };
+    });
   }
 
   static async prepareRestorePlugins(file: Express.Multer.File | null, backupName?: string) {
@@ -436,150 +439,152 @@ export default class BackupRestoreService {
   }
 
   static async restorePlugins(selections: { [key: string]: boolean }) {
-    const pluginNames = fs.readdirSync(
-      path.join(userDir, 'tmp', '_active_plugins_backup', 'plugins'),
-    );
-    console.log('SELECTIONS', selections);
+    return withLoading(async () => {
+      const pluginNames = fs.readdirSync(
+        path.join(userDir, 'tmp', '_active_plugins_backup', 'plugins'),
+      );
+      console.log('SELECTIONS', selections);
 
-    const pluginList = pluginNames
-      .map((p) => {
-        const packageJsonPath = path.join(
-          userDir,
-          'tmp',
-          '_active_plugins_backup',
-          'plugins',
-          p,
-          'package.json',
-        );
-        if (fs.existsSync(packageJsonPath)) {
-          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: 'utf-8' }));
-          return {
-            dirName: p,
-            name: packageJson.name,
-            version: packageJson.version,
-          };
-        }
-      })
-      .filter((plugin) => plugin !== undefined);
-
-    const pluginDir = path.join(userDir, 'plugins');
-    const webDir = path.join(userDir, 'web');
-    const overlayDir = path.join(webDir, 'overlay');
-    const utilityDir = path.join(webDir, 'utility');
-    const assetDir = path.join(webDir, 'assets');
-    const iconDir = path.join(webDir, 'icons');
-
-    function deletePluginDir(basePath: string, pluginDirName: string) {
-      if (fs.existsSync(path.join(basePath, pluginDirName))) {
-        fs.rmSync(path.join(basePath, pluginDirName), { recursive: true });
-      }
-    }
-
-    function copyToPluginDir(basePath: string, pluginDirName: string) {
-      if (
-        fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup', basePath, pluginDirName))
-      ) {
-        fs.copySync(
-          path.join(userDir, 'tmp', '_active_plugins_backup', basePath, pluginDirName),
-          path.join(userDir, basePath, pluginDirName),
-          { overwrite: true },
-        );
-      }
-    }
-
-    await PluginService.stopAllPlugins();
-
-    const selectionKeys = Object.keys(selections);
-    const progressSteps = selectionKeys.length * 2;
-    let progress = 0;
-
-    for (let s = 0; s < selectionKeys.length; s++) {
-      const selectionKey = selectionKeys[s];
-      if (selections[selectionKey] !== true) {
-        continue;
-      }
-
-      const plugin = pluginList.find((p) => p.dirName === selectionKey);
-      if (!plugin) {
-        webLog('Plugin not found: ' + selectionKey);
-        continue;
-      }
-      webLog('Deleting: ' + plugin.dirName);
-      deletePluginDir(pluginDir, plugin.dirName);
-      deletePluginDir(overlayDir, plugin.dirName);
-      deletePluginDir(utilityDir, plugin.dirName);
-      deletePluginDir(assetDir, plugin.dirName);
-      deletePluginDir(iconDir, `${plugin.dirName}.png`);
-
-      const copyLogMessage = 'Copying: ' + plugin.dirName;
-      progress++;
-      OSCService.sendToTCP('/spooder/restore/plugin', {
-        name: plugin.name,
-        message: copyLogMessage,
-        progress: progress,
-        totalProgress: progressSteps,
-      });
-      webLog(copyLogMessage);
-      copyToPluginDir('plugins', plugin.dirName);
-      copyToPluginDir(path.join('web', 'overlay'), plugin.dirName);
-      copyToPluginDir(path.join('web', 'utility'), plugin.dirName);
-      copyToPluginDir(path.join('web', 'assets'), plugin.dirName);
-      copyToPluginDir(path.join('web', 'icons'), `${plugin.dirName}.png`);
-
-      progress++;
-
-      if (fs.existsSync(path.join(userDir, 'plugins', plugin.dirName, 'package.json'))) {
-        let packagejson = JSON.parse(
-          fs.readFileSync(path.join(userDir, 'plugins', plugin.dirName, 'package.json'), {
-            encoding: 'utf-8',
-          }),
-        );
-        let hasDependencies = packagejson.dependencies != null;
-        if (hasDependencies) {
-          const installLogMessage = 'Installing dependencies for ' + plugin.dirName;
-          OSCService.sendToTCP('/spooder/restore/plugin', {
-            name: plugin.name,
-            message: installLogMessage,
-            progress: progress,
-            totalProgress: progressSteps,
-          });
-          webLog(installLogMessage);
-          await PluginService.installPluginDependencies(
-            plugin.dirName,
-            path.join(userDir, 'plugins', plugin.dirName),
+      const pluginList = pluginNames
+        .map((p) => {
+          const packageJsonPath = path.join(
+            userDir,
+            'tmp',
+            '_active_plugins_backup',
+            'plugins',
+            p,
+            'package.json',
           );
-        } else {
-          const installLogMessage = 'No dependencies for ' + plugin.dirName;
-          OSCService.sendToTCP('/spooder/restore/plugin', {
-            name: plugin.name,
-            message: installLogMessage,
-            progress: progress,
-            totalProgress: progressSteps,
-          });
-          webLog('No dependencies for ' + plugin.dirName);
+          if (fs.existsSync(packageJsonPath)) {
+            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: 'utf-8' }));
+            return {
+              dirName: p,
+              name: packageJson.name,
+              version: packageJson.version,
+            };
+          }
+        })
+        .filter((plugin) => plugin !== undefined);
+
+      const pluginDir = path.join(userDir, 'plugins');
+      const webDir = path.join(userDir, 'web');
+      const overlayDir = path.join(webDir, 'overlay');
+      const utilityDir = path.join(webDir, 'utility');
+      const assetDir = path.join(webDir, 'assets');
+      const iconDir = path.join(webDir, 'icons');
+
+      function deletePluginDir(basePath: string, pluginDirName: string) {
+        if (fs.existsSync(path.join(basePath, pluginDirName))) {
+          fs.rmSync(path.join(basePath, pluginDirName), { recursive: true });
         }
       }
-    }
 
-    progress = progressSteps;
-    OSCService.sendToTCP('/spooder/restore/plugin', {
-      name: 'Done',
-      message: 'Cleaning up...',
-      progress: progress,
-      totalProgress: progress,
+      function copyToPluginDir(basePath: string, pluginDirName: string) {
+        if (
+          fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup', basePath, pluginDirName))
+        ) {
+          fs.copySync(
+            path.join(userDir, 'tmp', '_active_plugins_backup', basePath, pluginDirName),
+            path.join(userDir, basePath, pluginDirName),
+            { overwrite: true },
+          );
+        }
+      }
+
+      await PluginService.stopAllPlugins();
+
+      const selectionKeys = Object.keys(selections);
+      const progressSteps = selectionKeys.length * 2;
+      let progress = 0;
+
+      for (let s = 0; s < selectionKeys.length; s++) {
+        const selectionKey = selectionKeys[s];
+        if (selections[selectionKey] !== true) {
+          continue;
+        }
+
+        const plugin = pluginList.find((p) => p.dirName === selectionKey);
+        if (!plugin) {
+          webLog('Plugin not found: ' + selectionKey);
+          continue;
+        }
+        webLog('Deleting: ' + plugin.dirName);
+        deletePluginDir(pluginDir, plugin.dirName);
+        deletePluginDir(overlayDir, plugin.dirName);
+        deletePluginDir(utilityDir, plugin.dirName);
+        deletePluginDir(assetDir, plugin.dirName);
+        deletePluginDir(iconDir, `${plugin.dirName}.png`);
+
+        const copyLogMessage = 'Copying: ' + plugin.dirName;
+        progress++;
+        OSCService.sendToTCP('/spooder/restore/plugin', {
+          name: plugin.name,
+          message: copyLogMessage,
+          progress: progress,
+          totalProgress: progressSteps,
+        });
+        webLog(copyLogMessage);
+        copyToPluginDir('plugins', plugin.dirName);
+        copyToPluginDir(path.join('web', 'overlay'), plugin.dirName);
+        copyToPluginDir(path.join('web', 'utility'), plugin.dirName);
+        copyToPluginDir(path.join('web', 'assets'), plugin.dirName);
+        copyToPluginDir(path.join('web', 'icons'), `${plugin.dirName}.png`);
+
+        progress++;
+
+        if (fs.existsSync(path.join(userDir, 'plugins', plugin.dirName, 'package.json'))) {
+          let packagejson = JSON.parse(
+            fs.readFileSync(path.join(userDir, 'plugins', plugin.dirName, 'package.json'), {
+              encoding: 'utf-8',
+            }),
+          );
+          let hasDependencies = packagejson.dependencies != null;
+          if (hasDependencies) {
+            const installLogMessage = 'Installing dependencies for ' + plugin.dirName;
+            OSCService.sendToTCP('/spooder/restore/plugin', {
+              name: plugin.name,
+              message: installLogMessage,
+              progress: progress,
+              totalProgress: progressSteps,
+            });
+            webLog(installLogMessage);
+            await PluginService.installPluginDependencies(
+              plugin.dirName,
+              path.join(userDir, 'plugins', plugin.dirName),
+            );
+          } else {
+            const installLogMessage = 'No dependencies for ' + plugin.dirName;
+            OSCService.sendToTCP('/spooder/restore/plugin', {
+              name: plugin.name,
+              message: installLogMessage,
+              progress: progress,
+              totalProgress: progressSteps,
+            });
+            webLog('No dependencies for ' + plugin.dirName);
+          }
+        }
+      }
+
+      progress = progressSteps;
+      OSCService.sendToTCP('/spooder/restore/plugin', {
+        name: 'Done',
+        message: 'Cleaning up...',
+        progress: progress,
+        totalProgress: progress,
+      });
+
+      webLog('Cleaning up...');
+
+      if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {
+        fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup'), { recursive: true });
+      }
+      if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup.zip'))) {
+        fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup.zip'));
+      }
+
+      PluginService.refreshAllPlugins();
+      webLog('COMPLETE');
+      return { status: 'SUCCESS' };
     });
-
-    webLog('Cleaning up...');
-
-    if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {
-      fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup'), { recursive: true });
-    }
-    if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup.zip'))) {
-      fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup.zip'));
-    }
-
-    PluginService.refreshAllPlugins();
-    webLog('COMPLETE');
-    return { status: 'SUCCESS' };
   }
 }

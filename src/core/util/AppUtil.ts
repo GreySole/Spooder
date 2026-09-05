@@ -93,3 +93,37 @@ export function sendToApp(data: any) {
     console.log('IPC:' + JSON.stringify(data));
   }
 }
+
+// How many long-running operations are in flight, so the manager app's busy icon reflects
+// whether *anything* is running rather than whichever one last finished. Without this, a
+// module install finishing while a plugin install is still going would send loading_stop
+// and hide the icon out from under the still-running plugin install.
+let loadingCount = 0;
+
+export function beginLoading() {
+  loadingCount++;
+  if (loadingCount === 1) {
+    sendToApp('loading_start');
+  }
+}
+
+export function endLoading() {
+  loadingCount = Math.max(0, loadingCount - 1);
+  if (loadingCount === 0) {
+    sendToApp('loading_stop');
+  }
+}
+
+/**
+ * Runs `fn` with the manager app's busy icon showing for its duration. Safe to nest - an
+ * operation that calls another wrapped operation internally (e.g. restoring plugins calls
+ * installPluginDependencies) only triggers one loading_start/loading_stop pair overall.
+ */
+export async function withLoading<T>(fn: () => Promise<T>): Promise<T> {
+  beginLoading();
+  try {
+    return await fn();
+  } finally {
+    endLoading();
+  }
+}

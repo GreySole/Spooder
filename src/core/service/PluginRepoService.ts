@@ -6,6 +6,7 @@ import nodeSchedule from 'node-schedule';
 import path from 'path';
 import { userDir } from '../../Types';
 import { spooderLog } from '../Logging';
+import { withLoading } from '../util/AppUtil';
 import { downloadToFile } from '../util/DownloadUtil';
 import { compareVersions } from '../util/VersionUtil';
 import ConfigService from './ConfigService';
@@ -303,25 +304,27 @@ export default class PluginRepoService {
     // record can still stop a swapped artifact.
     sha256?: string | null;
   }): Promise<InstallResult> {
-    const url = normalizeRepoUrl(options.url);
-    const mode: PluginRepoMode = options.mode === 'source' ? 'source' : 'release';
-    const branch = options.branch?.trim() || null;
+    return withLoading(async () => {
+      const url = normalizeRepoUrl(options.url);
+      const mode: PluginRepoMode = options.mode === 'source' ? 'source' : 'release';
+      const branch = options.branch?.trim() || null;
 
-    const result =
-      mode === 'source'
-        ? await PluginRepoService.installFromSource(url, branch)
-        : await PluginRepoService.installFromRelease(url, undefined, options.sha256 ?? null);
+      const result =
+        mode === 'source'
+          ? await PluginRepoService.installFromSource(url, branch)
+          : await PluginRepoService.installFromRelease(url, undefined, options.sha256 ?? null);
 
-    PluginRepoService.recordInstall({
-      pluginName: result.pluginName,
-      url,
-      mode,
-      branch: result.branch,
-      version: result.version,
-      commit: result.commit,
+      PluginRepoService.recordInstall({
+        pluginName: result.pluginName,
+        url,
+        mode,
+        branch: result.branch,
+        version: result.version,
+        commit: result.commit,
+      });
+
+      return result;
     });
-
-    return result;
   }
 
   // Reinstalls an already-tracked plugin in a different mode: release builds for normal
@@ -331,32 +334,34 @@ export default class PluginRepoService {
     mode: PluginRepoMode,
     branch?: string | null,
   ): Promise<InstallResult> {
-    const record = PluginRepoService.getRepo(pluginName);
-    if (!record) {
-      throw new Error(`${pluginName} was not installed from a repo, so it has no mode to set.`);
-    }
+    return withLoading(async () => {
+      const record = PluginRepoService.getRepo(pluginName);
+      if (!record) {
+        throw new Error(`${pluginName} was not installed from a repo, so it has no mode to set.`);
+      }
 
-    const result =
-      mode === 'source'
-        ? await PluginRepoService.installFromSource(
-            record.url,
-            branch?.trim() || record.branch,
-            pluginName,
-          )
-        : await PluginRepoService.installFromRelease(record.url, pluginName);
+      const result =
+        mode === 'source'
+          ? await PluginRepoService.installFromSource(
+              record.url,
+              branch?.trim() || record.branch,
+              pluginName,
+            )
+          : await PluginRepoService.installFromRelease(record.url, pluginName);
 
-    PluginRepoService.recordInstall({
-      pluginName: result.pluginName,
-      url: record.url,
-      // A release install keeps the last known branch so switching back to source mode
-      // returns to the branch the user was on rather than the repo default.
-      branch: result.branch ?? record.branch,
-      mode,
-      version: result.version,
-      commit: result.commit,
+      PluginRepoService.recordInstall({
+        pluginName: result.pluginName,
+        url: record.url,
+        // A release install keeps the last known branch so switching back to source mode
+        // returns to the branch the user was on rather than the repo default.
+        branch: result.branch ?? record.branch,
+        mode,
+        version: result.version,
+        commit: result.commit,
+      });
+
+      return result;
     });
-
-    return result;
   }
 
   private static recordInstall(fields: {
@@ -711,32 +716,34 @@ export default class PluginRepoService {
   }
 
   static async update(pluginName: string): Promise<InstallResult> {
-    const record = PluginRepoService.getRepo(pluginName);
-    if (!record) {
-      throw new Error(`${pluginName} was not installed from a repo.`);
-    }
+    return withLoading(async () => {
+      const record = PluginRepoService.getRepo(pluginName);
+      if (!record) {
+        throw new Error(`${pluginName} was not installed from a repo.`);
+      }
 
-    const result =
-      record.mode === 'source'
-        ? await PluginRepoService.updateSource(record)
-        : await PluginRepoService.installFromRelease(record.url, pluginName);
+      const result =
+        record.mode === 'source'
+          ? await PluginRepoService.updateSource(record)
+          : await PluginRepoService.installFromRelease(record.url, pluginName);
 
-    PluginRepoService.recordInstall({
-      pluginName: result.pluginName,
-      url: record.url,
-      mode: record.mode,
-      branch: result.branch ?? record.branch,
-      version: result.version,
-      commit: result.commit,
+      PluginRepoService.recordInstall({
+        pluginName: result.pluginName,
+        url: record.url,
+        mode: record.mode,
+        branch: result.branch ?? record.branch,
+        version: result.version,
+        commit: result.commit,
+      });
+
+      OSCService.sendToTCP?.('/spooder/plugin/install/complete', {
+        pluginName: result.pluginName,
+        status: 'complete',
+        message: 'Updated!',
+      });
+
+      return result;
     });
-
-    OSCService.sendToTCP?.('/spooder/plugin/install/complete', {
-      pluginName: result.pluginName,
-      status: 'complete',
-      message: 'Updated!',
-    });
-
-    return result;
   }
 
   // Reuses the existing clone so an update is a fetch instead of a full re-download. The
