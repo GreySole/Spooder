@@ -61,7 +61,6 @@ export default class OscTcpServer {
     });
     const controlModules = ModuleService.getControlModules();
     oscTCP.on('*', (message: OSC.Message) => {
-      oscLog('OSC TCP Message: ', message);
       MonitorService.addLog(
         MonitorDataType.TCP,
         MonitorDirection.Receive,
@@ -83,14 +82,6 @@ export default class OscTcpServer {
       //Must respond success or else they'll keep sending.
       if (message.address.endsWith('/connect')) {
         this.sendToTCP(`${message.address}/success`, 1, false);
-      }
-
-      if (message.address === '/spooder/monitor/live_logging') {
-        if (message.args[0] === 1) {
-          MonitorService.enableLiveLogging();
-        } else {
-          MonitorService.disableLiveLogging();
-        }
       }
     });
     oscTCP.on('error', (e: any) => {

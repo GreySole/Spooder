@@ -1,4 +1,5 @@
 import { userDir, KeyedObject } from '../../Types';
+import { spooderLog } from '../Logging';
 import OSCService from './OSCService';
 import si from 'systeminformation';
 
@@ -20,6 +21,11 @@ export enum MonitorDirection {
   Receive = 'receive',
 }
 
+// How often the background poll refreshes systemStatus. Matches DashboardTab's own refetch
+// interval, so a client polling at its normal cadence always finds a fresh-enough value
+// waiting rather than triggering the collection itself.
+const SYSTEM_STATUS_POLL_MS = 3_000;
+
 export default class MonitorService {
   private static instance: MonitorService;
 
@@ -29,6 +35,15 @@ export default class MonitorService {
     }
 
     MonitorService.instance = this;
+
+    // Collecting systemStatus (cpu/mem/disk/net via systeminformation) can take a couple of
+    // seconds - fsSize and networkStats both shell out and enumerate every mount/interface.
+    // Doing that inline on each /status request left the Dashboard tab's first load (and every
+    // 3s refetch after it) waiting on the slowest of those calls. Polling in the background
+    // instead means a request only ever reads the last completed snapshot, so it returns
+    // immediately regardless of how long collection takes.
+    this.refreshSystemStatus();
+    setInterval(() => this.refreshSystemStatus(), SYSTEM_STATUS_POLL_MS);
   }
 
   private monitorLogs = {
@@ -41,8 +56,17 @@ export default class MonitorService {
     udp: [] as OSCLog[],
     tcp: [] as OSCLog[],
     plugin: [] as OSCLog[],
-    liveLogEnabled: 0,
   };
+
+  // How long a subscriber can go without a heartbeat before it's swept as gone (tab closed,
+  // crashed, network dropped) rather than explicitly unsubscribing.
+  private static readonly LIVE_LOGGING_TTL_MS = 12_000;
+
+  // Frontend instances currently watching the live feed (OSC Monitor tab, OSC Receive node
+  // previews), keyed by a client-generated id and valued by last-seen timestamp. Replaces a
+  // single shared on/off flag: with one flag, any instance closing - or another one turning
+  // it off - silenced the feed for every other open instance too.
+  private liveLoggingSubscribers = new Map<string, number>();
 
   private systemStatus = {
     cpu: 0,
@@ -59,12 +83,38 @@ export default class MonitorService {
     },
   };
 
-  static enableLiveLogging() {
-    MonitorService.instance.oscMessageLog.liveLogEnabled = 1;
+  private sweepLiveLoggingSubscribers() {
+    const cutoff = Date.now() - MonitorService.LIVE_LOGGING_TTL_MS;
+    for (const [id, lastSeen] of this.liveLoggingSubscribers) {
+      if (lastSeen < cutoff) {
+        this.liveLoggingSubscribers.delete(id);
+        spooderLog(`Live logging subscriber timed out: ${id}`);
+      }
+    }
   }
 
-  static disableLiveLogging() {
-    MonitorService.instance.oscMessageLog.liveLogEnabled = 0;
+  // Registers a subscriber, or refreshes it if already known - mount and heartbeat both call
+  // this, so there's no separate "renew" path to fall out of sync with "create".
+  static subscribeLiveLogging(clientId: string) {
+    const instance = MonitorService.instance;
+    if (!instance.liveLoggingSubscribers.has(clientId)) {
+      spooderLog(`Live logging subscriber connected: ${clientId}`);
+    }
+    instance.liveLoggingSubscribers.set(clientId, Date.now());
+    instance.sweepLiveLoggingSubscribers();
+  }
+
+  static unsubscribeLiveLogging(clientId: string) {
+    const instance = MonitorService.instance;
+    if (instance.liveLoggingSubscribers.delete(clientId)) {
+      spooderLog(`Live logging subscriber disconnected: ${clientId}`);
+    }
+  }
+
+  private static isLiveLoggingEnabled() {
+    const instance = MonitorService.instance;
+    instance.sweepLiveLoggingSubscribers();
+    return instance.liveLoggingSubscribers.size > 0;
   }
 
   static addLog(type: MonitorDataType, direction: MonitorDirection, address: string, args: any[]) {
@@ -99,9 +149,7 @@ export default class MonitorService {
       MonitorService.instance.oscMessageLog.plugin.shift();
     }
 
-    if (MonitorService.instance.oscMessageLog.liveLogEnabled == 1) {
-      console.log('Live Send To Monitor', type, direction, address, liveLogData);
-
+    if (MonitorService.isLiveLoggingEnabled()) {
       OSCService.sendToTCP('/spooder/monitor/log', JSON.stringify(liveLogData), false);
     }
   }
@@ -119,19 +167,38 @@ export default class MonitorService {
   };
 
   static getMonitorLogs = () => {
-    return MonitorService.instance.oscMessageLog;
+    return {
+      ...MonitorService.instance.oscMessageLog,
+      liveLogging: MonitorService.instance.liveLoggingSubscribers.size,
+    };
   };
 
+  // Always answers from the last completed background poll - see the constructor - rather
+  // than collecting a fresh reading, so callers never wait on systeminformation.
   static getSystemStatus = async () => {
-    return MonitorService.instance.getSystemStatus();
+    return MonitorService.instance.systemStatus;
   };
 
-  private getSystemStatus = async () => {
-    this.systemStatus.cpu = await this.getCpuUsage();
-    this.systemStatus.memory = await this.getMemoryUsage();
-    this.systemStatus.disk = await this.getDiskUsage();
-    this.systemStatus.net = await this.getNetworkUsage();
-    return this.systemStatus;
+  // Guards against a slow poll (e.g. a hung `df`) still running when the next tick fires,
+  // which would otherwise pile up overlapping systeminformation calls.
+  private refreshingSystemStatus = false;
+
+  private refreshSystemStatus = async () => {
+    if (this.refreshingSystemStatus) {
+      return;
+    }
+    this.refreshingSystemStatus = true;
+    try {
+      const [cpu, memory, disk, net] = await Promise.all([
+        this.getCpuUsage(),
+        this.getMemoryUsage(),
+        this.getDiskUsage(),
+        this.getNetworkUsage(),
+      ]);
+      this.systemStatus = { cpu, memory, disk, net };
+    } finally {
+      this.refreshingSystemStatus = false;
+    }
   };
 
   private getCpuUsage = async () => {

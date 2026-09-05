@@ -38,6 +38,19 @@ export function ServerRoutes() {
     res.send(logs);
   });
 
+  // Subscribes (or renews) this frontend instance's interest in the live OSC log feed.
+  // Called on mount and on a heartbeat interval - a subscriber that stops renewing is swept
+  // server-side, so one tab closing can't silence the feed for every other open tab.
+  router.post('/monitor/live_logging/:clientId', (req: Request, res: Response) => {
+    MonitorService.subscribeLiveLogging(req.params.clientId as string);
+    res.sendStatus(204);
+  });
+
+  router.delete('/monitor/live_logging/:clientId', (req: Request, res: Response) => {
+    MonitorService.unsubscribeLiveLogging(req.params.clientId as string);
+    res.sendStatus(204);
+  });
+
   router.get('/status', async (req, res) => {
     const status = await MonitorService.getSystemStatus();
     res.send(status);
