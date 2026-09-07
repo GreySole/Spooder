@@ -6,6 +6,7 @@ import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { CoreModule, KeyedObject, PlatformType } from '../../Types';
 import ConfigService from './ConfigService';
 import { WebService } from './WebService';
+import { withLoading } from '../util/AppUtil';
 
 interface ModuleContainer {
   [key: string]: StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface;
@@ -38,7 +39,7 @@ export default class ModuleService {
     } else {
       console.log('REGISTERING MODULES');
 
-      (async () => {
+      withLoading(async () => {
         const integrationPath = path.join(__dirname, '../../integration');
         if(!existsSync(integrationPath)){
           onAllModulesLoaded();
@@ -46,7 +47,7 @@ export default class ModuleService {
         }
         const files = await fs.promises.readdir(integrationPath);
         console.log('Found integration files', files);
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           files.map(async (file) => {
             try {
               const filePath = path.join(integrationPath, file);
@@ -87,15 +88,14 @@ export default class ModuleService {
             }
             return null;
           }),
-        ).then((results) => {
-          results.forEach((result) => {
-            if (result.status === 'rejected') {
-              console.log('Module load error', result.reason);
-            }
-          });
-          onAllModulesLoaded();
+        );
+        results.forEach((result) => {
+          if (result.status === 'rejected') {
+            console.log('Module load error', result.reason);
+          }
         });
-      })();
+        onAllModulesLoaded();
+      });
     }
   }
 
@@ -251,26 +251,28 @@ export default class ModuleService {
   }
 
   static async autoLoginModules() {
-    for (let s in ModuleService.instance.activeStreams) {
-      try {
-        await ModuleService.instance.activeStreams[s].autoLogin();
-      } catch (e) {
-        console.log('Stream module auto-login error', e);
+    return withLoading(async () => {
+      for (let s in ModuleService.instance.activeStreams) {
+        try {
+          await ModuleService.instance.activeStreams[s].autoLogin();
+        } catch (e) {
+          console.log('Stream module auto-login error', e);
+        }
       }
-    }
-    for (let s in ModuleService.instance.activeCommunities) {
-      try {
-        await ModuleService.instance.activeCommunities[s].autoLogin();
-      } catch (e) {
-        console.log('Community module auto-login error', e);
+      for (let s in ModuleService.instance.activeCommunities) {
+        try {
+          await ModuleService.instance.activeCommunities[s].autoLogin();
+        } catch (e) {
+          console.log('Community module auto-login error', e);
+        }
       }
-    }
-    for (let s in ModuleService.instance.activeControls) {
-      try {
-        await ModuleService.instance.activeControls[s].autoLogin();
-      } catch (e) {
-        console.log('Control module auto-login error', e);
+      for (let s in ModuleService.instance.activeControls) {
+        try {
+          await ModuleService.instance.activeControls[s].autoLogin();
+        } catch (e) {
+          console.log('Control module auto-login error', e);
+        }
       }
-    }
+    });
   }
 }

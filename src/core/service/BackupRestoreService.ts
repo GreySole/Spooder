@@ -368,74 +368,89 @@ export default class BackupRestoreService {
   }
 
   static async prepareRestorePlugins(file: Express.Multer.File | null, backupName?: string) {
-    let fileName = null;
-    if (!fs.existsSync(userDir + '/backup/plugins')) {
-      fs.mkdirSync(userDir + '/backup/plugins', { recursive: true });
-    }
-    if (!fs.existsSync(userDir + '/tmp')) {
-      fs.mkdirSync(userDir + '/tmp', { recursive: true });
-    }
+    return withLoading(async () => {
+      let fileName = null;
+      if (!fs.existsSync(userDir + '/backup/plugins')) {
+        fs.mkdirSync(userDir + '/backup/plugins', { recursive: true });
+      }
+      if (!fs.existsSync(userDir + '/tmp')) {
+        fs.mkdirSync(userDir + '/tmp', { recursive: true });
+      }
 
-    if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {
-      fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup'), { recursive: true });
-    }
+      if (fs.existsSync(path.join(userDir, 'tmp', '_active_plugins_backup'))) {
+        fs.rmSync(path.join(userDir, 'tmp', '_active_plugins_backup'), { recursive: true });
+      }
 
-    if (file) {
-      console.log('FILE FOUND', file);
-      fileName = file.originalname;
-      await fs.move(file.path, path.join(userDir, 'backup', 'plugins', fileName), {
-        overwrite: true,
+      if (file) {
+        console.log('FILE FOUND', file);
+        fileName = file.originalname;
+        await fs.move(file.path, path.join(userDir, 'backup', 'plugins', fileName), {
+          overwrite: true,
+        });
+      } else if (backupName) {
+        fileName = backupName;
+      }
+
+      if (!fileName) {
+        throw new Error('No file name provided');
+      }
+
+      if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
+        await fs.rm(path.join(userDir, 'tmp', fileName));
+      }
+      fs.copySync(
+        path.join(userDir, 'backup', 'plugins', fileName),
+        path.join(userDir, 'tmp', '_active_plugins_backup.zip'),
+        { overwrite: true },
+      );
+
+      const zip = new AdmZip(path.join(userDir, 'tmp', '_active_plugins_backup.zip'));
+      const extractDir = path.join(userDir, 'tmp', '_active_plugins_backup');
+      const fileEntries = zip.getEntries().filter((entry) => !entry.isDirectory);
+      const totalEntries = fileEntries.length;
+
+      fileEntries.forEach((entry, index) => {
+        zip.extractEntryTo(entry, extractDir, true, true);
+        OSCService.sendToTCP('/spooder/restore/plugin', {
+          name: entry.entryName,
+          message: `Unpacking ${entry.entryName}`,
+          progress: index + 1,
+          totalProgress: totalEntries,
+        });
       });
-    } else if (backupName) {
-      fileName = backupName;
-    }
 
-    if (!fileName) {
-      throw new Error('No file name provided');
-    }
+      const pluginNames = fs.readdirSync(
+        path.join(userDir, 'tmp', '_active_plugins_backup', 'plugins'),
+      );
 
-    if (fs.existsSync(path.join(userDir, 'tmp', fileName))) {
-      await fs.rm(path.join(userDir, 'tmp', fileName));
-    }
-    fs.copySync(
-      path.join(userDir, 'backup', 'plugins', fileName),
-      path.join(userDir, 'tmp', '_active_plugins_backup.zip'),
-      { overwrite: true },
-    );
+      const pluginList = pluginNames
+        .map((p) => {
+          const packageJsonPath = path.join(
+            userDir,
+            'tmp',
+            '_active_plugins_backup',
+            'plugins',
+            p,
+            'package.json',
+          );
+          if (fs.existsSync(packageJsonPath)) {
+            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: 'utf-8' }));
+            return {
+              dirName: p,
+              name: packageJson.name,
+              version: packageJson.version,
+            };
+          }
+        })
+        .filter((plugin) => plugin !== undefined);
 
-    const zip = new AdmZip(path.join(userDir, 'tmp', '_active_plugins_backup.zip'));
-    zip.extractAllTo(path.join(userDir, 'tmp', '_active_plugins_backup'));
-    const pluginNames = fs.readdirSync(
-      path.join(userDir, 'tmp', '_active_plugins_backup', 'plugins'),
-    );
+      console.log('BACKUP PLUGINS ENTRIES', pluginList);
 
-    const pluginList = pluginNames
-      .map((p) => {
-        const packageJsonPath = path.join(
-          userDir,
-          'tmp',
-          '_active_plugins_backup',
-          'plugins',
-          p,
-          'package.json',
-        );
-        if (fs.existsSync(packageJsonPath)) {
-          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: 'utf-8' }));
-          return {
-            dirName: p,
-            name: packageJson.name,
-            version: packageJson.version,
-          };
-        }
-      })
-      .filter((plugin) => plugin !== undefined);
-
-    console.log('BACKUP PLUGINS ENTRIES', pluginList);
-
-    return {
-      status: 'ok',
-      data: pluginList,
-    };
+      return {
+        status: 'ok',
+        data: pluginList,
+      };
+    });
   }
 
   static async restorePlugins(selections: { [key: string]: boolean }) {
