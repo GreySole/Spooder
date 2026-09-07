@@ -103,14 +103,14 @@ let loadingCount = 0;
 export function beginLoading() {
   loadingCount++;
   if (loadingCount === 1) {
-    sendToApp('loading_start');
+    sendToApp({action:'loading_start'});
   }
 }
 
 export function endLoading() {
   loadingCount = Math.max(0, loadingCount - 1);
   if (loadingCount === 0) {
-    sendToApp('loading_stop');
+    sendToApp({action:'loading_stop'});
   }
 }
 
