@@ -18,12 +18,13 @@ export async function downloadToFile(
   url: string,
   destPath: string,
   expectedSha256?: string | null,
+  extraHeaders?: Record<string, string> | null,
 ): Promise<void> {
   const response = await Axios({
     url,
     method: 'GET',
     responseType: 'arraybuffer',
-    headers: { Accept: 'application/octet-stream' },
+    headers: { Accept: 'application/octet-stream', ...extraHeaders },
   });
 
   const data = Buffer.from(response.data);

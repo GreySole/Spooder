@@ -91,7 +91,7 @@ export function registerGetRoutes(router: express.Router, publicRouter: express.
         hasPublic: thisPlugin.hasPublic,
         pluginMode: thisPlugin.pluginMode,
         devMode: thisPlugin.devMode,
-        repo: PluginRepoService.getRepo(a),
+        repo: PluginRepoService.getRepoForClient(a),
       };
     }
 
@@ -102,7 +102,7 @@ export function registerGetRoutes(router: express.Router, publicRouter: express.
     res.send({
       status: 'ok',
       gitAvailable: await PluginRepoService.isGitAvailable(),
-      repos: PluginRepoService.getRepos(),
+      repos: PluginRepoService.getReposForClient(),
     });
   });
 

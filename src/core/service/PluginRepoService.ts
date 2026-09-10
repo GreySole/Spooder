@@ -13,10 +13,12 @@ import ConfigService from './ConfigService';
 import OSCService from './OSCService';
 import PluginService from './PluginService';
 
-// Plugins are distributed from Git repos laid out exactly like an /export_plugin zip:
-// a `plugin/` (or legacy `command/`) folder for the plugin itself, plus optional
-// `overlay/`, `utility/`, `public/`, `settings/`, `assets/` folders and an `icon.png`
-// at the repo root. That means a checkout can be handed straight to
+// Plugins are distributed from Git repos laid out like an /export_plugin zip: a `plugin/`
+// (or legacy `command/`) folder for the plugin itself, plus optional `overlay/`, `utility/`,
+// `public/`, `settings/`, `assets/` folders and an `icon.png` at the repo root. A repo
+// dedicated to one plugin can skip the `plugin/` wrapper and keep those files at the repo
+// root instead (see looksLikePlugin/stageCheckout) - the checkout is normalized into the
+// wrapped shape during staging either way, so it can be handed straight to
 // PluginService.installPluginFromTemp, the same code path a manually uploaded zip takes.
 //
 // Two install modes, tracked per plugin:
@@ -29,6 +31,13 @@ import PluginService from './PluginService';
 // Source clones are kept in user/plugin-repos/<pluginName> rather than in the installed
 // plugin folder, because a repo spans several install destinations (user/plugins and
 // several user/web subfolders) and there's no single directory that could be the worktree.
+//
+// A private repo carries a fine-grained GitHub PAT (read-only Contents+Metadata) as
+// `token`. The same token authenticates both modes: it's sent as a Bearer header to the
+// GitHub API and the release-asset endpoint for 'release' mode, and as a per-invocation
+// `http.extraheader` for 'source' mode's clone/fetch - never written into the URL or
+// .git/config, where it would linger in plaintext. It's stripped from every response this
+// service hands to a route (see redact()); only the service itself ever reads it back out.
 
 export type PluginRepoMode = 'release' | 'source';
 
@@ -50,7 +59,12 @@ export interface PluginRepoRecord {
   installedAt: string;
   lastChecked: string | null;
   update: PluginRepoUpdate | null;
+  token: string | null;
 }
+
+// What PluginRepoRecord looks like once it's left this service - never the token itself,
+// just whether one is on file, so the UI can show "private" without being able to read it.
+export type PublicPluginRepoRecord = Omit<PluginRepoRecord, 'token'> & { hasToken: boolean };
 
 interface PluginRepoRegistry {
   [pluginName: string]: PluginRepoRecord;
@@ -58,7 +72,13 @@ interface PluginRepoRegistry {
 
 interface ReleaseInfo {
   version: string;
+  // Public download link - works unauthenticated, but 404s on a private repo.
   assetUrl: string;
+  // The GitHub API's asset endpoint, needed to download from a private repo: it accepts
+  // the same Bearer token as the releases lookup, where assetUrl does not. Null when the
+  // release has no attached zip and assetUrl points at a source zipball instead (that URL
+  // is already an API endpoint, so it takes the Bearer token directly).
+  assetApiUrl: string | null;
   assetName: string;
 }
 
@@ -111,6 +131,22 @@ function runGit(args: string[], cwd?: string, timeout = 300000): Promise<string>
   });
 }
 
+// Extra `-c` args to splice in front of a git subcommand that talks to the network (clone,
+// fetch). Passed per-invocation rather than `git remote set-url`-ed with the token embedded,
+// so the token never lands in .git/config or a `git remote -v` listing. Scoped to
+// https://github.com/ specifically so it's never sent to a different host a redirect or
+// submodule might point at.
+function gitAuthArgs(url: string, token: string | null | undefined): string[] {
+  if (!token) {
+    return [];
+  }
+  if (!parseGitHubRepo(url)) {
+    return [];
+  }
+  const basic = Buffer.from(`x-access-token:${token}`).toString('base64');
+  return ['-c', `http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic}`];
+}
+
 function normalizeRepoUrl(url: string): string {
   const trimmed = (url ?? '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\/[^\s]+$/i.test(trimmed)) {
@@ -129,15 +165,38 @@ function parseGitHubRepo(url: string): { owner: string; repo: string } | null {
   return { owner: match[1], repo: match[2] };
 }
 
+// display_name has no purpose outside a Spooder plugin's package.json - every plugin
+// shipped with the app carries one, and a generic npm package never does - so it's the
+// signal that lets a repo with no plugin/ wrapper still be trusted as an installable
+// plugin rather than treating any GitHub repo with a package.json as one.
+function looksLikePlugin(dir: string): boolean {
+  const manifestPath = path.join(dir, 'build', 'manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    return true;
+  }
+  const packagePath = path.join(dir, 'package.json');
+  if (!fs.existsSync(packagePath)) {
+    return false;
+  }
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packagePath, { encoding: 'utf8' }));
+    return !!(pkg.name && pkg.display_name);
+  } catch (e) {
+    return false;
+  }
+}
+
 // The plugin's own folder inside a checkout. 'command' is the pre-0.5 name and still
 // turns up in older plugin repos, so both are accepted here and by installPluginFromTemp.
+// A repo with neither falls back to treating its own root as that folder, for a plugin
+// that keeps its files at the repo root instead of nesting them under plugin/.
 function pluginSubdir(rootDir: string): string | null {
   for (const candidate of ['plugin', 'command']) {
     if (fs.existsSync(path.join(rootDir, candidate))) {
       return path.join(rootDir, candidate);
     }
   }
-  return null;
+  return looksLikePlugin(rootDir) ? rootDir : null;
 }
 
 function readPluginName(rootDir: string): string | null {
@@ -179,33 +238,74 @@ function findCheckoutRoot(extractDir: string): string | null {
   return null;
 }
 
-// Copies a checkout into user/tmp/<pluginName> for installPluginFromTemp to consume.
+// Sibling folders a checkout may carry next to plugin/ (or, in a flat repo, next to
+// everything else at the root) that install to their own destinations outside the plugin
+// folder - see installPluginFromTemp. icon.png is the other root-level file with this
+// treatment, handled separately below since it's a file, not a folder.
+const INSTALL_SIBLINGS = ['overlay', 'utility', 'public', 'settings', 'assets'];
+
+function shouldSkipCopy(sourceDir: string, src: string): boolean {
+  const rel = path.relative(sourceDir, src);
+  if (rel === '') {
+    return false;
+  }
+  const parts = rel.split(path.sep);
+  return parts[0] === '.git' || parts.includes('node_modules');
+}
+
+// Copies a checkout into user/tmp/<pluginName> for installPluginFromTemp to consume, which
+// requires the plugin's own files under a plugin/ (or command/) folder there. Two repo
+// layouts are accepted: "wrapped", where that folder already exists at the repo root
+// alongside the optional overlay/utility/public/settings/assets folders and icon.png (the
+// layout /export_plugin produces); and "flat", where the plugin's files sit directly at
+// the repo root with no wrapper - simpler for a repo dedicated to one plugin. A flat
+// checkout still gets those same sibling folders/icon recognized if present at the root;
+// everything else there is nested under plugin/ to match what installPluginFromTemp expects.
+//
 // Git metadata and dependencies are stripped, and so are the plugin's settings.json and
 // _share folder: those belong to this installation, not to the repo, and a plugin that
 // happens to commit an example settings.json must not wipe the user's real settings.
 function stageCheckout(sourceDir: string, destDir: string) {
   fs.removeSync(destDir);
-  fs.copySync(sourceDir, destDir, {
-    filter: (src: string) => {
-      const rel = path.relative(sourceDir, src);
-      if (rel === '') {
-        return true;
-      }
-      const parts = rel.split(path.sep);
-      if (parts[0] === '.git') {
-        return false;
-      }
-      if (parts.includes('node_modules')) {
-        return false;
-      }
-      if (parts.length === 2 && (parts[0] === 'plugin' || parts[0] === 'command')) {
-        if (parts[1] === 'settings.json' || parts[1] === '_share') {
+
+  const wrapped = ['plugin', 'command'].some((candidate) =>
+    fs.existsSync(path.join(sourceDir, candidate)),
+  );
+
+  if (wrapped) {
+    fs.copySync(sourceDir, destDir, {
+      filter: (src: string) => {
+        if (shouldSkipCopy(sourceDir, src)) {
           return false;
         }
-      }
-      return true;
-    },
-  });
+        const parts = path.relative(sourceDir, src).split(path.sep);
+        if (parts.length === 2 && (parts[0] === 'plugin' || parts[0] === 'command')) {
+          if (parts[1] === 'settings.json' || parts[1] === '_share') {
+            return false;
+          }
+        }
+        return true;
+      },
+    });
+    return;
+  }
+
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    if (entry.name === '.git' || entry.name === 'node_modules') {
+      continue;
+    }
+    if (entry.name === 'settings.json' || entry.name === '_share') {
+      continue;
+    }
+
+    const from = path.join(sourceDir, entry.name);
+    const to =
+      entry.name === 'icon.png' || INSTALL_SIBLINGS.includes(entry.name)
+        ? path.join(destDir, entry.name)
+        : path.join(destDir, 'plugin', entry.name);
+
+    fs.copySync(from, to, { filter: (src: string) => !shouldSkipCopy(sourceDir, src) });
+  }
 }
 
 export default class PluginRepoService {
@@ -265,6 +365,39 @@ export default class PluginRepoService {
     return PluginRepoService.loadRegistry()[pluginName] ?? null;
   }
 
+  private static redact(record: PluginRepoRecord): PublicPluginRepoRecord {
+    const { token, ...rest } = record;
+    return { ...rest, hasToken: !!token };
+  }
+
+  // These are what routes should hand back to the frontend - getRepo/getRepos above stay
+  // raw for the service's own use (checking/installing/updating need the real token).
+  static getRepoForClient(pluginName: string): PublicPluginRepoRecord | null {
+    const record = PluginRepoService.getRepo(pluginName);
+    return record ? PluginRepoService.redact(record) : null;
+  }
+
+  static getReposForClient(): { [pluginName: string]: PublicPluginRepoRecord } {
+    const registry = PluginRepoService.loadRegistry();
+    const result: { [pluginName: string]: PublicPluginRepoRecord } = {};
+    for (const pluginName of Object.keys(registry)) {
+      result[pluginName] = PluginRepoService.redact(registry[pluginName]);
+    }
+    return result;
+  }
+
+  // Updates (or clears, with token: null) just the credential on an already-tracked repo -
+  // for rotating an expiring PAT, or flipping a repo private without a full reinstall.
+  static setToken(pluginName: string, token: string | null) {
+    const registry = PluginRepoService.loadRegistry();
+    const record = registry[pluginName];
+    if (!record) {
+      throw new Error(`${pluginName} was not installed from a repo.`);
+    }
+    record.token = token?.trim() || null;
+    PluginRepoService.saveRegistry();
+  }
+
   static async isGitAvailable(): Promise<boolean> {
     if (PluginRepoService.gitAvailable !== null) {
       return PluginRepoService.gitAvailable;
@@ -303,16 +436,24 @@ export default class PluginRepoService {
     // plugin runs in-process with the user's tokens, so this is the one point where that
     // record can still stop a swapped artifact.
     sha256?: string | null;
+    // Fine-grained GitHub PAT for a private repo. Optional - public repos need nothing.
+    token?: string | null;
   }): Promise<InstallResult> {
     return withLoading(async () => {
       const url = normalizeRepoUrl(options.url);
       const mode: PluginRepoMode = options.mode === 'source' ? 'source' : 'release';
       const branch = options.branch?.trim() || null;
+      const token = options.token?.trim() || null;
 
       const result =
         mode === 'source'
-          ? await PluginRepoService.installFromSource(url, branch)
-          : await PluginRepoService.installFromRelease(url, undefined, options.sha256 ?? null);
+          ? await PluginRepoService.installFromSource(url, branch, undefined, token)
+          : await PluginRepoService.installFromRelease(
+              url,
+              undefined,
+              options.sha256 ?? null,
+              token,
+            );
 
       PluginRepoService.recordInstall({
         pluginName: result.pluginName,
@@ -321,6 +462,7 @@ export default class PluginRepoService {
         branch: result.branch,
         version: result.version,
         commit: result.commit,
+        token,
       });
 
       return result;
@@ -346,8 +488,14 @@ export default class PluginRepoService {
               record.url,
               branch?.trim() || record.branch,
               pluginName,
+              record.token,
             )
-          : await PluginRepoService.installFromRelease(record.url, pluginName);
+          : await PluginRepoService.installFromRelease(
+              record.url,
+              pluginName,
+              null,
+              record.token,
+            );
 
       PluginRepoService.recordInstall({
         pluginName: result.pluginName,
@@ -358,6 +506,8 @@ export default class PluginRepoService {
         mode,
         version: result.version,
         commit: result.commit,
+        // Mode switches reuse the credential already on file for this repo.
+        token: record.token,
       });
 
       return result;
@@ -371,6 +521,7 @@ export default class PluginRepoService {
     branch: string | null;
     version: string | null;
     commit: string | null;
+    token: string | null;
   }) {
     const registry = PluginRepoService.loadRegistry();
     registry[fields.pluginName] = {
@@ -386,6 +537,7 @@ export default class PluginRepoService {
     url: string,
     branch: string | null,
     knownPluginName?: string,
+    token?: string | null,
   ): Promise<InstallResult> {
     if (!(await PluginRepoService.isGitAvailable())) {
       throw new Error(
@@ -400,7 +552,7 @@ export default class PluginRepoService {
 
     try {
       progress(label, branch ? `Cloning ${branch}...` : 'Cloning repository...');
-      const args = ['clone', '--single-branch'];
+      const args = [...gitAuthArgs(url, token), 'clone', '--single-branch'];
       if (branch) {
         args.push('--branch', branch);
       }
@@ -440,6 +592,7 @@ export default class PluginRepoService {
     url: string,
     knownPluginName?: string,
     expectedSha256?: string | null,
+    token?: string | null,
   ): Promise<InstallResult> {
     const gh = parseGitHubRepo(url);
     if (!gh) {
@@ -449,10 +602,11 @@ export default class PluginRepoService {
     }
 
     const label = knownPluginName ?? url;
-    const release = await PluginRepoService.getLatestRelease(gh);
+    const release = await PluginRepoService.getLatestRelease(gh, token);
     if (!release) {
       throw new Error(
-        `No published release found for ${gh.owner}/${gh.repo}. Publish a release with the plugin zip attached, or install from source instead.`,
+        `No published release found for ${gh.owner}/${gh.repo}. Publish a release with the plugin zip attached, or install from source instead.` +
+          (token ? '' : ' If this is a private repo, add a token first.'),
       );
     }
 
@@ -463,7 +617,11 @@ export default class PluginRepoService {
 
     try {
       progress(label, `Downloading ${release.version}...`);
-      await downloadToFile(release.assetUrl, zipPath, expectedSha256 ?? null);
+      // A private repo's plain download link 404s without a browser session; the API's
+      // asset endpoint takes the same Bearer token the releases lookup used instead.
+      const downloadUrl = token && release.assetApiUrl ? release.assetApiUrl : release.assetUrl;
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : null;
+      await downloadToFile(downloadUrl, zipPath, expectedSha256 ?? null, authHeaders);
 
       progress(label, 'Extracting...');
       new AdmZip(zipPath).extractAllTo(scratch, true);
@@ -499,15 +657,22 @@ export default class PluginRepoService {
   // release is expected to carry an /export_plugin zip as its asset; if the author tagged
   // a release without attaching one, the tag's source zipball is used instead so tagging
   // alone is enough to publish.
-  private static async getLatestRelease(gh: {
-    owner: string;
-    repo: string;
-  }): Promise<ReleaseInfo | null> {
+  private static async getLatestRelease(
+    gh: { owner: string; repo: string },
+    token?: string | null,
+  ): Promise<ReleaseInfo | null> {
     try {
+      const headers: Record<string, string> = {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'Spooder',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
       const response = await Axios({
         url: `https://api.github.com/repos/${gh.owner}/${gh.repo}/releases/latest`,
         method: 'GET',
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Spooder' },
+        headers,
       });
       const tagName: string | undefined = response.data?.tag_name;
       if (!tagName) {
@@ -520,6 +685,7 @@ export default class PluginRepoService {
         return {
           version: tagName.replace(/^v/i, ''),
           assetUrl: zipAsset.browser_download_url,
+          assetApiUrl: zipAsset.url ?? null,
           assetName: zipAsset.name,
         };
       }
@@ -528,6 +694,9 @@ export default class PluginRepoService {
         return {
           version: tagName.replace(/^v/i, ''),
           assetUrl: response.data.zipball_url,
+          // zipball_url is already an api.github.com endpoint, so it takes the same
+          // Bearer header the releases lookup used - no separate asset URL needed.
+          assetApiUrl: null,
           assetName: `${gh.repo}-${tagName}-source.zip`,
         };
       }
@@ -604,13 +773,15 @@ export default class PluginRepoService {
       };
     }
 
-    const release = await PluginRepoService.getLatestRelease(gh);
+    const release = await PluginRepoService.getLatestRelease(gh, record.token);
     if (!release) {
       return {
         available: false,
         version: null,
         commit: null,
-        summary: 'No published releases found.',
+        summary: record.token
+          ? 'No published releases found.'
+          : 'No published releases found. If this is a private repo, add a token.',
         checkedAt,
       };
     }
@@ -651,7 +822,7 @@ export default class PluginRepoService {
       };
     }
 
-    await runGit(['fetch', '--prune', 'origin'], dir);
+    await runGit([...gitAuthArgs(record.url, record.token), 'fetch', '--prune', 'origin'], dir);
     const branch = record.branch ?? (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], dir));
     const remoteRef = `origin/${branch}`;
     const local = await runGit(['rev-parse', 'HEAD'], dir);
@@ -725,7 +896,12 @@ export default class PluginRepoService {
       const result =
         record.mode === 'source'
           ? await PluginRepoService.updateSource(record)
-          : await PluginRepoService.installFromRelease(record.url, pluginName);
+          : await PluginRepoService.installFromRelease(
+              record.url,
+              pluginName,
+              null,
+              record.token,
+            );
 
       PluginRepoService.recordInstall({
         pluginName: result.pluginName,
@@ -734,6 +910,7 @@ export default class PluginRepoService {
         branch: result.branch ?? record.branch,
         version: result.version,
         commit: result.commit,
+        token: record.token,
       });
 
       OSCService.sendToTCP?.('/spooder/plugin/install/complete', {
@@ -752,7 +929,12 @@ export default class PluginRepoService {
   private static async updateSource(record: PluginRepoRecord): Promise<InstallResult> {
     const dir = repoDir(record.pluginName);
     if (!fs.existsSync(path.join(dir, '.git'))) {
-      return PluginRepoService.installFromSource(record.url, record.branch, record.pluginName);
+      return PluginRepoService.installFromSource(
+        record.url,
+        record.branch,
+        record.pluginName,
+        record.token,
+      );
     }
 
     if (!(await PluginRepoService.isGitAvailable())) {
@@ -760,7 +942,7 @@ export default class PluginRepoService {
     }
 
     progress(record.pluginName, 'Fetching latest source...');
-    await runGit(['fetch', '--prune', 'origin'], dir);
+    await runGit([...gitAuthArgs(record.url, record.token), 'fetch', '--prune', 'origin'], dir);
 
     const branch = record.branch ?? (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], dir));
     await runGit(['checkout', branch], dir);

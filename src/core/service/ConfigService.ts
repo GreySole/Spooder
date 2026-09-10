@@ -151,11 +151,11 @@ export default class ConfigService {
       },
     },
     webui_update: {
-      enabled: false,
+      enabled: true,
       schedule: '0 0 * * *',
     },
     plugin_update: {
-      enabled: false,
+      enabled: true,
       schedule: '0 0 * * *',
     },
   };

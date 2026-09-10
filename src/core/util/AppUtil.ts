@@ -1,6 +1,7 @@
 import net from 'net';
 import os from 'os';
 import path from 'path';
+import { KeyedObject } from '@spooder/plugin-sdk';
 import { spooderLog } from '../Logging';
 
 let ipcSocket: net.Socket | null = null;
@@ -85,7 +86,7 @@ export function requestRestart(reason: string): { restarting: boolean; via: Rest
   return { restarting: false, via };
 }
 
-export function sendToApp(data: any) {
+export function sendToApp(data: KeyedObject) {
   if (ipcSocket && ipcSocket.writable) {
     ipcSocket.write(JSON.stringify(data) + '\n');
   } else {

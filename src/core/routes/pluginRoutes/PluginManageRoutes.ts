@@ -156,9 +156,10 @@ export function registerManageRoutes(router: express.Router) {
     const url = req.body.url as string;
     const mode = req.body.mode as PluginRepoMode | undefined;
     const branch = req.body.branch as string | undefined;
+    const token = req.body.token as string | undefined;
 
     try {
-      const result = await PluginRepoService.installFromUrl({ url, mode, branch });
+      const result = await PluginRepoService.installFromUrl({ url, mode, branch, token });
       res.send({ status: 'ok', ...result });
     } catch (e: any) {
       webLog('Plugin repo install failed:', e.message ?? e);
@@ -205,6 +206,21 @@ export function registerManageRoutes(router: express.Router) {
     } catch (e: any) {
       webLog(`Failed to switch ${pluginName} to ${mode}:`, e.message ?? e);
       res.status(400).send({ status: 'error', message: e.message ?? 'Mode switch failed' });
+    }
+  });
+
+  // Rotates or clears a repo's GitHub PAT without reinstalling. Pass token: null (or omit
+  // it) to remove it - e.g. if the repo goes public, or a leaked token needs pulling.
+  router.post('/set_plugin_repo_token', async (req: Request, res: Response) => {
+    const pluginName = req.body.pluginName as string;
+    const token = (req.body.token as string | null | undefined) ?? null;
+
+    try {
+      PluginRepoService.setToken(pluginName, token);
+      res.send({ status: 'ok' });
+    } catch (e: any) {
+      webLog(`Failed to set repo token for ${pluginName}:`, e.message ?? e);
+      res.status(400).send({ status: 'error', message: e.message ?? 'Failed to set token' });
     }
   });
 

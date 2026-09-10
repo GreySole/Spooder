@@ -11,21 +11,21 @@ import { ControlModuleInterface } from '../../interface/ControlModuleInterface';
 import { StreamModuleInterface } from '../../interface/StreamModuleInterface';
 import { frontendDir, userDir } from '../../Types';
 import { logToFile, spooderLog, webLog } from '../Logging';
-import { sendToApp } from '../util/AppUtil';
 import { BackupRestoreRoutes } from '../routes/BackupRestoreRoutes';
 import { ChangelogRoutes } from '../routes/ChangelogRoutes';
 import { ConfigRoutes } from '../routes/ConfigRoutes';
 import { EventRoutes } from '../routes/EventRoutes';
 import { ModerationRoutes, validateModAccess, validateUser } from '../routes/ModerationRoutes';
 import ModuleRoutes from '../routes/ModuleRoutes';
-import RegistryRoutes from '../routes/RegistryRoutes';
 import { OverlayContainerRoutes } from '../routes/OverlayContainerRoutes';
 import { PluginRoutes } from '../routes/PluginRoutes';
 import { PublicRoutes } from '../routes/PublicRoutes';
+import RegistryRoutes from '../routes/RegistryRoutes';
 import { ServerRoutes } from '../routes/ServerRoutes';
 import { ShareRoutes } from '../routes/ShareRoutes';
 import { ThemeRoutes } from '../routes/ThemeRoutes';
 import { UserRoutes } from '../routes/UserRoutes';
+import { sendToApp } from '../util/AppUtil';
 import ConfigService from './ConfigService';
 import ShareService from './ShareService';
 import MotherwolfTunnel from './webui/Motherwolf';
@@ -410,10 +410,7 @@ export class WebService {
     // can take a while and has nothing to do with whether the server can serve a page yet.
     // Fires for both the init wizard and the main app, since both go through this same method.
     sendToApp({
-      type: 'status',
-      message: 'server_running',
-      url: `http://localhost:${expressPort}`,
-      port: expressPort,
+      action: 'server_running',
     });
   }
 

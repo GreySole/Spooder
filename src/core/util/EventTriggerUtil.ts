@@ -17,12 +17,7 @@ export function triggerExistsAndEnabled(event: KeyedObject, triggerType: string)
 }
 
 export function groupIsDisabled(event: KeyedObject) {
-  EventService.getDisabledGroups()?.forEach((groupName: string) => {
-    if (event.group === groupName) {
-      return true;
-    }
-  });
-  return false;
+  return EventService.getDisabledGroups()?.includes(event.group) ?? false;
 }
 
 const NO_FILTER_VALUES = ['', 'any', false, undefined, null];
