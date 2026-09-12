@@ -156,6 +156,10 @@ export default class TimerService {
     }
   }
 
+  static isRunning(name: string): boolean {
+    return TimerService.timers.has(name);
+  }
+
   static getRunningTimers() {
     return [...TimerService.timers.values()].map((timer) => ({
       name: timer.name,

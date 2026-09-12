@@ -2,26 +2,25 @@ import { KeyedObject, StreamMessage } from '../../Types';
 import EventStorageService from '../service/EventStorageService';
 import { EventService, sayInChat } from '../service/EventService';
 import ModuleService from '../service/ModuleService';
-import { triggerExistsAndEnabled } from './EventTriggerUtil';
 import { matchSearchPattern } from './SearchMatchUtil';
 
 export function checkResponseTrigger(eventData: KeyedObject, message: StreamMessage) {
-  let searchMode = false;
-  if (triggerExistsAndEnabled(eventData, 'chat')) {
-    if (eventData.triggers.chat.search) {
-      searchMode = true;
-    }
-  }
-  if (triggerExistsAndEnabled(eventData, 'osc')) {
-    if (eventData.triggers.osc.search) {
-      searchMode = true;
-    }
-  }
+  // Which trigger's own settings apply is decided by where this message actually came from,
+  // not by OR-ing every trigger type's `search` flag together: an OSC trigger node always
+  // carries a `search` sub-object (its arg/command config, present regardless of handletype),
+  // so an event with both a chat_command and an osc_trigger node had every chat message pulled
+  // into OSC's pattern matcher instead of chat's own plain command-prefix check - and a `!`
+  // -prefixed command can never match there, since the matcher strips punctuation from the
+  // incoming text but not from the pattern.
+  const isOscMessage = message.platform == 'osc';
   let command = '';
-  if (message.platform == 'osc') {
+  let searchMode = false;
+  if (isOscMessage) {
     command = eventData.triggers.osc.search?.command.toLowerCase();
+    searchMode = eventData.triggers.osc.handletype === 'search';
   } else {
     command = eventData.triggers.chat.command.toLowerCase();
+    searchMode = Boolean(eventData.triggers.chat.search);
   }
   if (searchMode == true) {
     // The matcher itself lives in SearchMatchUtil, shared with the Search & Match operation

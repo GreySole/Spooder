@@ -60,6 +60,23 @@ export interface PluginStore {
    * so a plain file copy of a live database can silently come back missing records.
    */
   backup(destPath: string): void;
+
+  /**
+   * Run SQL directly against this plugin's own database - DDL such as CREATE TABLE, or
+   * any other statement that takes no parameters and returns no rows. Runs on the same
+   * connection as the collection/key API above; a table created this way is unrelated to
+   * a same-named collection, since collections all live inside one shared internal table.
+   */
+  exec(sql: string): void;
+
+  /** Run a parameterized statement that doesn't return rows - INSERT, UPDATE, DELETE. */
+  run(sql: string, ...params: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint };
+
+  /** Run a parameterized SELECT, returning the first matching row or undefined. */
+  queryOne<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T | undefined;
+
+  /** Run a parameterized SELECT, returning every matching row. */
+  query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T[];
 }
 
 /** Stand-in used before core wires up the real store. Every read is empty; writes throw. */
@@ -106,5 +123,20 @@ export class NoopPluginStore implements PluginStore {
   }
   backup(_destPath: string): void {
     this.fail();
+  }
+  exec(_sql: string): void {
+    this.fail();
+  }
+  run(
+    _sql: string,
+    ..._params: unknown[]
+  ): { changes: number | bigint; lastInsertRowid: number | bigint } {
+    this.fail();
+  }
+  queryOne<T = Record<string, unknown>>(_sql: string, ..._params: unknown[]): T | undefined {
+    return undefined;
+  }
+  query<T = Record<string, unknown>>(_sql: string, ..._params: unknown[]): T[] {
+    return [];
   }
 }

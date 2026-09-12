@@ -9,7 +9,7 @@ import { webLog } from '../Logging';
 type SqliteDatabase = {
   exec(sql: string): void;
   prepare(sql: string): {
-    run(...params: unknown[]): { changes: number };
+    run(...params: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint };
     get(...params: unknown[]): Record<string, unknown> | undefined;
     all(...params: unknown[]): Record<string, unknown>[];
   };
@@ -241,7 +241,9 @@ class SqlitePluginStore implements PluginStore {
   }
 
   clear(collection: string): number {
-    return this.handle().prepare('DELETE FROM store WHERE collection = ?').run(collection).changes;
+    return Number(
+      this.handle().prepare('DELETE FROM store WHERE collection = ?').run(collection).changes,
+    );
   }
 
   collections(): string[] {
@@ -262,6 +264,22 @@ class SqlitePluginStore implements PluginStore {
     // VACUUM INTO rather than a file copy: committed rows may still be sitting in the -wal
     // sidecar, so copying data.db on its own can silently lose recent writes.
     this.handle().exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`);
+  }
+
+  exec(sql: string): void {
+    this.handle().exec(sql);
+  }
+
+  run(sql: string, ...params: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint } {
+    return this.handle().prepare(sql).run(...params);
+  }
+
+  queryOne<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T | undefined {
+    return this.handle().prepare(sql).get(...params) as T | undefined;
+  }
+
+  query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T[] {
+    return this.handle().prepare(sql).all(...params) as T[];
   }
 
   /** Checkpoints the WAL and releases the file, so the folder can be deleted or archived. */

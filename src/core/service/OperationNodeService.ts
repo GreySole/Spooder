@@ -256,6 +256,28 @@ const STRING_NODES: OperationNodeDef[] = [
     ],
   },
   {
+    id: 'change_case',
+    label: 'Change Case',
+    description: 'Converts text to all upper case or all lower case.',
+    category: 'string',
+    form: {
+      text: { label: 'Text', type: 'text', portType: 'string' },
+      mode: {
+        label: 'Case',
+        type: 'select',
+        portType: 'string',
+        options: {
+          selections: {
+            upper: 'UPPER CASE',
+            lower: 'lower case',
+          },
+        },
+      },
+    },
+    defaults: { text: '', mode: 'upper' },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
+  },
+  {
     id: 'word_at',
     label: 'Word At',
     description: 'Splits text on spaces and returns the word at the given index (0-based).',
@@ -687,6 +709,13 @@ export default class OperationNodeService {
         });
         return result;
       }
+      case 'change_case':
+        return {
+          result:
+            String(values.mode) === 'lower'
+              ? String(values.text ?? '').toLowerCase()
+              : String(values.text ?? '').toUpperCase(),
+        };
       case 'word_at':
         return { result: String(values.text).split(' ')[Number(values.index)] ?? '' };
       case 'array_at': {

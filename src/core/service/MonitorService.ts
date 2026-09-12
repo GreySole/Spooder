@@ -154,6 +154,28 @@ export default class MonitorService {
     }
   }
 
+  // Pushes a Debug: Text Display node's current value onto the same live feed the OSC Monitor
+  // tab and OSC Receive node previews already share (see OscLiveValues.tsx on the frontend) -
+  // gated behind the same subscriber check, so a graph with no editor open never puts anything
+  // on the wire. Not stored in oscMessageLog: unlike an OSC message there is no "monitor tab"
+  // history for it to serve, only the live readout on the node itself.
+  static addGraphDebugLog(eventId: string, nodeId: string, value: string) {
+    if (!MonitorService.isLiveLoggingEnabled()) {
+      return;
+    }
+    OSCService.sendToTCP(
+      '/spooder/monitor/log',
+      JSON.stringify({
+        type: 'graph_debug',
+        eventId,
+        nodeId,
+        value,
+        timestamp: new Date().toISOString(),
+      }),
+      false,
+    );
+  }
+
   static sendToMonitor = (proto: string, direction: string, data: KeyedObject) => {
     let timestamp = Date.now();
     console.log('SEND TO MONITOR', proto, direction, data);

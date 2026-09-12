@@ -369,7 +369,7 @@ export class EventService {
       if (!matchesTriggerValues(triggerNodeId, event.triggers[moduleName], payload)) {
         continue;
       }
-      EventService.runCommands(streamMessage, e, 'event');
+      EventService.runCommands(streamMessage, e, 'event', {}, moduleName);
     }
   }
 
@@ -378,6 +378,10 @@ export class EventService {
     eventName: string,
     eventType: string,
     extra: KeyedObject = {},
+    // Which module's trigger actually fired (e.g. 'twitch', 'discord', 'obs') - passed by
+    // dispatchers that aren't chat or OSC, so a graph mixing one of those triggers with a
+    // chat_command/osc_trigger only runs the branch that fired. See entryNodesForDispatch.
+    triggerModule?: string,
   ) => {
     const sconfig = ConfigService.getConfig();
     let isChat = eventType.includes('chat');
@@ -452,7 +456,7 @@ export class EventService {
       ranActions = walkEventGraph(
         graph,
         graphContext,
-        entryNodesForDispatch(graph, graphContext, triggerNodeTypes),
+        entryNodesForDispatch(graph, graphContext, triggerNodeTypes, triggerModule),
       );
     } else if (event.commands) {
       // Mod-command virtual events aren't backed by a graph (they live in mod_commands.json)

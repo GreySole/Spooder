@@ -4,6 +4,7 @@ import { matchCommand } from '../../util/CommandMatchUtil';
 import { buildExecAdjacency, findEntryNodeIds } from '../../util/EventGraphMigration';
 import { EventService, sayInChat } from '../EventService';
 import EventStorageService from '../EventStorageService';
+import MonitorService from '../MonitorService';
 import NodeRegistryService from '../NodeRegistryService';
 import OperationNodeService from '../OperationNodeService';
 import OscLayerService from '../OscLayerService';
@@ -117,9 +118,9 @@ function evaluateOperationNode(
   const inputValues = resolveNodeValues(graph, node, ctx, actionOutputs, depth);
 
   // Keyed off nodeTypeId, not node.moduleName: the frontend palette tags operation nodes
-  // with their category as moduleName (these three carry category 'storage'), so a
-  // moduleName === 'core' check here would never match and these would fall through to
-  // OperationNodeService.evaluate() and throw.
+  // with their category as moduleName (the storage getters carry category 'storage', Is Timer
+  // Active carries 'timer'), so a moduleName === 'core' check here would never match and these
+  // would fall through to OperationNodeService.evaluate() and throw.
   switch (node.nodeTypeId) {
     case 'get_string_value': {
       const eventName = inputValues.eventName || ctx.eventName;
@@ -159,6 +160,8 @@ function evaluateOperationNode(
         ),
       };
     }
+    case 'is_timer_active':
+      return { active: TimerService.isRunning(inputValues.name) };
     default:
       return OperationNodeService.evaluate(node.nodeTypeId, inputValues);
   }
@@ -226,6 +229,8 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
         // Branching itself happens in activatedPorts(); neither node has a side effect of its
         // own to run.
         return () => {};
+      case 'debug_text':
+        return () => MonitorService.addGraphDebugLog(ctx.eventName, node.id, String(values.value ?? ''));
       case 'set_string_value':
         return () =>
           EventStorageService.setValue(
@@ -327,21 +332,31 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
 // original behavior exactly.
 // Where a fire starts. `triggerNodeTypes` narrows it to the kind of trigger that actually fired,
 // so an event holding both a chat trigger and a timer runs only the branch that was triggered.
+// `triggerModule` does the same for dispatches that don't have a fixed node-type list to check
+// against (Twitch, Discord, OBS, ... - anything routed through emitTrigger or Twitch's own
+// eventsub matching): a graph mixing one of those triggers with a chat_command or osc_trigger
+// would otherwise run both branches every time either one fired, since neither is in
+// CHAT_TRIGGER_NODE_TYPES/OSC_TRIGGER_NODE_TYPES and the type-list check alone can't tell them
+// apart from a co-located core trigger.
 // Returns undefined when the graph has no trigger of that kind - the caller decides what that
 // means, since the dispatch must then have come from somewhere else (a Trigger Event node, say).
 export function entryNodesForDispatch(
   graph: EventGraph,
   ctx: GraphExecutionContext,
   triggerNodeTypes?: string[],
+  triggerModule?: string,
 ): string[] | undefined {
   const callbacks = graph.nodes.filter(
-    (n) => n.kind === 'callback' && (!triggerNodeTypes || triggerNodeTypes.includes(n.nodeTypeId)),
+    (n) =>
+      n.kind === 'callback' &&
+      (!triggerNodeTypes || triggerNodeTypes.includes(n.nodeTypeId)) &&
+      (!triggerModule || n.moduleName === triggerModule),
   );
   if (callbacks.length === 0) {
     // A graph with no trigger at all is run programmatically and starts at its loose actions;
     // findEntryNodeIds knows that rule. A graph that has triggers but none of this kind is a
     // dispatch this function can't speak for.
-    return triggerNodeTypes ? undefined : findEntryNodeIds(graph);
+    return triggerNodeTypes || triggerModule ? undefined : findEntryNodeIds(graph);
   }
 
   const outgoing = buildExecAdjacency(graph);

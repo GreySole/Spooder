@@ -1,5 +1,7 @@
-// Copies package.json from each src/integration/* subdirectory into the
-// compiled dist/integration/* output after `tsc` runs.
+// Copies non-TS assets from each src/integration/* subdirectory into the compiled
+// dist/integration/* output after `tsc` runs: the package.json manifest, and any
+// prebuilt `widgets` (small standalone iframe-able pages a module ships for its own
+// functions - tsc won't touch either since neither is TypeScript.
 const fs = require('fs');
 const path = require('path');
 
@@ -15,4 +17,10 @@ for (const entry of entries) {
   fs.mkdirSync(destDir, { recursive: true });
   fs.copyFileSync(srcPkg, path.join(destDir, 'package.json'));
   console.log(`Copied integration/${entry}/package.json`);
+
+  const srcWidgets = path.join(srcIntegrationDir, entry, 'widgets');
+  if (fs.existsSync(srcWidgets)) {
+    fs.cpSync(srcWidgets, path.join(destDir, 'widgets'), { recursive: true });
+    console.log(`Copied integration/${entry}/widgets`);
+  }
 }

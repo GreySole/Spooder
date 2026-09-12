@@ -61,6 +61,18 @@ export function getCoreOperationNodes(): OperationNodeDef[] {
       defaults: { eventName: '', key: '', defaultValue: false },
       outputs: [{ id: 'value', label: 'Value', dataType: 'boolean' }],
     },
+    {
+      id: 'is_timer_active',
+      label: 'Is Timer Active',
+      description:
+        "True while the named timer is running - started and not yet stopped, or elapsed without repeating. Reads live timer state, so it always reflects the timer's status at the moment this runs, not just at some node upstream that started or stopped it.",
+      category: 'timer',
+      form: {
+        name: { label: 'Timer Name', type: 'text', portType: 'string' },
+      },
+      defaults: { name: '' },
+      outputs: [{ id: 'active', label: 'Active', dataType: 'boolean' }],
+    },
   ];
 }
 
@@ -245,6 +257,22 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
         seconds: { label: 'Seconds', type: 'number', portType: 'number' },
       },
       defaults: { seconds: 1 },
+    },
+    {
+      id: 'debug_text',
+      label: 'Debug: Text Display',
+      description:
+        'Shows whatever value is wired in, right on the node, updating every time this branch runs. For watching what a graph is actually carrying while building it - it has no effect on the event itself.',
+      form: {
+        // A generous default height: incoming text has no length limit, so the card renders
+        // it in a resizable, selectable textarea (see GraphNodeCard) rather than the one-line
+        // readout every other live value gets. `options.readoutHeight` rather than a real field
+        // (nodeLayout reads it via the same loosely-typed bag 'custom' fields already use for
+        // their own per-field settings) since the frontend's NodeFieldDef comes from a
+        // separately-versioned federated module this repo doesn't own.
+        value: { label: 'Value', type: 'port', portType: 'any', options: { readoutHeight: 100 } },
+      },
+      defaults: {},
     },
   ];
 }

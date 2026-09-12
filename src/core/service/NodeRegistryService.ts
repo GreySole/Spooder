@@ -29,6 +29,7 @@ const FIELD_TYPE_PORT_TYPES: { [fieldType: string]: NodePortDataType } = {
   select: 'string',
   text: 'string',
   number: 'number',
+  range: 'number',
   boolean: 'boolean',
 };
 

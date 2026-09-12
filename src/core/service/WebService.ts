@@ -231,6 +231,9 @@ export class WebService {
       // Mounted per module rather than serving user/modules wholesale: only the `web` folder
       // is public, so anything else a module keeps beside it stays server-side.
       router.use('/modules/:moduleName', moduleUIStatic);
+      // A module's own small iframe-able pages (e.g. a Stream Manager panel) - prebuilt static
+      // files shipped inside the module's backend repo, unlike the federated remote above.
+      router.use('/widgets/:moduleName', moduleWidgetStatic);
       router.use('/utility', express.static(userDir + '/web/utility'));
       router.use('/plugin', express.static(userDir + '/web/public'));
       router.use('/assets', express.static(userDir + '/web/assets'));
@@ -301,6 +304,7 @@ export class WebService {
         }),
       );
       publicRouter.use('/utility', validatePageAccess, express.static(userDir + '/web/utility'));
+      publicRouter.use('/widgets/:moduleName', validatePageAccess, moduleWidgetStatic);
       publicRouter.use('/plugin', express.static(userDir + '/web/public'));
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));
       publicRouter.use('/icons', express.static(userDir + '/web/icons'));
@@ -550,4 +554,30 @@ function moduleUIStatic(req: Request, res: Response, next: NextFunction) {
     );
   }
   moduleStaticHandlers[moduleName](req, res, next);
+}
+
+// One express.static per module for its `widgets` folder - small standalone pages a module
+// ships to expose one of its own functions (e.g. a Stream Manager panel) as something that
+// can sit in a bare iframe, unlike the module UI above which needs the WebUI's own React
+// runtime to mount. Prebuilt static files shipped inside the module's backend repo and
+// copied into dist alongside it, the same way its package.json manifest is - not downloaded
+// into user/ like the federated remote, since they ship with Spooder rather than being
+// updated independently.
+const moduleWidgetHandlers: { [moduleName: string]: express.RequestHandler } = {};
+
+function moduleWidgetStatic(req: Request, res: Response, next: NextFunction) {
+  const moduleName = String(req.params.moduleName ?? '');
+  if (!/^[a-z0-9_-]+$/.test(moduleName)) {
+    next();
+    return;
+  }
+  if (!moduleWidgetHandlers[moduleName]) {
+    // Unlike moduleUIStatic, index resolution stays on: each widget is its own little app
+    // with an index.html entry, so /widgets/<module>/<widget>/ should just serve it rather
+    // than making every caller spell out the filename.
+    moduleWidgetHandlers[moduleName] = express.static(
+      path.join(__dirname, '../../integration', moduleName, 'widgets'),
+    );
+  }
+  moduleWidgetHandlers[moduleName](req, res, next);
 }

@@ -26,6 +26,7 @@ export interface NodeFieldDef {
     | 'text'
     | 'textarea'
     | 'number'
+    | 'range'
     | 'custom'
     | 'port';
   options?: KeyedObject;
@@ -39,6 +40,10 @@ export interface NodeFieldDef {
   // node only ever offers one empty slot at a time and grows as it's filled in. A slot that
   // already holds something is always shown, so nothing can feed a node invisibly.
   growable?: boolean;
+  // Only meaningful on an 'asset' field: the value is an array of asset paths rather than one,
+  // and the frontend renders a multi-picker instead of a single one. Hyphenated to match the
+  // plugin form schema (events-form.json) this key is read from verbatim.
+  'multi-select'?: boolean;
 }
 
 export interface NodeForm {
@@ -110,7 +115,7 @@ export interface OperationNodeDef {
   id: string;
   label: string;
   description?: string;
-  category: 'math' | 'string' | 'logic' | 'random' | 'storage' | 'array';
+  category: 'math' | 'string' | 'logic' | 'random' | 'storage' | 'array' | 'timer';
   // See TriggerNodeDef.nodeWidth.
   nodeWidth?: number;
   form: NodeForm;
