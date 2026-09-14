@@ -1,4 +1,5 @@
 import { EventService } from '../service/EventService';
+import EventStorageService from '../service/EventStorageService';
 import ModuleService from '../service/ModuleService';
 import { getCoreOperationNodes } from '../service/CoreNodeManifest';
 import NodeRegistryService from '../service/NodeRegistryService';
@@ -40,6 +41,25 @@ export function EventRoutes() {
     EventService.saveEventGraphs(req.body.graphs, req.body.groups, req.body.disabledGroups);
     res.send({ status: 'SAVE SUCCESS' });
     webLog('SAVED EVENT GRAPHS');
+  });
+
+  router.get('/event_storage/:eventName', async (req: Request, res: Response) => {
+    res.send(EventStorageService.listValues(req.params.eventName as string));
+  });
+
+  router.post('/event_storage/:eventName', async (req: Request, res: Response) => {
+    const key = req.body.key;
+    if (typeof key !== 'string' || key.length === 0) {
+      res.status(400).send({ status: 'error', message: 'A non-empty key is required.' });
+      return;
+    }
+    EventStorageService.setRawValue(req.params.eventName as string, key, req.body.value);
+    res.send({ status: 'SAVE SUCCESS' });
+  });
+
+  router.delete('/event_storage/:eventName/:key', async (req: Request, res: Response) => {
+    EventStorageService.deleteValue(req.params.eventName as string, req.params.key as string);
+    res.send({ status: 'DELETE SUCCESS' });
   });
 
   router.get('/node_manifest', async (req: Request, res: Response) => {

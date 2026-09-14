@@ -201,4 +201,25 @@ export default class EventStorageService {
     // scalar behind a key the matching get will then refuse to read.
     EventStorageService.setRawValue(eventName, key, type === 'array' ? toArray(value) : value);
   }
+
+  // Used by the storage browser in the events tab - every key an event holds, decoded.
+  static listValues(eventName: string): KeyedObject {
+    const rows = EventStorageService.db
+      .prepare(
+        'SELECT key, value_type, value_text, value_number, value_boolean FROM event_values WHERE event_name = ? ORDER BY key',
+      )
+      .all(eventName) as KeyedObject[];
+
+    const result: KeyedObject = {};
+    for (const row of rows) {
+      result[row.key as string] = decodeRow(row);
+    }
+    return result;
+  }
+
+  static deleteValue(eventName: string, key: string) {
+    EventStorageService.db
+      .prepare('DELETE FROM event_values WHERE event_name = ? AND key = ?')
+      .run(eventName, key);
+  }
 }
