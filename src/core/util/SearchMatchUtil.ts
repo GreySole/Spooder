@@ -56,6 +56,12 @@ export function patternSlots(pattern: string): string[] {
 // The text is lowercased and stripped of punctuation before matching, so the returned words are
 // too - that has always been true of this matcher and response scripts depend on it.
 export function matchSearchPattern(pattern: string, text: string): string[] | undefined {
+  if (!pattern) {
+    // A trigger with no configured pattern (e.g. a never-migrated legacy event missing its
+    // search.command) can't match anything - crashing OSC/chat dispatch for every message is
+    // worse than just declining to match.
+    return undefined;
+  }
   const slots = patternSlots(pattern.toLowerCase());
   if (slots.length === 0) {
     // An empty pattern has nothing to match on. Without this the "all slots filled" test below

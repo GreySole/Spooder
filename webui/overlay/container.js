@@ -43,6 +43,10 @@
       iframe.style.position = 'absolute';
       iframe.style.border = 'none';
       iframe.style.background = 'transparent';
+      // The editor treats a lower index in the saved order as more "front" (its layer list
+      // shows the front-most overlay at the top). Set z-index explicitly from that index rather
+      // than relying on append order, which would put the *last* entry on top instead.
+      iframe.style.zIndex = String(config.order.length - config.order.indexOf(entry));
       applyBoxStyle(iframe, entry);
       stack.appendChild(iframe);
       iframes.set(entry.pluginName, iframe);
@@ -348,6 +352,7 @@
         const box = document.createElement('div');
         box.className = 'overlay-box' + (entry.enabled ? '' : ' disabled');
         box.textContent = entry.displayName || entry.pluginName;
+        box.style.zIndex = String(order.length - order.indexOf(entry));
         applyBoxStyle(box, entry);
 
         const handle = document.createElement('div');

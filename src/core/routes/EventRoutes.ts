@@ -1,4 +1,5 @@
 import { EventService } from '../service/EventService';
+import { runTriggerNow } from '../service/event/EventGraphExecutor';
 import EventStorageService from '../service/EventStorageService';
 import ModuleService from '../service/ModuleService';
 import { getCoreOperationNodes } from '../service/CoreNodeManifest';
@@ -179,6 +180,31 @@ export function EventRoutes() {
   }
 
   router.post('/verify_response_script', verifyResponseScriptPOST);
+
+  router.post(
+    '/event_graphs/:eventName/nodes/:nodeId/trigger_now',
+    async (req: Request, res: Response) => {
+      const eventName = req.params.eventName as string;
+      const nodeId = req.params.nodeId as string;
+      // Reads the last saved graph, same as every other dispatch path - an unsaved edit
+      // (including the trigger node itself, if it was just added) isn't visible here yet.
+      const graph = EventService.getGraphs()[eventName];
+      const node = graph?.nodes.find((n) => n.id === nodeId);
+      if (!graph || !node) {
+        res.status(404).send({
+          status: 'error',
+          message: 'Trigger not found - save your changes and try again.',
+        });
+        return;
+      }
+      if (node.kind !== 'callback') {
+        res.status(400).send({ status: 'error', message: 'That node is not a trigger.' });
+        return;
+      }
+      const ranActions = runTriggerNow(graph, eventName, nodeId);
+      res.send({ status: 'ok', ranActions });
+    },
+  );
 
   return {
     local: router,

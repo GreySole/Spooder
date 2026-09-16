@@ -366,6 +366,19 @@ export function upgradeGraphNodes(graphs: { [eventId: string]: EventGraph }): nu
       return { ...node, moduleName: 'core' };
     });
 
+    // Promise All moved out of the Twitch module into core the same way: the executor already
+    // gated on this nodeTypeId regardless of moduleName, so the wait-for-every-branch behavior
+    // never actually depended on Twitch - only the node's declared home did, and findActionDef
+    // resolves a node's def by moduleName+nodeTypeId together, so a node left on 'twitch' would
+    // read as an unknown node type the moment the def moved.
+    graph.nodes = graph.nodes.map((node) => {
+      if (node.moduleName === 'core' || node.nodeTypeId !== 'promise_all') {
+        return node;
+      }
+      changed++;
+      return { ...node, moduleName: 'core' };
+    });
+
     // Arg Count arrived after these nodes were saved, and a chat trigger migrated from the flat
     // event format never carried one either. Everything that reads it already treats absent as
     // zero, but the card's number input binds the raw value - undefined renders as a blank box
@@ -378,6 +391,11 @@ export function upgradeGraphNodes(graphs: { [eventId: string]: EventGraph }): nu
       return { ...node, values: { ...node.values, argCount: 0 } };
     });
 
+    // A handful of osc_trigger nodes predate the search sub-object: still on the very old flat
+    // `value` field, with handletype already 'search'. checkResponseTrigger only ever reads
+    // triggers.osc.search.command, so these never matched anything.
+    changed += repairLegacyOscSearch(graph);
+
     // Timing last, and in this order: lifting a delayed node out of the chain works on the
     // shape a 0.5 event was migrated into, and expanding an OSC Send then hangs its release
     // off wherever that left it.
@@ -385,6 +403,38 @@ export function upgradeGraphNodes(graphs: { [eventId: string]: EventGraph }): nu
     changed += upgradeOscSendNodes(graph);
   }
 
+  return changed;
+}
+
+// A handful of osc_trigger nodes predate the search sub-object entirely: still on the very old
+// flat `value` field (from before condition_groups_on/off, let alone `search`, existed), with
+// handletype already set to 'search'. checkResponseTrigger only ever reads
+// triggers.osc.search.command, so these never matched anything - `command` resolved to undefined
+// and (before matchSearchPattern learned to decline an empty pattern) crashed OSC dispatch on
+// every single message sent to that trigger's address.
+function repairLegacyOscSearch(graph: EventGraph): number {
+  let changed = 0;
+  graph.nodes = graph.nodes.map((node) => {
+    if (node.moduleName !== 'core' || node.nodeTypeId !== 'osc_trigger') {
+      return node;
+    }
+    const values = node.values ?? {};
+    if (values.handletype !== 'search' || values.search?.command) {
+      return node;
+    }
+    const legacyCommand = values.value ?? values.command;
+    if (legacyCommand == null || legacyCommand === '') {
+      return node;
+    }
+    changed++;
+    return {
+      ...node,
+      values: {
+        ...values,
+        search: { arg: values.search?.arg ?? 0, command: String(legacyCommand) },
+      },
+    };
+  });
   return changed;
 }
 

@@ -70,6 +70,17 @@ const MATH_NODES: OperationNodeDef[] = [
     outputs: [{ id: 'result', label: 'Result', dataType: 'number' }],
   },
   {
+    id: 'modulus',
+    label: 'Modulus',
+    category: 'math',
+    form: {
+      a: { label: 'A', type: 'number', portType: 'number' },
+      b: { label: 'B', type: 'number', portType: 'number' },
+    },
+    defaults: { a: 0, b: 1 },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'number' }],
+  },
+  {
     // Still 'random_int' because the id is what saved graphs store: renaming it would leave
     // every node anyone has already placed unresolvable. Only the label and the decimals
     // field grew.
@@ -330,7 +341,41 @@ function sanitizeText(text: string, values: KeyedObject): string {
   }
 }
 
+// Build Array's inputs, in the order collected. Mirrors CONCAT_SLOTS/concatForm exactly - A and
+// B are always offered, the rest are `growable` so the frontend reveals C once A and B hold
+// something, and so on - except each slot takes 'any' value rather than being joined as text.
+const BUILD_ARRAY_SLOTS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+function buildArrayForm(): NodeForm {
+  const form: NodeForm = {};
+  BUILD_ARRAY_SLOTS.forEach((slot, index) => {
+    form[slot] = {
+      label: slot.toUpperCase(),
+      type: 'text',
+      portType: 'any',
+      growable: index >= 2,
+    };
+  });
+  return form;
+}
+
 const ARRAY_NODES: OperationNodeDef[] = [
+  {
+    id: 'build_array',
+    label: 'Build Array',
+    description:
+      'Collects its inputs into one new array, in order - works like Concat, but for arrays instead of text. Wire in items or type literal values; the node grows a slot at a time as they fill up.',
+    category: 'array',
+    form: buildArrayForm(),
+    // Only the two always-present slots are seeded, matching Concat: an unused slot stays
+    // absent from the node's values entirely, which is exactly what the evaluator and the
+    // frontend treat as empty.
+    defaults: { a: '', b: '' },
+    outputs: [
+      { id: 'result', label: 'Array', dataType: 'any' },
+      { id: 'length', label: 'Length', dataType: 'number' },
+    ],
+  },
   {
     id: 'array_at',
     label: 'Item At',
@@ -658,6 +703,8 @@ export default class OperationNodeService {
         return { result: Number(values.a) * Number(values.b) };
       case 'divide':
         return { result: Number(values.a) / Number(values.b) };
+      case 'modulus':
+        return { result: Number(values.a) % Number(values.b) };
       case 'random_int': {
         // Picked on a grid of 10^-decimals steps rather than by scaling a raw float, so max is
         // as reachable as min and the two ends stay symmetric. At 0 decimals the grid is the
@@ -718,6 +765,14 @@ export default class OperationNodeService {
         };
       case 'word_at':
         return { result: String(values.text).split(' ')[Number(values.index)] ?? '' };
+      case 'build_array': {
+        // Every slot in order, skipping the ones the node never grew into - same rule as
+        // Concat, except the values are collected as-is instead of being joined into a string.
+        const built = BUILD_ARRAY_SLOTS.map((slot) => values[slot]).filter(
+          (value) => value !== undefined && value !== null,
+        );
+        return { result: built, length: built.length };
+      }
       case 'array_at': {
         const items = toArray(values.array);
         const index = Number(values.index);

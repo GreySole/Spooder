@@ -1,7 +1,9 @@
+import Axios from 'axios';
 import { spooderLog } from '../../Logging';
 import { EventGraph, EventGraphNode, KeyedObject, StreamMessage } from '../../../Types';
 import { matchCommand } from '../../util/CommandMatchUtil';
 import { buildExecAdjacency, findEntryNodeIds } from '../../util/EventGraphMigration';
+import { buildMockStreamMessage } from '../../util/ResponseUtil';
 import { EventService, sayInChat } from '../EventService';
 import EventStorageService from '../EventStorageService';
 import MonitorService from '../MonitorService';
@@ -203,6 +205,56 @@ function activatedPorts(
   return ['exec'];
 }
 
+// Headers/Body take a wired-in value of any type or a typed JSON literal - parse the literal,
+// but pass a wired-in non-string straight through so an object built upstream (Build Array's
+// cousin for objects, a response script's return value, ...) is sent as-is.
+function parseJsonField(value: unknown, eventName: string, fieldLabel: string): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  if (value.trim() === '') {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    spooderLog(`HTTP Request node: invalid ${fieldLabel} JSON for event ${eventName}`, e);
+    return undefined;
+  }
+}
+
+// Resolves on any HTTP status rather than throwing on 4xx/5xx - a graph reads outcome off `ok`/
+// `status` like every other node's result, rather than the node needing named success/error exec
+// branches. A thrown error here (DNS failure, connection refused, ...) is still reported the same
+// way, just with `status` 0, so a downstream `If ok` works whether the request failed to send at
+// all or the server rejected it.
+async function runHttpRequest(values: KeyedObject, ctx: GraphExecutionContext): Promise<KeyedObject> {
+  const headers = parseJsonField(values.headers, ctx.eventName, 'Headers') as
+    | KeyedObject
+    | undefined;
+  const data = parseJsonField(values.body, ctx.eventName, 'Body');
+
+  try {
+    const response = await Axios.request({
+      url: String(values.url ?? ''),
+      method: String(values.method || 'GET'),
+      headers,
+      data,
+      validateStatus: () => true,
+    });
+    const isJson = typeof response.data === 'object' && response.data !== null;
+    return {
+      status: response.status,
+      ok: response.status >= 200 && response.status < 300,
+      body: isJson ? JSON.stringify(response.data) : String(response.data ?? ''),
+      json: isJson ? response.data : (parseJsonField(response.data, ctx.eventName, 'Response') ?? null),
+    };
+  } catch (e) {
+    spooderLog(`HTTP Request node failed for event ${ctx.eventName}`, e);
+    return { status: 0, ok: false, body: e instanceof Error ? e.message : String(e), json: null };
+  }
+}
+
 function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphExecutionContext) {
   if (node.nodeTypeId === 'promise_all') {
     return () => {};
@@ -286,6 +338,10 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             channel || ctx.streamMessage.channel,
           );
         };
+      case 'null':
+        return () => {};
+      case 'http_request':
+        return () => runHttpRequest(values, ctx);
       case 'trigger_event':
         return () =>
           EventService.runCommands(
@@ -295,7 +351,10 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             ctx.extra,
           );
       case 'start_timer':
-        return () => TimerService.start(values.name, values.duration, values.repeat);
+        return () => {
+          TimerService.start(values.name, values.duration, values.repeat);
+          return { name: values.name };
+        };
       case 'stop_timer':
         return () => TimerService.stop(values.name);
       case 'osc_claim':
@@ -340,6 +399,29 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
 // apart from a co-located core trigger.
 // Returns undefined when the graph has no trigger of that kind - the caller decides what that
 // means, since the dispatch must then have come from somewhere else (a Trigger Event node, say).
+// The graph editor's "Trigger Now" context-menu action: fires one specific trigger node's exec
+// branch directly; a manual, no-frills test that skips cooldowns, active-event bookkeeping and
+// platform-specific dispatch entirely (unlike EventService.runCommands, which is what a real
+// chat message/OSC message/EventSub event goes through). Uses a mock StreamMessage the same way
+// verify_response_script does, since there's no real trigger payload to hand downstream nodes.
+export function runTriggerNow(graph: EventGraph, eventName: string, nodeId: string): number {
+  const node = graph.nodes.find((n) => n.id === nodeId);
+  if (!node || node.kind !== 'callback') {
+    return 0;
+  }
+  const ctx: GraphExecutionContext = {
+    eventName,
+    streamMessage: buildMockStreamMessage(''),
+    extra: {},
+    isChat: false,
+    isOSC: false,
+    event: EventService.getEvents()[eventName] ?? {},
+    activeEvents: EventService.getActiveEvents(),
+  };
+  const entryNodeIds = buildExecAdjacency(graph).get(`${nodeId}::exec`) ?? [];
+  return walkEventGraph(graph, ctx, entryNodeIds);
+}
+
 export function entryNodesForDispatch(
   graph: EventGraph,
   ctx: GraphExecutionContext,
@@ -374,7 +456,7 @@ export function entryNodesForDispatch(
 function isControlFlowNode(node: EventGraphNode): boolean {
   return (
     node.moduleName === 'core' &&
-    (node.nodeTypeId === 'if' || node.nodeTypeId === 'platform_branch')
+    (node.nodeTypeId === 'if' || node.nodeTypeId === 'platform_branch' || node.nodeTypeId === 'null')
   );
 }
 

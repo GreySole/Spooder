@@ -180,6 +180,58 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
       defaults: { message: '', platform: '', channel: '' },
     },
     {
+      id: 'null',
+      label: 'Null',
+      description:
+        'Does nothing - every action already accepts more than one incoming exec wire, so this just gives them a labeled place to converge before continuing as one, instead of several wires all landing on whatever node happens to be next.',
+      form: {},
+      defaults: {},
+    },
+    {
+      // Moved here from the Twitch module - EventGraphExecutor already gates on this
+      // nodeTypeId regardless of moduleName, so this is purely where it's declared/discovered.
+      // Formerly Twitch-only, but the wait-for-every-branch behavior has nothing to do with
+      // Twitch, and the HTTP Request node below is a natural pairing (fire several off in
+      // parallel branches, Promise All to continue once they've all resolved).
+      id: 'promise_all',
+      label: 'Promise All',
+      description: 'Continues only after every action wired into its exec input has completed.',
+      form: {},
+      defaults: {},
+    },
+    {
+      id: 'http_request',
+      label: 'HTTP Request',
+      description:
+        "Makes an HTTP request and waits for the response before continuing. Headers and Body take literal JSON text or a wired-in value (an object wired in is sent as JSON automatically). Firing several of these into a Promise All continues once they've all resolved.",
+      form: {
+        url: { label: 'URL', type: 'text', portType: 'string' },
+        method: {
+          label: 'Method',
+          type: 'select',
+          portType: 'string',
+          options: {
+            selections: {
+              GET: 'GET',
+              POST: 'POST',
+              PUT: 'PUT',
+              PATCH: 'PATCH',
+              DELETE: 'DELETE',
+            },
+          },
+        },
+        headers: { label: 'Headers (JSON, optional)', type: 'textarea', portType: 'any' },
+        body: { label: 'Body (optional)', type: 'textarea', portType: 'any' },
+      },
+      defaults: { url: '', method: 'GET', headers: '', body: '' },
+      outputs: [
+        { id: 'status', label: 'Status', dataType: 'number' },
+        { id: 'ok', label: 'Ok', dataType: 'boolean' },
+        { id: 'body', label: 'Response Body', dataType: 'string' },
+        { id: 'json', label: 'Response JSON', dataType: 'any' },
+      ],
+    },
+    {
       id: 'trigger_event',
       label: 'Trigger Event',
       description: 'Directly invokes another event by name, bypassing its trigger matching.',
@@ -199,6 +251,10 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
         repeat: { label: 'Repeat', type: 'boolean', portType: 'boolean' },
       },
       defaults: { name: '', duration: 5, repeat: false },
+      // Echoes the name it was actually started with, so a generated/wired-in name only has to
+      // be produced once and can feed Timer Elapsed/Tick/Is Active/Stop Timer downstream instead
+      // of being retyped or re-wired into each of them.
+      outputs: [{ id: 'name', label: 'Timer Name', dataType: 'string' }],
     },
     {
       id: 'stop_timer',

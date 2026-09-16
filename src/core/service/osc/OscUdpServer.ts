@@ -48,17 +48,129 @@ export default class OscUdpServer {
       );
 
       for (const e of Object.keys(events)) {
-        if (triggerExistsAndEnabled(events[e], 'osc')) {
-          if (events[e].triggers.osc.handletype == 'search') {
-            if (message.address == events[e].triggers.osc.address) {
-              const searchArg = events[e].triggers.osc.search?.arg ?? 0;
+        try {
+          if (triggerExistsAndEnabled(events[e], 'osc')) {
+            if (events[e].triggers.osc.handletype == 'search') {
+              if (message.address == events[e].triggers.osc.address) {
+                const searchArg = events[e].triggers.osc.search?.arg ?? 0;
+                const streamMessage = {
+                  userId: '',
+                  username: '',
+                  displayName: '',
+                  platform: 'osc',
+                  channel: 'udp',
+                  message: `${message.args[searchArg]}`,
+                  messageType: 'osc',
+                  respond: () => {},
+                  emotes: [],
+                  tags: {},
+                  isBroadcaster: false,
+                  isMod: false,
+                  isSubscriber: false,
+                  isVIP: false,
+                  isFirstMessage: false,
+                  isReturningChatter: false,
+                } as StreamMessage;
+
+                const check = checkResponseTrigger(events[e], streamMessage);
+
+                if (check != null) {
+                  EventService.runCommands(check.message, e, 'osc', check.extra);
+                }
+              }
+            } else if (message.address == events[e].triggers.osc.address) {
+              const conditions = EventService.eventIsRunning(e)
+                ? (events[e].triggers.osc.condition_groups_off as OSCConditionGroup[])
+                : (events[e].triggers.osc.condition_groups_on as OSCConditionGroup[]);
+
+              // No condition groups => the node-graph model: the address match IS the trigger,
+              // and any further conditions are expressed as logic nodes on the graph. This is
+              // also what revives events migrated from the legacy flat format, which only ever
+              // had `condition`/`value` fields and so never produced condition groups.
+              const hasLegacyConditions = Array.isArray(conditions) && conditions.length > 0;
+
+              if (hasLegacyConditions && message.args.length < conditions.length) {
+                // `continue`, not `return`: this loop body runs per event, and returning here
+                // would abandon every remaining event for this message as well as the control
+                // module / plugin onOSC dispatch below.
+                continue;
+              }
+
+              function runConditions(args: any[], conditionGroups: OSCConditionGroup[]) {
+                for (let groupIndex = 0; groupIndex < conditionGroups.length; groupIndex++) {
+                  const groupConditionMode = conditionGroups[groupIndex].mode;
+                  const conditionValues = conditionGroups[groupIndex].conditions;
+                  if (groupConditionMode === 'AND') {
+                    for (
+                      let conditionIndex = 0;
+                      conditionIndex < conditionValues.length;
+                      conditionIndex++
+                    ) {
+                      const conditionArg = conditionValues[conditionIndex].arg;
+                      const conditionType = conditionValues[conditionIndex].type;
+                      const conditionValue = conditionValues[conditionIndex].value;
+
+                      if (
+                        eval(
+                          args[conditionArg ?? conditionIndex] + conditionType + conditionValue,
+                        ) === false
+                      ) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  } else if (groupConditionMode === 'OR') {
+                    for (
+                      let conditionIndex = 0;
+                      conditionIndex < conditionValues.length;
+                      conditionIndex++
+                    ) {
+                      const conditionArg = conditionValues[conditionIndex].arg;
+                      const conditionType = conditionValues[conditionIndex].type;
+                      const conditionValue = conditionValues[conditionIndex].value;
+                      if (
+                        eval(
+                          args[conditionArg ?? conditionIndex] + conditionType + conditionValue,
+                        ) === true
+                      ) {
+                        return true;
+                      }
+                    }
+                    return false;
+                  }
+                }
+              }
+
+              const isRunning = EventService.eventIsRunning(e);
+
+              if (hasLegacyConditions) {
+                // Legacy shape: the condition groups decide, and for a running event the 'off'
+                // groups stop it outright.
+                if (isRunning) {
+                  if (runConditions(message.args, conditions)) {
+                    EventService.stopEvent(e);
+                  }
+                  continue;
+                }
+                if (!runConditions(message.args, conditions)) {
+                  continue;
+                }
+              } else if (isRunning && events[e].triggers.osc.handletype !== 'toggle') {
+                // Node model: the address match is the trigger. Suppress re-firing while the
+                // event is still running (its cooldown/timed commands are active) - continuously
+                // streamed addresses like VRChat avatar params would otherwise retrigger every
+                // message. A 'toggle' is exempt so it reaches runCommands, which stops it (see
+                // EventService.runCommands' isOSC toggle branch).
+                continue;
+              }
+
               const streamMessage = {
                 userId: '',
                 username: '',
                 displayName: '',
                 platform: 'osc',
                 channel: 'udp',
-                message: `${message.args[searchArg]}`,
+                message: `${message.args[0]}`,
                 messageType: 'osc',
                 respond: () => {},
                 emotes: [],
@@ -69,126 +181,26 @@ export default class OscUdpServer {
                 isVIP: false,
                 isFirstMessage: false,
                 isReturningChatter: false,
+                // Exposes the payload to the graph: EventGraphExecutor.resolveNodeValues
+                // reads a callback's data edge as platformEventData[fromPort], so the trigger
+                // node's 'address'/'arg0'/'arg1'... output ports resolve with no executor
+                // changes. Set on the legacy path too, so old events gain wireable outputs.
+                platformEventData: buildOscEventData(message),
               } as StreamMessage;
 
-              const check = checkResponseTrigger(events[e], streamMessage);
-
-              if (check != null) {
-                EventService.runCommands(check.message, e, 'osc', check.extra);
-              }
+              EventService.runCommands(streamMessage, e, 'osc');
             }
-          } else if (message.address == events[e].triggers.osc.address) {
-            const conditions = EventService.eventIsRunning(e)
-              ? (events[e].triggers.osc.condition_groups_off as OSCConditionGroup[])
-              : (events[e].triggers.osc.condition_groups_on as OSCConditionGroup[]);
-
-            // No condition groups => the node-graph model: the address match IS the trigger,
-            // and any further conditions are expressed as logic nodes on the graph. This is
-            // also what revives events migrated from the legacy flat format, which only ever
-            // had `condition`/`value` fields and so never produced condition groups.
-            const hasLegacyConditions = Array.isArray(conditions) && conditions.length > 0;
-
-            if (hasLegacyConditions && message.args.length < conditions.length) {
-              // `continue`, not `return`: this loop body runs per event, and returning here
-              // would abandon every remaining event for this message as well as the control
-              // module / plugin onOSC dispatch below.
-              continue;
-            }
-
-            function runConditions(args: any[], conditionGroups: OSCConditionGroup[]) {
-              for (let groupIndex = 0; groupIndex < conditionGroups.length; groupIndex++) {
-                const groupConditionMode = conditionGroups[groupIndex].mode;
-                const conditionValues = conditionGroups[groupIndex].conditions;
-                if (groupConditionMode === 'AND') {
-                  for (
-                    let conditionIndex = 0;
-                    conditionIndex < conditionValues.length;
-                    conditionIndex++
-                  ) {
-                    const conditionArg = conditionValues[conditionIndex].arg;
-                    const conditionType = conditionValues[conditionIndex].type;
-                    const conditionValue = conditionValues[conditionIndex].value;
-
-                    if (
-                      eval(
-                        args[conditionArg ?? conditionIndex] + conditionType + conditionValue,
-                      ) === false
-                    ) {
-                      return false;
-                    }
-                  }
-                  return true;
-                } else if (groupConditionMode === 'OR') {
-                  for (
-                    let conditionIndex = 0;
-                    conditionIndex < conditionValues.length;
-                    conditionIndex++
-                  ) {
-                    const conditionArg = conditionValues[conditionIndex].arg;
-                    const conditionType = conditionValues[conditionIndex].type;
-                    const conditionValue = conditionValues[conditionIndex].value;
-                    if (
-                      eval(
-                        args[conditionArg ?? conditionIndex] + conditionType + conditionValue,
-                      ) === true
-                    ) {
-                      return true;
-                    }
-                  }
-                  return false;
-                }
-              }
-            }
-
-            const isRunning = EventService.eventIsRunning(e);
-
-            if (hasLegacyConditions) {
-              // Legacy shape: the condition groups decide, and for a running event the 'off'
-              // groups stop it outright.
-              if (isRunning) {
-                if (runConditions(message.args, conditions)) {
-                  EventService.stopEvent(e);
-                }
-                continue;
-              }
-              if (!runConditions(message.args, conditions)) {
-                continue;
-              }
-            } else if (isRunning && events[e].triggers.osc.handletype !== 'toggle') {
-              // Node model: the address match is the trigger. Suppress re-firing while the
-              // event is still running (its cooldown/timed commands are active) - continuously
-              // streamed addresses like VRChat avatar params would otherwise retrigger every
-              // message. A 'toggle' is exempt so it reaches runCommands, which stops it (see
-              // EventService.runCommands' isOSC toggle branch).
-              continue;
-            }
-
-            const streamMessage = {
-              userId: '',
-              username: '',
-              displayName: '',
-              platform: 'osc',
-              channel: 'udp',
-              message: `${message.args[0]}`,
-              messageType: 'osc',
-              respond: () => {},
-              emotes: [],
-              tags: {},
-              isBroadcaster: false,
-              isMod: false,
-              isSubscriber: false,
-              isVIP: false,
-              isFirstMessage: false,
-              isReturningChatter: false,
-              // Exposes the payload to the graph: EventGraphExecutor.resolveNodeValues
-              // reads a callback's data edge as platformEventData[fromPort], so the trigger
-              // node's 'address'/'arg0'/'arg1'... output ports resolve with no executor
-              // changes. Set on the legacy path too, so old events gain wireable outputs.
-              platformEventData: buildOscEventData(message),
-            } as StreamMessage;
-
-            EventService.runCommands(streamMessage, e, 'osc');
           }
+        } catch (err) {
+          const oscTrigger = events[e]?.triggers?.osc as KeyedObject | undefined;
+          const isLegacy =
+            oscTrigger?.handletype === 'search' ||
+            (Array.isArray(oscTrigger?.condition_groups_on) && oscTrigger.condition_groups_on.length > 0) ||
+            (Array.isArray(oscTrigger?.condition_groups_off) && oscTrigger.condition_groups_off.length > 0);
+          oscLog(
+            `OSC Error: event '${e}' failed handling address '${message.address}'${isLegacy ? ' (legacy OSC Receive node)' : ''}: `,
+            err,
+          );
         }
 
         const controlModules = ModuleService.getControlModules();
