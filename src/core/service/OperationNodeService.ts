@@ -525,6 +525,19 @@ const ARRAY_NODES: OperationNodeDef[] = [
       { id: 'length', label: 'Length', dataType: 'number' },
     ],
   },
+  {
+    id: 'choose_random',
+    label: 'Choose Random',
+    category: 'array',
+    form: {
+      a: { label: 'Option A', type: 'text', portType: 'string' },
+      b: { label: 'Option B', type: 'text', portType: 'string' },
+      c: { label: 'Option C (optional)', type: 'text', portType: 'string' },
+      d: { label: 'Option D (optional)', type: 'text', portType: 'string' },
+    },
+    defaults: { a: '', b: '', c: '', d: '' },
+    outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
+  },
 ];
 
 const LOGIC_NODES: OperationNodeDef[] = [
@@ -666,25 +679,9 @@ const LOGIC_NODES: OperationNodeDef[] = [
   },
 ];
 
-const RANDOM_NODES: OperationNodeDef[] = [
-  {
-    id: 'choose_random',
-    label: 'Choose Random',
-    category: 'random',
-    form: {
-      a: { label: 'Option A', type: 'text', portType: 'string' },
-      b: { label: 'Option B', type: 'text', portType: 'string' },
-      c: { label: 'Option C (optional)', type: 'text', portType: 'string' },
-      d: { label: 'Option D (optional)', type: 'text', portType: 'string' },
-    },
-    defaults: { a: '', b: '', c: '', d: '' },
-    outputs: [{ id: 'result', label: 'Result', dataType: 'string' }],
-  },
-];
-
 export default class OperationNodeService {
   static getOperationNodes(): OperationNodeDef[] {
-    return [...MATH_NODES, ...STRING_NODES, ...ARRAY_NODES, ...LOGIC_NODES, ...RANDOM_NODES];
+    return [...MATH_NODES, ...STRING_NODES, ...ARRAY_NODES, ...LOGIC_NODES];
   }
 
   static isOperationNode(nodeTypeId: string): boolean {

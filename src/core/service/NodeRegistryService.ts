@@ -97,6 +97,7 @@ export default class NodeRegistryService {
     for (const name in streamModules) {
       manifests.push({
         moduleName: name,
+        displayName: ModuleService.getDisplayName(name),
         triggers: streamModules[name].getTriggerNodes(),
         actions: streamModules[name].getActionNodes(),
       });
@@ -106,6 +107,7 @@ export default class NodeRegistryService {
     for (const name in communityModules) {
       manifests.push({
         moduleName: name,
+        displayName: ModuleService.getDisplayName(name),
         triggers: communityModules[name].getTriggerNodes(),
         actions: communityModules[name].getActionNodes(),
       });
@@ -115,6 +117,7 @@ export default class NodeRegistryService {
     for (const name in controlModules) {
       manifests.push({
         moduleName: name,
+        displayName: ModuleService.getDisplayName(name),
         triggers: controlModules[name].getTriggerNodes(),
         actions: controlModules[name].getActionNodes(),
       });

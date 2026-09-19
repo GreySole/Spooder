@@ -6,6 +6,7 @@ import { buildExecAdjacency, findEntryNodeIds } from '../../util/EventGraphMigra
 import { buildMockStreamMessage } from '../../util/ResponseUtil';
 import { EventService, sayInChat } from '../EventService';
 import EventStorageService from '../EventStorageService';
+import ModuleService from '../ModuleService';
 import MonitorService from '../MonitorService';
 import NodeRegistryService from '../NodeRegistryService';
 import OperationNodeService from '../OperationNodeService';
@@ -164,8 +165,15 @@ function evaluateOperationNode(
     }
     case 'is_timer_active':
       return { active: TimerService.isRunning(inputValues.name) };
-    default:
+    default: {
+      // A module's own value nodes carry the module name as moduleName (their category), so this
+      // only ever finds a module for those - 'math', 'string' and the rest name no module.
+      const module = ModuleService.getCommunityModule(node.moduleName);
+      if (module?.evaluateOperationNode) {
+        return module.evaluateOperationNode(node.nodeTypeId, inputValues);
+      }
       return OperationNodeService.evaluate(node.nodeTypeId, inputValues);
+    }
   }
 }
 

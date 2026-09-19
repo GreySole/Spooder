@@ -99,6 +99,27 @@ export default class ModuleService {
     }
   }
 
+  private static displayNames = new Map<string, string | undefined>();
+
+  // The name a module is shown under in menus, from `spooder_module.displayName` in its
+  // package.json. Absent for a module that doesn't declare one, and the caller falls back to
+  // the module's own name.
+  static getDisplayName(name: string): string | undefined {
+    if (!ModuleService.displayNames.has(name)) {
+      let displayName: string | undefined;
+      try {
+        const manifest = JSON.parse(
+          fs.readFileSync(path.join(__dirname, '../../integration', name, 'package.json'), 'utf-8'),
+        );
+        displayName = manifest?.spooder_module?.displayName;
+      } catch (e) {
+        // No package.json on disk for this name - nothing to display but the name itself.
+      }
+      ModuleService.displayNames.set(name, displayName);
+    }
+    return ModuleService.displayNames.get(name);
+  }
+
   static getCoreModule(module: CoreModule) {
     return ModuleService.instance.coreModules[module];
   }

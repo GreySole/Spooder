@@ -93,7 +93,14 @@ export function EventRoutes() {
   });
 
   router.get('/operation_nodes', async (req: Request, res: Response) => {
-    res.send([...OperationNodeService.getOperationNodes(), ...getCoreOperationNodes()]);
+    const moduleOperationNodes = Object.values(ModuleService.getCommunityModules()).flatMap(
+      (module) => module.getOperationNodes?.() ?? [],
+    );
+    res.send([
+      ...OperationNodeService.getOperationNodes(),
+      ...getCoreOperationNodes(),
+      ...moduleOperationNodes,
+    ]);
   });
 
   router.get('/chat_commands', (req: Request, res: Response) => {

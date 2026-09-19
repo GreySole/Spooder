@@ -15,6 +15,10 @@ All notable changes to this project are documented in this file. This changelog 
   - New `plugin_update` config section (`enabled`, `schedule`) runs a scheduled update *check* only — it flags plugins with updates and emits `/spooder/plugin/update/available` over OSC, but never installs on its own.
   - A plugin's `settings.json` and `_share/` are never overwritten by a repo checkout, so updates keep the user's configuration.
 
+### Changed
+- **Breaking:** Discord's Message fields (Send To Channel, Send Direct Message, Reply To Message, Send Server Interaction, Send Direct Interaction) are no longer run through the Response Script evaluator (`eval`). The field's value is now used as literal text, the same way the core Say In Chat action already worked. Any existing Discord message that relied on Response Script syntax (e.g. `return \`Hi ${username}\`;`, or calling `modules.*` APIs directly in the field) will now be sent verbatim as text and needs to be rebuilt using graph nodes (Template, Concat, etc.) wired into the Message field instead.
+  - This also fixes a bug where wiring a Template/Concat/Text node's plain-text output into a Discord Message field could throw `SyntaxError: Invalid or unexpected token` (or a `ReferenceError`, for a single bare word) at send time, because the resolved text was being parsed as JavaScript source instead of used as-is.
+
 ### Fixed
 - Twitch EventSub WebSocket reconnect logic: fixed a race between `onerror`/`onclose` double-reconnecting, an incorrect `session_reconnect` handoff sequence that could trigger Twitch's "Invalid reconnect" close code, and an unguarded `.pong()` call that could crash the process when called on a stale socket. Added a keepalive watchdog and exponential backoff.
 - Motherwolf tunnel reconnect logic: exponential backoff, safer socket teardown, avoids duplicate concurrent reconnect attempts.

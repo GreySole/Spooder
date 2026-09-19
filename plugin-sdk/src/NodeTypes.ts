@@ -40,6 +40,10 @@ export interface NodeFieldDef {
   // node only ever offers one empty slot at a time and grows as it's filled in. A slot that
   // already holds something is always shown, so nothing can feed a node invisibly.
   growable?: boolean;
+  // Limits the 'earlier fields are filled' check growable uses to fields sharing this group, for
+  // a node whose slots sit among unrelated fields (a message, a destination) that shouldn't
+  // hold the slots back.
+  growGroup?: string;
   // Only meaningful on an 'asset' field: the value is an array of asset paths rather than one,
   // and the frontend renders a multi-picker instead of a single one. Hyphenated to match the
   // plugin form schema (events-form.json) this key is read from verbatim.
@@ -115,7 +119,7 @@ export interface OperationNodeDef {
   id: string;
   label: string;
   description?: string;
-  category: 'math' | 'string' | 'logic' | 'random' | 'storage' | 'array' | 'timer';
+  category: 'math' | 'string' | 'logic' | 'storage' | 'array' | 'timer' | 'discord';
   // See TriggerNodeDef.nodeWidth.
   nodeWidth?: number;
   form: NodeForm;
@@ -125,6 +129,8 @@ export interface OperationNodeDef {
 
 export interface NodeManifest {
   moduleName: string;
+  // How menus show the module, from `spooder_module.displayName` in its package.json.
+  displayName?: string;
   triggers: TriggerNodeDef[];
   actions: ActionNodeDef[];
   // Set for manifests generated from a plugin's events-form.json, so the node palette can
