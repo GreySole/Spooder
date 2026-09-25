@@ -330,6 +330,70 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
       },
       defaults: {},
     },
+    {
+      id: 'set_lockdown',
+      label: 'Set Lockdown',
+      description:
+        "Locks or unlocks every event and plugin at once, and blocks chat commands entirely while locked. For a single event or plugin, use Lock Event/Lock Plugin instead - this is the all-at-once switch. No duration here: wire a Start Timer's exec output into a second copy of this node (unlocked) to lift it after a delay.",
+      form: {
+        locked: { label: 'Locked', type: 'boolean', portType: 'boolean' },
+      },
+      defaults: { locked: true },
+    },
+    {
+      id: 'lock_event',
+      label: 'Lock Event',
+      description:
+        "Locks or unlocks one event by name, or every event at once with target 'all'. A locked event's triggers are ignored until unlocked. No duration here: wire a Start Timer's exec output into a second copy of this node (unlocked) to lift it after a delay.",
+      form: {
+        target: {
+          label: "Event Name ('all' = every event)",
+          type: 'text',
+          portType: 'string',
+        },
+        locked: { label: 'Locked', type: 'boolean', portType: 'boolean' },
+      },
+      defaults: { target: '', locked: true },
+    },
+    {
+      id: 'lock_plugin',
+      label: 'Lock Plugin',
+      description:
+        "Locks or unlocks one plugin by name, or every plugin at once with target 'all'. A locked plugin ignores events routed to it until unlocked. No duration here: wire a Start Timer's exec output into a second copy of this node (unlocked) to lift it after a delay.",
+      form: {
+        target: {
+          label: "Plugin Name ('all' = every plugin)",
+          type: 'text',
+          portType: 'string',
+        },
+        locked: { label: 'Locked', type: 'boolean', portType: 'boolean' },
+      },
+      defaults: { target: '', locked: true },
+    },
+    {
+      id: 'set_spam_guard',
+      label: 'Set Spam Guard',
+      description: 'Turns spam guard on or off.',
+      form: {
+        on: { label: 'On', type: 'boolean', portType: 'boolean' },
+      },
+      defaults: { on: true },
+    },
+    {
+      id: 'stop_event',
+      label: 'Stop Event',
+      description:
+        "Stops one running event by name, or every running event at once with target 'all'. Only affects events that are currently active (mid-cooldown/mid-timer) - it does nothing to one that isn't running.",
+      form: {
+        target: {
+          label: "Event Name ('all' = every running event)",
+          type: 'text',
+          portType: 'string',
+        },
+      },
+      defaults: { target: '' },
+      outputs: [{ id: 'message', label: 'Result Message', dataType: 'string' }],
+    },
   ];
 }
 

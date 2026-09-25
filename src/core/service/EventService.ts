@@ -593,6 +593,51 @@ export class EventService {
     });
   }
 
+  // Tracks a graph 'delay' node's pending continuation in activeEvents, the same place
+  // createTimeout's legacy timers live, so the event shows as active while paused and
+  // stopEvent can find and cancel it. Deliberately not built on createTimeout: that mechanism
+  // runs its callback both when the timer elapses AND immediately when stopEvent cuts it short
+  // (the right call for a "revert" callback like unlocking early) - a delay's callback resumes
+  // the rest of the graph, which stopping must prevent outright rather than fire early, so this
+  // registers a no-op 'function' for stopEvent to call and does the actual continuation itself,
+  // only once, only if the timeout is allowed to elapse naturally.
+  static scheduleDelay(eventName: string, seconds: number, onElapsed: () => void) {
+    const activeEvents = EventService.getActiveEvents();
+    if (activeEvents[eventName] == null) {
+      activeEvents[eventName] = [];
+    }
+
+    const entry: KeyedObject = {
+      function: () => {},
+      command: null,
+      start_time: Date.now(),
+      timeout: (Date.now() / 1000 + seconds) * 1000,
+      etype: 'delay',
+    };
+    entry.timeoutEvent = setTimeout(() => {
+      const list = activeEvents[eventName];
+      const index = list?.indexOf(entry) ?? -1;
+      if (index !== -1) {
+        list.splice(index, 1);
+        if (list.length === 0) {
+          delete activeEvents[eventName];
+        }
+      }
+      // Mirrors createTimeout's endCommand - sent on natural completion only, not when
+      // stopEvent cuts the wait short (stopEvent doesn't send this for its own clears either).
+      OSCService.sendToTCP('/events/end/' + eventName, entry);
+      onElapsed();
+    }, seconds * 1000);
+
+    activeEvents[eventName].push(entry);
+    OSCService.sendToTCP('/events/start/' + eventName, {
+      etype: 'delay',
+      command: null,
+      start_time: entry.start_time,
+      timeout: entry.timeout,
+    });
+  }
+
   private sayAlreadyOn(name: string) {
     const events = EventService.getEvents();
     const activeEvents = EventService.getActiveEvents();

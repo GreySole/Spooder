@@ -62,18 +62,45 @@ export interface OSCMessage {
   args: MessageArgValue[];
 }
 
+export interface IntegrationModuleEntry {
+  subscribeToModuleEvent: (eventName: string, callback: Function) => void;
+  [key: string]: any;
+}
+
 export interface IntegrationModule {
-  [key: string]: {
-    subscribeToModuleEvent: (eventName: string, callback: Function) => void;
-    [key: string]: any;
-  };
+  [key: string]: IntegrationModuleEntry;
+}
+
+// The functions/values exposed to plugins for the Twitch stream module, mirroring
+// getPluginFunctions() in the Twitch module's own twitch.ts. Kept in sync by hand since
+// plugin-sdk can't import from that module.
+export interface TwitchModuleFunctions {
+  subscribeToModuleEvent: (eventName: string, callback: Function) => void;
+  getUserInfo: (user?: string) => Promise<KeyedObject>;
+  getUserInfoById: (id: string) => Promise<KeyedObject>;
+  callBroadcasterApi: (url: string, postBody?: KeyedObject, method?: string) => Promise<any>;
+  callBotApi: (url: string, postBody?: KeyedObject, method?: string) => Promise<any>;
+  getBroadcasterId: () => Promise<string>;
+  getBotId: () => Promise<string>;
+  isStreamerLive: (username: string) => Promise<boolean | undefined>;
+  getStreamInfo: (username: string) => Promise<KeyedObject | undefined>;
+  getChannelInfo: (channel?: string) => Promise<KeyedObject>;
+  broadcasterUsername: string;
+  botUsername: string;
+}
+
+// Twitch is an optional stream module - a plugin can't assume it's installed, so `twitch`
+// is optional here even though its shape is fully known when present.
+export interface StreamModules {
+  twitch?: TwitchModuleFunctions;
+  [key: string]: IntegrationModuleEntry | TwitchModuleFunctions | undefined;
 }
 
 export interface PluginSpooderModules {
-  stream: IntegrationModule;
+  stream: StreamModules;
   community: IntegrationModule;
   control: IntegrationModule;
-  [key: string]: IntegrationModule;
+  [key: string]: IntegrationModule | StreamModules;
 }
 
 export interface PluginPublicInfo {
@@ -103,7 +130,7 @@ export interface PluginThemeInfo {
 }
 
 export interface PluginChatInfo {
-  sayInChat: (message: string, platform: string, channel: string) => void;
+  sayInChat: (message: string, platform?: string, channel?: string) => void;
 }
 
 export interface PluginModule {

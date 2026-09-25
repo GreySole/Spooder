@@ -21,9 +21,9 @@ export function PublicRoutes() {
     //TODO: Make this work on an Interface level
     const twitch = ModuleService.getStreamModule('twitch');
     res.send({
-      botName: twitch.api.botUsername,
-      homeChannel: twitch.api.homeChannel,
-      clientId: twitch.oauth['client-id'],
+      botName: twitch?.api.botUsername ?? '',
+      homeChannel: twitch?.api.homeChannel ?? '',
+      clientId: twitch?.oauth['client-id'] ?? '',
       theme: ConfigService.getThemes().public,
       spooderpet: ConfigService.getThemes().spooderpet,
       plugins: publicPlugins,

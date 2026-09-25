@@ -51,22 +51,16 @@ export default class Plugin {
   private pluginPath: string | undefined = undefined;
   private require: NodeJS.Require | undefined = undefined;
 
-  private moduleEventSubscriptions: PluginSpooderModules = {
-    stream: {
-      dummy: {
-        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
-      },
-    },
-    community: {
-      dummy: {
-        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
-      },
-    },
-    control: {
-      dummy: {
-        subscribeToModuleEvent: (eventName: string, callback: Function) => {},
-      },
-    },
+  // Keyed by module name, then event name, to the subscribed callback - not part of the
+  // plugin-facing modules contract, so it doesn't reuse PluginSpooderModules.
+  private moduleEventSubscriptions: {
+    stream: KeyedObject;
+    community: KeyedObject;
+    control: KeyedObject;
+  } = {
+    stream: {},
+    community: {},
+    control: {},
   };
 
   constructor(pluginDirName: string, pluginPath: string) {

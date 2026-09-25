@@ -45,7 +45,7 @@ export default class PluginBase implements Partial<PluginModule> {
     publicOscUrl: '',
   };
   chat: PluginChatInfo = {
-    sayInChat: (_message: string, _platform: string, _channel: string): void => {},
+    sayInChat: (_message: string, _platform?: string, _channel?: string): void => {},
   };
   settings: KeyedObject = {};
   /**

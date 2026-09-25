@@ -6,6 +6,7 @@ import { buildExecAdjacency, findEntryNodeIds } from '../../util/EventGraphMigra
 import { buildMockStreamMessage } from '../../util/ResponseUtil';
 import { EventService, sayInChat } from '../EventService';
 import EventStorageService from '../EventStorageService';
+import { ModerationService } from '../ModerationService';
 import ModuleService from '../ModuleService';
 import MonitorService from '../MonitorService';
 import NodeRegistryService from '../NodeRegistryService';
@@ -282,6 +283,23 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
         return EventPluginCommand(values, ctx.eventName, ctx.streamMessage, ctx.extra);
       case 'mod':
         return EventModCommand(values, ctx.eventName, ctx.streamMessage, ctx.extra);
+      case 'set_lockdown':
+        // Mirrors what the legacy Mod node's lockdown toggle did: the master switch ChatUtil
+        // gates on, plus every individual event and plugin, so Lock Event/Lock Plugin still
+        // read this state accurately afterward rather than only the coarse flag moving.
+        return () => {
+          ModerationService.lockEvent(values.locked ? 'lock' : 'unlock', 'all');
+          ModerationService.lockPlugin(values.locked ? 'lock' : 'unlock', 'all');
+          ModerationService.setLockdown(values.locked);
+        };
+      case 'lock_event':
+        return () => ModerationService.lockEvent(values.locked ? 'lock' : 'unlock', values.target);
+      case 'lock_plugin':
+        return () => ModerationService.lockPlugin(values.locked ? 'lock' : 'unlock', values.target);
+      case 'set_spam_guard':
+        return () => ModerationService.setSpamGuard(values.on ? 'on' : 'off');
+      case 'stop_event':
+        return () => ({ message: ModerationService.stopEvent(values.target) });
       case 'software':
         return EventSoftwareCommand(values);
       case 'if':
@@ -515,13 +533,15 @@ export function walkEventGraph(
       const targets = activatedPorts(node, values, ctx).flatMap(
         (port) => outgoing.get(`${nodeId}::${port}`) ?? [],
       );
-      const seconds = Number(values.seconds);
+      const rawSeconds = Number(values.seconds);
+      const seconds = Math.max(0, Number.isFinite(rawSeconds) ? rawSeconds : 0);
       if (targets.length > 0) {
         // Counted as having run: the branch is committed, it's just waiting.
         executed++;
-        setTimeout(
-          () => walkEventGraph(graph, ctx, targets, actionOutputs, completedActions),
-          Math.max(0, Number.isFinite(seconds) ? seconds : 0) * 1000,
+        // Registered with EventService rather than a bare setTimeout so Stop Event can find and
+        // cancel the pending continuation instead of it firing anyway after being told to stop.
+        EventService.scheduleDelay(ctx.eventName, seconds, () =>
+          walkEventGraph(graph, ctx, targets, actionOutputs, completedActions),
         );
       }
       continue;
