@@ -134,7 +134,7 @@ export default class EventGraphStorageService {
     if (data.graphs) {
       file = {
         graphs: data.graphs,
-        groups: data.groups ?? ['Default'],
+        groups: data.groups ?? [],
         disabledGroups: data.disabledGroups ?? [],
       };
     } else {
@@ -214,7 +214,7 @@ export default class EventGraphStorageService {
     const groups = groupRows.map((r) => r.name as string);
     const disabledGroups = groupRows.filter((r) => r.disabled === 1).map((r) => r.name as string);
 
-    return { graphs, groups: groups.length > 0 ? groups : ['Default'], disabledGroups };
+    return { graphs, groups, disabledGroups };
   }
 
   static saveAll(

@@ -118,8 +118,9 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
         eventName: eventNameField(),
         key: { label: 'Key', type: 'text', portType: 'string' },
         value: { label: 'Array', type: 'port', portType: 'any' },
+        temporary: { label: 'Temporary (memory only, not saved)', type: 'boolean' },
       },
-      defaults: { eventName: '', key: '' },
+      defaults: { eventName: '', key: '', temporary: false },
     },
     {
       id: 'set_string_value',
@@ -128,8 +129,9 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
         eventName: eventNameField(),
         key: { label: 'Key', type: 'text', portType: 'string' },
         value: { label: 'Value', type: 'text', portType: 'string' },
+        temporary: { label: 'Temporary (memory only, not saved)', type: 'boolean' },
       },
-      defaults: { eventName: '', key: '', value: '' },
+      defaults: { eventName: '', key: '', value: '', temporary: false },
     },
     {
       id: 'set_number_value',
@@ -138,8 +140,9 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
         eventName: eventNameField(),
         key: { label: 'Key', type: 'text', portType: 'string' },
         value: { label: 'Value', type: 'number', portType: 'number' },
+        temporary: { label: 'Temporary (memory only, not saved)', type: 'boolean' },
       },
-      defaults: { eventName: '', key: '', value: 0 },
+      defaults: { eventName: '', key: '', value: 0, temporary: false },
     },
     {
       id: 'set_boolean_value',
@@ -148,8 +151,9 @@ export function getCoreActionNodes(streamPlatforms: string[] = []): ActionNodeDe
         eventName: eventNameField(),
         key: { label: 'Key', type: 'text', portType: 'string' },
         value: { label: 'Value', type: 'boolean', portType: 'boolean' },
+        temporary: { label: 'Temporary (memory only, not saved)', type: 'boolean' },
       },
-      defaults: { eventName: '', key: '', value: false },
+      defaults: { eventName: '', key: '', value: false, temporary: false },
     },
     {
       id: 'say_in_chat',
@@ -478,7 +482,7 @@ export function getCoreTriggerNodes(): TriggerNodeDef[] {
       label: 'Timer Elapsed',
       description: "Fires when the named timer's time is up. Repeats fire it each cycle.",
       form: {
-        name: { label: 'Timer Name', type: 'text', portType: 'string' },
+        name: { label: 'Timer Name', type: 'text' },
       },
       defaults: { name: '' },
       outputs: [{ id: 'name', label: 'Timer Name', dataType: 'string' }],
@@ -488,8 +492,8 @@ export function getCoreTriggerNodes(): TriggerNodeDef[] {
       label: 'Timer Tick',
       description: 'Fires on a set interval for as long as the named timer is running.',
       form: {
-        name: { label: 'Timer Name', type: 'text', portType: 'string' },
-        interval: { label: 'Interval (Seconds)', type: 'number', portType: 'number' },
+        name: { label: 'Timer Name', type: 'text' },
+        interval: { label: 'Interval (Seconds)', type: 'number' },
       },
       defaults: { name: '', interval: 1 },
       outputs: [

@@ -26,13 +26,27 @@ import { ShareRoutes } from '../routes/ShareRoutes';
 import { ThemeRoutes } from '../routes/ThemeRoutes';
 import { UserRoutes } from '../routes/UserRoutes';
 import { sendToApp } from '../util/AppUtil';
-import ConfigService from './ConfigService';
+import ConfigService, { OVERLAY_LAYOUT_NAME } from './ConfigService';
 import ShareService from './ShareService';
 import MotherwolfTunnel from './webui/Motherwolf';
 import Ngrok from './webui/Ngrok';
 
 // Private ranges that count as "on my network". Anything else is treated as the open
 // internet and gets the public router.
+// /overlays/<layout> serves the container page, which reads the layout name off its own URL.
+// Names can't contain a dot, so real files under /overlays (container.js, osc-bundle.js) never
+// match and fall through to the static handler.
+function overlayLayoutPage(req: Request, res: Response, next: NextFunction) {
+  // Case-insensitive, so /overlays/Vars reaches the same layout as /overlays/vars.
+  const name = req.path.replace(/^\/|\/$/g, '').toLowerCase();
+  if (req.method !== 'GET' || !OVERLAY_LAYOUT_NAME.test(name)) {
+    next();
+    return;
+  }
+  // frontendDir is relative to the working directory, and sendFile needs an absolute path.
+  res.sendFile(path.resolve(frontendDir, 'overlay', 'index.html'));
+}
+
 function isPrivateAddress(address: string) {
   // Node reports IPv4 peers on a dual-stack socket as ::ffff:192.168.1.5.
   const addr = address.trim().replace(/^::ffff:/i, '');
@@ -255,7 +269,7 @@ export class WebService {
           },
         }),
       );
-      router.use('/overlays', express.static(frontendDir + '/overlay'));
+      router.use('/overlays', overlayLayoutPage, express.static(frontendDir + '/overlay'));
 
       publicRouter.use(json());
       publicRouter.use(cookieParser());
@@ -324,7 +338,7 @@ export class WebService {
           },
         }),
       );
-      publicRouter.use('/overlays', express.static(frontendDir + '/overlay'));
+      publicRouter.use('/overlays', overlayLayoutPage, express.static(frontendDir + '/overlay'));
 
       const systemRoutes = ServerRoutes();
       router.use('/server', systemRoutes.local);

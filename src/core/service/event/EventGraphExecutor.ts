@@ -316,6 +316,7 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             values.key,
             'string',
             values.value,
+            values.temporary === true,
           );
       case 'set_number_value':
         return () =>
@@ -324,6 +325,7 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             values.key,
             'number',
             values.value,
+            values.temporary === true,
           );
       case 'set_array_value':
         return () =>
@@ -332,6 +334,7 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             values.key,
             'array',
             values.value,
+            values.temporary === true,
           );
       case 'set_boolean_value':
         return () =>
@@ -340,6 +343,7 @@ function executeGraphNode(node: EventGraphNode, values: KeyedObject, ctx: GraphE
             values.key,
             'boolean',
             values.value,
+            values.temporary === true,
           );
       case 'say_in_chat':
         return () => {

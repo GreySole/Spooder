@@ -3,6 +3,7 @@ import fs from 'fs';
 import { KeyedObject, userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import { toArray } from '../util/ArrayUtil';
+import OSCService from './OSCService';
 
 type StoredType = 'string' | 'number' | 'boolean' | 'json';
 
@@ -53,6 +54,35 @@ const MIGRATION_VERSION = 1;
 
 export default class EventStorageService {
   private static db: DatabaseSync;
+
+  // Values written with a node's Temporary flag: kept in memory only, never written to the
+  // database, and gone on restart. For values that change many times a second (a timer's
+  // progress), where saving each one would just churn the disk. A temporary value shadows a
+  // saved one under the same event and key until the next saved write replaces it.
+  private static temporary = new Map<string, Map<string, any>>();
+
+  private static getTemporary(eventName: string, key: string): { found: boolean; value?: any } {
+    const values = EventStorageService.temporary.get(eventName);
+    return values?.has(key) ? { found: true, value: values.get(key) } : { found: false };
+  }
+
+  private static clearTemporary(eventName: string, key: string) {
+    const values = EventStorageService.temporary.get(eventName);
+    values?.delete(key);
+    if (values?.size === 0) {
+      EventStorageService.temporary.delete(eventName);
+    }
+  }
+
+  private static setTemporaryValue(eventName: string, key: string, value: any) {
+    let values = EventStorageService.temporary.get(eventName);
+    if (!values) {
+      values = new Map();
+      EventStorageService.temporary.set(eventName, values);
+    }
+    values.set(key, value);
+    EventStorageService.announce(eventName, key, value);
+  }
 
   static initialize() {
     const dbPath = userDir + '/settings/eventstorage.db';
@@ -140,6 +170,10 @@ export default class EventStorageService {
   // setSharedVar) - preserves any JSON-serializable value, including the arrays some real
   // events store (e.g. a quote list), not just the three primitive types graph nodes use.
   static getRawValue(eventName: string, key: string, defaultValue: any = 0) {
+    const temporary = EventStorageService.getTemporary(eventName, key);
+    if (temporary.found) {
+      return temporary.value ?? defaultValue;
+    }
     const row = EventStorageService.db
       .prepare('SELECT value_type, value_text, value_number, value_boolean FROM event_values WHERE event_name = ? AND key = ?')
       .get(eventName, key) as KeyedObject | undefined;
@@ -151,6 +185,8 @@ export default class EventStorageService {
   }
 
   static setRawValue(eventName: string, key: string, value: any) {
+    // A saved write ends any temporary value under the same key, so the saved one is what reads.
+    EventStorageService.clearTemporary(eventName, key);
     const type = inferType(value);
     const encoded = encodeForColumn(type, value);
     EventStorageService.db
@@ -164,6 +200,19 @@ export default class EventStorageService {
            value_boolean = excluded.value_boolean`,
       )
       .run(eventName, key, type, encoded.value_text, encoded.value_number, encoded.value_boolean);
+    EventStorageService.announce(eventName, key, value);
+  }
+
+  // Tells connected overlays a value changed, so storage widgets update as it happens instead of
+  // polling. The value travels as JSON text, which keeps booleans, arrays and objects intact
+  // through OSC's argument types. Best effort: writes also happen at startup, before the OSC
+  // server exists, and a missed announcement must never fail the write itself.
+  private static announce(eventName: string, key: string, value: any) {
+    try {
+      OSCService.sendToTCP?.('/eventstorage/value', [eventName, key, JSON.stringify(value)], false);
+    } catch (e) {
+      // Nothing to do - overlays re-read the value when they load.
+    }
   }
 
   // Typed get/set used by the new get_*_value/set_*_value graph nodes.
@@ -179,6 +228,12 @@ export default class EventStorageService {
     type: StoredValueType,
     defaultValue: any,
   ) {
+    const temporary = EventStorageService.getTemporary(eventName, key);
+    if (temporary.found) {
+      const matches =
+        type === 'array' ? Array.isArray(temporary.value) : typeof temporary.value === type;
+      return matches ? temporary.value : defaultValue;
+    }
     const row = EventStorageService.db
       .prepare('SELECT value_type, value_text, value_number, value_boolean FROM event_values WHERE event_name = ? AND key = ?')
       .get(eventName, key) as KeyedObject | undefined;
@@ -196,10 +251,21 @@ export default class EventStorageService {
     return decoded ?? defaultValue;
   }
 
-  static setValue(eventName: string, key: string, type: StoredValueType, value: any) {
+  static setValue(
+    eventName: string,
+    key: string,
+    type: StoredValueType,
+    value: any,
+    temporary = false,
+  ) {
     // Normalized here rather than at the call site so a Set Array Value node can never leave a
     // scalar behind a key the matching get will then refuse to read.
-    EventStorageService.setRawValue(eventName, key, type === 'array' ? toArray(value) : value);
+    const normalized = type === 'array' ? toArray(value) : value;
+    if (temporary) {
+      EventStorageService.setTemporaryValue(eventName, key, normalized);
+      return;
+    }
+    EventStorageService.setRawValue(eventName, key, normalized);
   }
 
   // Used by the storage browser in the events tab - every key an event holds, decoded.
@@ -214,12 +280,38 @@ export default class EventStorageService {
     for (const row of rows) {
       result[row.key as string] = decodeRow(row);
     }
+    for (const [key, value] of EventStorageService.temporary.get(eventName) ?? []) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  // Every key each event holds, for the overlay editor's Key dropdown.
+  static listAllKeys(): { [eventName: string]: string[] } {
+    const rows = EventStorageService.db
+      .prepare('SELECT event_name, key FROM event_values ORDER BY event_name, key')
+      .all() as KeyedObject[];
+    const result: { [eventName: string]: string[] } = {};
+    for (const row of rows) {
+      (result[row.event_name as string] ??= []).push(row.key as string);
+    }
+    for (const [eventName, values] of EventStorageService.temporary) {
+      const keys = (result[eventName] ??= []);
+      for (const key of values.keys()) {
+        if (!keys.includes(key)) {
+          keys.push(key);
+        }
+      }
+      keys.sort();
+    }
     return result;
   }
 
   static deleteValue(eventName: string, key: string) {
+    EventStorageService.clearTemporary(eventName, key);
     EventStorageService.db
       .prepare('DELETE FROM event_values WHERE event_name = ? AND key = ?')
       .run(eventName, key);
+    EventStorageService.announce(eventName, key, null);
   }
 }

@@ -248,7 +248,7 @@ export function migrateEventsFileToGraphs(oldFile: KeyedObject): EventGraphFile 
   }
   return {
     graphs,
-    groups: oldFile.groups ?? ['Default'],
+    groups: oldFile.groups ?? [],
     disabledGroups: oldFile.disabledGroups ?? [],
   };
 }

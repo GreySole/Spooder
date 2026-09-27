@@ -89,18 +89,44 @@ export interface ConfigFile {
   plugin_update: PluginUpdateSection;
 }
 
-export interface OverlayContainerEntry {
-  pluginName: string;
-  enabled: boolean;
+// One thing placed on a layout: either a plugin's overlay page or a built-in widget. Layers are
+// stored front-to-back, so a lower index renders in front. Plugin layers use their plugin name
+// as their id (a plugin can appear once per layout); widget layers get a generated id.
+export interface OverlayLayer {
+  id: string;
+  type: 'plugin' | 'widget';
+  pluginName?: string;
+  widgetType?: string;
+  settings?: { [key: string]: any };
   x: number; // percent of container width, 0-100
   y: number; // percent of container height, 0-100
   width: number; // percent of container width, 0-100
   height: number; // percent of container height, 0-100
 }
 
-export interface OverlayContainerConfig {
-  order: OverlayContainerEntry[];
+// One named layout - what a single /overlays/<name> URL renders.
+// The browser-source size a layout is designed for, in pixels. Entries are stored as percentages
+// so the page itself fits any size; this only sets the editor canvas's shape, so what's laid out
+// there matches the OBS source it will be shown in.
+export interface OverlayCanvasSize {
+  width: number;
+  height: number;
 }
+
+export const DEFAULT_OVERLAY_CANVAS: OverlayCanvasSize = { width: 1920, height: 1080 };
+
+export interface OverlayContainerConfig {
+  canvas?: OverlayCanvasSize;
+  layers: OverlayLayer[];
+}
+
+export interface OverlayLayouts {
+  layouts: { [name: string]: OverlayContainerConfig };
+}
+
+// Layout names double as URL segments, so they're kept to characters that need no escaping and
+// can't collide with the container's static files (which all contain a dot).
+export const OVERLAY_LAYOUT_NAME = /^[a-z0-9_-]{1,40}$/;
 
 export default class ConfigService {
   private static instance: ConfigService;
@@ -180,7 +206,7 @@ export default class ConfigService {
     ],
   } as KeyedObject;
 
-  private overlayContainer: OverlayContainerConfig = { order: [] };
+  private overlayLayouts: OverlayLayouts = { layouts: {} };
 
   static getConfig(): ConfigFile {
     return ConfigService.instance.config;
@@ -217,14 +243,14 @@ export default class ConfigService {
     return ConfigService.instance.flags;
   }
 
-  static getOverlayContainer(): OverlayContainerConfig {
-    return ConfigService.instance.overlayContainer;
+  static getOverlayLayouts(): OverlayLayouts {
+    return ConfigService.instance.overlayLayouts;
   }
 
-  static saveOverlayContainer(newConfig: OverlayContainerConfig) {
+  static saveOverlayLayouts(newLayouts: OverlayLayouts) {
     fs.writeFileSync(
       userDir + '/settings/overlay_container.json',
-      JSON.stringify(newConfig),
+      JSON.stringify(newLayouts),
       'utf-8',
     );
 
@@ -362,7 +388,44 @@ export default class ConfigService {
     if (fs.existsSync(overlayContainerPath)) {
       try {
         const overlayContainerFile = fs.readFileSync(overlayContainerPath, { encoding: 'utf8' });
-        ConfigService.instance.overlayContainer = JSON.parse(overlayContainerFile);
+        const parsed = JSON.parse(overlayContainerFile);
+        // The file used to hold a single layout as { order }. It becomes an ordinary layout
+        // named 'default' - only when it actually placed something, so a fresh install starts
+        // with none.
+        const layouts: OverlayLayouts = Array.isArray(parsed.order)
+          ? { layouts: parsed.order.length > 0 ? ({ default: { order: parsed.order } } as any) : {} }
+          : { layouts: parsed.layouts ?? {} };
+        // Layouts used to hold `order`: every overlay-capable plugin, each with an enabled flag.
+        // Layers are added rather than toggled now, so only the enabled ones carry over.
+        // Layout names are lowercase now (they're URL segments). Ones saved earlier in another case
+        // are renamed to match; if that would collide with another layout, a number is added.
+        const lowered: OverlayLayouts['layouts'] = {};
+        for (const [name, layout] of Object.entries(layouts.layouts)) {
+          let target = name.toLowerCase();
+          for (let n = 2; lowered[target]; n++) {
+            target = `${name.toLowerCase()}-${n}`;
+          }
+          lowered[target] = layout;
+        }
+        layouts.layouts = lowered;
+        for (const name in layouts.layouts) {
+          const layout: any = layouts.layouts[name];
+          if (!layout.layers) {
+            layout.layers = (layout.order ?? [])
+              .filter((entry: any) => entry.enabled)
+              .map((entry: any) => ({
+                id: entry.pluginName,
+                type: 'plugin',
+                pluginName: entry.pluginName,
+                x: entry.x,
+                y: entry.y,
+                width: entry.width,
+                height: entry.height,
+              }));
+          }
+          delete layout.order;
+        }
+        ConfigService.instance.overlayLayouts = layouts;
       } catch (e) {
         console.error(e);
       }

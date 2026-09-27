@@ -86,7 +86,7 @@ export class EventService {
 
   modCommands = {} as KeyedObject;
   graphs = {} as { [eventId: string]: EventGraph };
-  eventGroups = ['Default'];
+  eventGroups = [] as string[];
   disabledGroups = [] as string[];
   recurringMessages = {} as KeyedObject;
 

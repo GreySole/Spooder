@@ -39,6 +39,9 @@ export default class Plugin {
   description: string = '';
   dependencies: string = '';
   hasOverlay: boolean = false;
+  // Optional `overlay_category` in package.json: groups the plugin's overlay in the overlay
+  // editor's Add Layer menu. Empty leaves it at the top level.
+  overlayCategory: string = '';
   hasUtility: boolean = false;
   hasPublic: boolean = false;
   pluginMode: PluginMode = PluginMode.none;
@@ -125,6 +128,8 @@ export default class Plugin {
       this.modulePath = modulePath;
 
       this.name = pluginMeta.display_name ?? pluginMeta.name;
+      this.overlayCategory =
+        typeof pluginMeta.overlay_category === 'string' ? pluginMeta.overlay_category : '';
       this.main = pluginMeta.main = pluginMeta.main ?? 'index.js';
       this.dirname = pluginDirName;
       this.author = pluginMeta.author;

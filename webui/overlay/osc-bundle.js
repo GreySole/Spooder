@@ -2425,11 +2425,24 @@
             window.location.origin,
           );
 
-          if (!oscOpenFired) {
+          // Standalone pages call onOSCOpen when the websocket opens, which is always after the
+          // page's own scripts have loaded. Here there is no socket to wait for, and the settings
+          // fetch that leads here can resolve while the scripts after this bundle are still
+          // loading - so onOSCOpen wasn't defined yet and never ran. Wait for the page to finish
+          // loading first.
+          const fireOSCOpen = () => {
+            if (oscOpenFired) {
+              return;
+            }
             oscOpenFired = true;
             if (typeof onOSCOpen != 'undefined') {
               onOSCOpen();
             }
+          };
+          if (document.readyState === 'complete') {
+            fireOSCOpen();
+          } else {
+            window.addEventListener('load', fireOSCOpen, { once: true });
           }
 
           console.log('OSC BRIDGE MODE', pluginName);
