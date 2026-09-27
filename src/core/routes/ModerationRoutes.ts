@@ -17,6 +17,7 @@ import {
 import { isLocal, WebService } from '../service/WebService';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
 import e from 'express';
+import { registerModEventRoutes } from './ModEventRoutes';
 
 export function validateModAccess(req: Request, res: Response, next: NextFunction) {
   const isValid = validateUser(req);
@@ -422,6 +423,10 @@ export function ModerationRoutes() {
 
   router.post('/remove_mod_command', removeModCommand);
   publicRouter.post('/remove_mod_command', removeModCommand);
+
+  // The event graph editor's endpoints, limited to the mod-editable groups.
+  registerModEventRoutes(router, validateUser);
+  registerModEventRoutes(publicRouter, validateUser);
 
   return { local: router, public: publicRouter };
 }

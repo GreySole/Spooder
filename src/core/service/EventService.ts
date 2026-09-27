@@ -65,13 +65,19 @@ export class EventService {
     this.graphs = loaded.graphs;
     this.eventGroups = loaded.groups;
     this.disabledGroups = loaded.disabledGroups;
+    this.modGroups = loaded.modGroups ?? [];
 
     // Written straight back to storage rather than re-derived every boot. Saved through the
     // storage service directly, not saveEventGraphs, because the stream modules it notifies
     // aren't up yet at this point in startup.
     const upgraded = upgradeGraphNodes(this.graphs);
     if (upgraded > 0) {
-      EventGraphStorageService.saveAll(this.graphs, this.eventGroups, this.disabledGroups);
+      EventGraphStorageService.saveAll(
+        this.graphs,
+        this.eventGroups,
+        this.disabledGroups,
+        this.modGroups,
+      );
       spooderLog(`Upgraded ${upgraded} node(s) to current node types`);
     }
     spooderLog('Got events');
@@ -88,6 +94,9 @@ export class EventService {
   graphs = {} as { [eventId: string]: EventGraph };
   eventGroups = [] as string[];
   disabledGroups = [] as string[];
+  // Groups whose events a moderator may view and edit from the mod UI. Everything outside them
+  // is the owner's alone.
+  modGroups = [] as string[];
   recurringMessages = {} as KeyedObject;
 
   static getActiveEventEndTime(eventName: string) {
@@ -245,6 +254,10 @@ export class EventService {
     return EventService.instance.eventGroups;
   }
 
+  static getModGroups() {
+    return EventService.instance.modGroups;
+  }
+
   static getDisabledGroups() {
     return EventService.instance.disabledGroups;
   }
@@ -300,12 +313,21 @@ export class EventService {
     newGraphs: { [eventId: string]: EventGraph },
     newGroups: string[],
     newDisabledGroups: string[],
+    // Left as it was when a caller doesn't say (an older client, the legacy flat save).
+    newModGroups: string[] = EventService.instance.modGroups,
   ) {
     EventService.instance.graphs = newGraphs;
     EventService.instance.eventGroups = newGroups;
     EventService.instance.disabledGroups = newDisabledGroups;
+    // A group that no longer exists can't stay mod-editable.
+    EventService.instance.modGroups = newModGroups.filter((group) => newGroups.includes(group));
 
-    EventGraphStorageService.saveAll(newGraphs, newGroups, newDisabledGroups);
+    EventGraphStorageService.saveAll(
+      newGraphs,
+      newGroups,
+      newDisabledGroups,
+      EventService.instance.modGroups,
+    );
 
     const activePlatforms = ModuleService.getStreamModules();
     for (let p in activePlatforms) {

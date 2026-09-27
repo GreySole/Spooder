@@ -60,7 +60,8 @@ export default class EventGraphStorageService {
       CREATE TABLE IF NOT EXISTS event_groups (
         name TEXT PRIMARY KEY,
         position INTEGER NOT NULL,
-        disabled INTEGER NOT NULL DEFAULT 0
+        disabled INTEGER NOT NULL DEFAULT 0,
+        mod_editable INTEGER NOT NULL DEFAULT 0
       ) WITHOUT ROWID;
     `);
 
@@ -113,6 +114,16 @@ export default class EventGraphStorageService {
     );
     if (!columns.has('width')) {
       EventGraphStorageService.db.exec('ALTER TABLE event_nodes ADD COLUMN width REAL');
+    }
+    const groupColumns = new Set(
+      (EventGraphStorageService.db.prepare('PRAGMA table_info(event_groups)').all() as KeyedObject[]).map(
+        (row) => row.name as string,
+      ),
+    );
+    if (!groupColumns.has('mod_editable')) {
+      EventGraphStorageService.db.exec(
+        'ALTER TABLE event_groups ADD COLUMN mod_editable INTEGER NOT NULL DEFAULT 0',
+      );
     }
   }
 
@@ -214,13 +225,16 @@ export default class EventGraphStorageService {
     const groups = groupRows.map((r) => r.name as string);
     const disabledGroups = groupRows.filter((r) => r.disabled === 1).map((r) => r.name as string);
 
-    return { graphs, groups, disabledGroups };
+    const modGroups = groupRows.filter((r) => r.mod_editable === 1).map((r) => r.name as string);
+
+    return { graphs, groups, disabledGroups, modGroups };
   }
 
   static saveAll(
     graphs: { [eventId: string]: EventGraph },
     groups: string[],
     disabledGroups: string[],
+    modGroups: string[] = [],
   ) {
     const db = EventGraphStorageService.db;
 
@@ -244,7 +258,7 @@ export default class EventGraphStorageService {
          VALUES (?, ?, ?, ?, ?, ?)`,
       );
       const insertGroup = db.prepare(
-        `INSERT INTO event_groups (name, position, disabled) VALUES (?, ?, ?)`,
+        `INSERT INTO event_groups (name, position, disabled, mod_editable) VALUES (?, ?, ?, ?)`,
       );
 
       for (const eventId in graphs) {
@@ -278,7 +292,12 @@ export default class EventGraphStorageService {
       }
 
       groups.forEach((name, index) => {
-        insertGroup.run(name, index, disabledGroups.includes(name) ? 1 : 0);
+        insertGroup.run(
+          name,
+          index,
+          disabledGroups.includes(name) ? 1 : 0,
+          modGroups.includes(name) ? 1 : 0,
+        );
       });
 
       db.exec('COMMIT');

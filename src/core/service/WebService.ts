@@ -319,6 +319,19 @@ export class WebService {
       );
       publicRouter.use('/utility', validatePageAccess, express.static(userDir + '/web/utility'));
       publicRouter.use('/widgets/:moduleName', validatePageAccess, moduleWidgetStatic);
+      // The module UIs, for the mod UI's node editor (it loads their inspectors and test panels).
+      // Only to a logged-in moderator - the owner's own WebUI reads them from the local router.
+      publicRouter.use(
+        '/modules/:moduleName',
+        (req: Request, res: Response, next: NextFunction) => {
+          if (validateUser(req) === 'ok') {
+            next();
+          } else {
+            res.status(401).end();
+          }
+        },
+        moduleUIStatic,
+      );
       publicRouter.use('/plugin', express.static(userDir + '/web/public'));
       publicRouter.use('/assets', express.static(userDir + '/web/assets'));
       publicRouter.use('/icons', express.static(userDir + '/web/icons'));
@@ -514,9 +527,20 @@ export class WebService {
   static registerModuleApi(
     context: StreamModuleInterface | CommunityModuleInterface | ControlModuleInterface,
   ) {
-    const { router, publicRouter, baseUrl } = context.getRouters();
+    const { router, publicRouter, modRouter, baseUrl } = context.getRouters();
     if (router != null) {
       WebService.instance.router?.use(baseUrl, router);
+    }
+    if (modRouter != null) {
+      // Ahead of the module's own public router, and only for a logged-in moderator: anyone else
+      // falls straight through to it, so its viewer-facing routes are unaffected.
+      WebService.instance.publicRouter?.use(baseUrl, (req, res, next) => {
+        if (validateUser(req) === 'ok') {
+          modRouter(req, res, next);
+        } else {
+          next();
+        }
+      });
     }
     if (publicRouter != null) {
       WebService.instance.publicRouter?.use(baseUrl, publicRouter);

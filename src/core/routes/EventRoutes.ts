@@ -17,6 +17,19 @@ import {
 } from '../util/ResponseUtil';
 import { triggerExistsAndEnabled } from '../util/EventTriggerUtil';
 
+// Every operation node the editor can offer: the built-in ones plus whatever the loaded
+// community modules contribute. Shared with the mod-facing routes.
+export function collectOperationNodes() {
+  const moduleOperationNodes = Object.values(ModuleService.getCommunityModules()).flatMap(
+    (module) => module.getOperationNodes?.() ?? [],
+  );
+  return [
+    ...OperationNodeService.getOperationNodes(),
+    ...getCoreOperationNodes(),
+    ...moduleOperationNodes,
+  ];
+}
+
 export function EventRoutes() {
   const router = express.Router();
   const publicRouter = express.Router();
@@ -34,12 +47,18 @@ export function EventRoutes() {
       graphs: EventService.getGraphs(),
       groups: EventService.getGroups(),
       disabledGroups: EventService.getDisabledGroups(),
+      modGroups: EventService.getModGroups(),
       plugins: Object.keys(PluginService.getActivePlugins()),
     });
   });
 
   router.post('/save_event_graphs', async (req: Request, res: Response) => {
-    EventService.saveEventGraphs(req.body.graphs, req.body.groups, req.body.disabledGroups);
+    EventService.saveEventGraphs(
+      req.body.graphs,
+      req.body.groups,
+      req.body.disabledGroups,
+      req.body.modGroups,
+    );
     res.send({ status: 'SAVE SUCCESS' });
     webLog('SAVED EVENT GRAPHS');
   });
@@ -93,14 +112,7 @@ export function EventRoutes() {
   });
 
   router.get('/operation_nodes', async (req: Request, res: Response) => {
-    const moduleOperationNodes = Object.values(ModuleService.getCommunityModules()).flatMap(
-      (module) => module.getOperationNodes?.() ?? [],
-    );
-    res.send([
-      ...OperationNodeService.getOperationNodes(),
-      ...getCoreOperationNodes(),
-      ...moduleOperationNodes,
-    ]);
+    res.send(collectOperationNodes());
   });
 
   router.get('/chat_commands', (req: Request, res: Response) => {

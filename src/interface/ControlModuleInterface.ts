@@ -13,7 +13,15 @@ export interface ControlModuleInterface {
   call: (command: string, data: KeyedObject) => void;
   getPluginFunctions: () => KeyedObject;
   onPluginsLoaded: () => void;
-  getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
+  getRouters: () => {
+    baseUrl: string;
+    router?: Router;
+    publicRouter?: Router;
+    // The few endpoints of `router` a moderator may call through the public URL, for the node
+    // inspectors and test panels the module's UI contributes to the mod UI. Answered only to a
+    // logged-in moderator; build it with modSafeRouter.
+    modRouter?: Router;
+  };
   onOSC: (message: any) => void;
   getTriggerNodes: () => TriggerNodeDef[];
   getActionNodes: () => ActionNodeDef[];

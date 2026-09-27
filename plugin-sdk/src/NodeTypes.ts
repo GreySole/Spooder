@@ -183,4 +183,6 @@ export interface EventGraphFile {
   graphs: { [eventId: string]: EventGraph };
   groups: string[];
   disabledGroups: string[];
+  // Groups a moderator may view and edit from the mod UI.
+  modGroups?: string[];
 }

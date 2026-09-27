@@ -4,7 +4,15 @@ import { ActionExecutionContext, ActionNodeDef, KeyedObject, TriggerNodeDef } fr
 export interface StreamModuleInterface {
   api: any;
   oauth: any;
-  getRouters: () => { baseUrl: string; router?: Router; publicRouter?: Router };
+  getRouters: () => {
+    baseUrl: string;
+    router?: Router;
+    publicRouter?: Router;
+    // The few endpoints of `router` a moderator may call through the public URL, for the node
+    // inspectors and test panels the module's UI contributes to the mod UI. Answered only to a
+    // logged-in moderator; build it with modSafeRouter.
+    modRouter?: Router;
+  };
   autoLogin: () => Promise<boolean>;
   sayInChat: (message: string, channel: string) => void;
   onEventFileSaved: () => void;
