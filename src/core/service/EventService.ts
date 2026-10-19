@@ -16,6 +16,7 @@ import EventResponseCommand from './event/EventResponseCommand';
 import { entryNodesForDispatch, walkEventGraph } from './event/EventGraphExecutor';
 import EventGraphStorageService from './EventGraphStorageService';
 import EventStorageService from './EventStorageService';
+import SnippetStorageService from './SnippetStorageService';
 import ModuleService from './ModuleService';
 import OscLayerService from './OscLayerService';
 import OSCService from './OSCService';
@@ -83,6 +84,7 @@ export class EventService {
     spooderLog('Got events');
 
     EventStorageService.initialize();
+    SnippetStorageService.initialize();
   }
 
   uptime = 0;

@@ -6,6 +6,8 @@ import { getCoreOperationNodes } from '../service/CoreNodeManifest';
 import NodeRegistryService from '../service/NodeRegistryService';
 import OperationNodeService from '../service/OperationNodeService';
 import PluginService from '../service/PluginService';
+import { SAMPLE_SNIPPETS } from '../service/SampleSnippets';
+import SnippetStorageService from '../service/SnippetStorageService';
 import { json, Request, Response } from 'express';
 import express from 'express';
 import { webLog } from '../Logging';
@@ -79,6 +81,53 @@ export function EventRoutes() {
 
   router.delete('/event_storage/:eventName/:key', async (req: Request, res: Response) => {
     EventStorageService.deleteValue(req.params.eventName as string, req.params.key as string);
+    res.send({ status: 'DELETE SUCCESS' });
+  });
+
+  router.get('/snippets', async (req: Request, res: Response) => {
+    res.send({ snippets: [...SAMPLE_SNIPPETS, ...SnippetStorageService.listAll()] });
+  });
+
+  router.post('/snippets', async (req: Request, res: Response) => {
+    const { name, description, nodes, edges } = req.body;
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).send({ status: 'error', message: 'A name is required.' });
+      return;
+    }
+    const snippet = SnippetStorageService.create(name.trim(), description ?? '', nodes ?? [], edges ?? []);
+    res.send({ status: 'SAVE SUCCESS', snippet });
+  });
+
+  router.put('/snippets/:id', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (SAMPLE_SNIPPETS.some((s) => s.id === id)) {
+      res.status(400).send({ status: 'error', message: 'Built-in snippets cannot be edited.' });
+      return;
+    }
+    const { name, description, nodes, edges } = req.body;
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).send({ status: 'error', message: 'A name is required.' });
+      return;
+    }
+    const snippet = SnippetStorageService.update(id, name.trim(), description ?? '', nodes ?? [], edges ?? []);
+    if (!snippet) {
+      res.status(404).send({ status: 'error', message: 'Snippet not found.' });
+      return;
+    }
+    res.send({ status: 'SAVE SUCCESS', snippet });
+  });
+
+  router.delete('/snippets/:id', async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    if (SAMPLE_SNIPPETS.some((s) => s.id === id)) {
+      res.status(400).send({ status: 'error', message: 'Built-in snippets cannot be deleted.' });
+      return;
+    }
+    const deleted = SnippetStorageService.delete(id);
+    if (!deleted) {
+      res.status(404).send({ status: 'error', message: 'Snippet not found.' });
+      return;
+    }
     res.send({ status: 'DELETE SUCCESS' });
   });
 

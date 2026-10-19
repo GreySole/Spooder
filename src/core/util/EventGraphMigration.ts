@@ -401,6 +401,7 @@ export function upgradeGraphNodes(graphs: { [eventId: string]: EventGraph }): nu
     // off wherever that left it.
     changed += convertLegacyDelays(graph);
     changed += upgradeOscSendNodes(graph);
+    changed += upgradeObsTimedNodes(graph);
   }
 
   return changed;
@@ -697,6 +698,72 @@ function upgradeOscSendNodes(graph: EventGraph): number {
     // 'oneshot' (and anything unrecognised) is the send it always was; the legacy fields are
     // simply dropped, which the destructure above already did.
     changed++;
+  }
+  return changed;
+}
+
+// The three timed OBS action nodes (Switch Scene, Set Input Mute, Enable/Disable Scene Item)
+// held their own single/timed Mode field and revert-after-duration logic - exactly what Delay
+// plus a second action node already does, the same redundancy OSC Send's 'timed' mode was (see
+// upgradeOscSendNodes above). A 'timed' node expands into that pair; a 'single' one just sheds
+// the now-unused fields.
+function upgradeObsTimedNodes(graph: EventGraph): number {
+  let changed = 0;
+  const TIMED_NODE_IDS = ['switchscenes', 'setinputmute', 'enablesceneitem'];
+  for (const node of [...graph.nodes]) {
+    if (node.moduleName !== 'obs' || !TIMED_NODE_IDS.includes(node.nodeTypeId)) {
+      continue;
+    }
+    const values = node.values ?? {};
+    // Already upgraded: the legacy fields are what identifies a node that still needs it.
+    if (
+      values.etype == null &&
+      values.duration == null &&
+      values.itemOff == null &&
+      values.valueOff == null
+    ) {
+      continue;
+    }
+
+    const { etype, duration, itemOff, valueOff, ...keep } = values;
+    node.values = keep;
+    changed++;
+
+    if (etype !== 'timed') {
+      continue;
+    }
+
+    const seconds = Number(duration);
+    const holdSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+    const below = { x: node.position.x + 240, y: node.position.y + 110 };
+
+    // The old executor computed Enable/Disable Scene Item's revert call as `valueOff == 0`,
+    // which for a boolean field is `!valueOff` - preserved here so this migration doesn't
+    // change what a saved event actually does.
+    const revertValues =
+      node.nodeTypeId === 'switchscenes'
+        ? { itemOn: itemOff }
+        : node.nodeTypeId === 'enablesceneitem'
+          ? { ...keep, valueOn: !valueOff }
+          : { ...keep, valueOn: valueOff };
+
+    const revert: EventGraphNode = {
+      id: uuidv4(),
+      kind: 'action',
+      moduleName: 'obs',
+      nodeTypeId: node.nodeTypeId,
+      values: revertValues,
+      position: { x: below.x + 240, y: below.y },
+    };
+    graph.nodes.push(revert);
+
+    if (holdSeconds > 0) {
+      const hold = delayNode(holdSeconds, below);
+      graph.nodes.push(hold);
+      graph.edges.push(execEdge(node.id, hold.id), execEdge(hold.id, revert.id));
+    } else {
+      graph.edges.push(execEdge(node.id, revert.id));
+    }
   }
   return changed;
 }

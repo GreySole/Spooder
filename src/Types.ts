@@ -29,6 +29,7 @@ export type {
   EventGraphEdge,
   EventGraph,
   EventGraphFile,
+  Snippet,
 } from '@spooder/plugin-sdk';
 
 export const userDir = path.join('./', 'user');

@@ -186,3 +186,18 @@ export interface EventGraphFile {
   // Groups a moderator may view and edit from the mod UI.
   modGroups?: string[];
 }
+
+// A reusable fragment of a graph - a handful of nodes plus the edges between them - importable
+// into any event's graph via the palette's Snippets menu. Node/edge ids are only unique within
+// the snippet itself: importing one always assigns fresh ids, so the same snippet can be dropped
+// into a graph any number of times without colliding with itself or an earlier copy.
+export interface Snippet {
+  id: string;
+  name: string;
+  description?: string;
+  nodes: EventGraphNode[];
+  edges: EventGraphEdge[];
+  // Ships with Spooder rather than being saved by a user - not editable or deletable from the
+  // UI, and not stored in SnippetStorageService.
+  builtIn?: boolean;
+}
