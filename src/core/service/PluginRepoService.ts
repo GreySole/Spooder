@@ -312,6 +312,7 @@ export default class PluginRepoService {
   private static registry: PluginRepoRegistry | null = null;
   private static job: any = null;
   private static checking = false;
+  private static launchChecked = false;
   private static gitAvailable: boolean | null = null;
 
   static InitSchedule() {
@@ -320,6 +321,15 @@ export default class PluginRepoService {
       PluginRepoService.job = null;
     }
     const settings = ConfigService.getConfig().plugin_update;
+
+    // Once per launch; InitSchedule also runs on every config save.
+    if (settings?.enabled && !PluginRepoService.launchChecked) {
+      PluginRepoService.launchChecked = true;
+      PluginRepoService.checkAllForUpdates().catch((e) =>
+        spooderLog('Plugin launch update check failed:', e.message ?? e),
+      );
+    }
+
     if (settings?.enabled) {
       PluginRepoService.job = nodeSchedule.scheduleJob(settings.schedule, () => {
         PluginRepoService.checkAllForUpdates().catch((e) =>

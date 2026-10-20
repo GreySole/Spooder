@@ -5,6 +5,7 @@ import PluginService from '../service/PluginService';
 import ModuleInstallService from '../service/ModuleInstallService';
 import PluginRepoService from '../service/PluginRepoService';
 import RegistryService, { RegistryArtifact, SourcedEntry } from '../service/RegistryService';
+import WebUIUpdateService from '../service/WebUIUpdateService';
 import { getRestartCapability, requestRestart, withLoading } from '../util/AppUtil';
 
 // What the Modules tab reads. The catalogue on its own is not enough to draw a card - whether
@@ -109,6 +110,21 @@ export default function RegistryRoutes() {
       await sendCatalogue(res, true);
     } catch (e: any) {
       res.status(500).send({ error: e.message ?? 'Could not refresh the registries' });
+    }
+  });
+
+  // The Config tab's "Check for updates": runs the same checks the schedule does, now, and
+  // reports what changed so the button can say something other than "done".
+  router.post('/check-updates', async (req: Request, res: Response) => {
+    try {
+      const webuiUpdated = await WebUIUpdateService.checkForUpdate();
+      const plugins = await PluginRepoService.checkAllForUpdates();
+      res.send({
+        webuiUpdated,
+        pluginsOutdated: Object.keys(plugins).filter((name) => plugins[name].available),
+      });
+    } catch (e: any) {
+      res.status(500).send({ error: e.message ?? 'Could not check for updates' });
     }
   });
 

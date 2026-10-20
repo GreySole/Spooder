@@ -51,6 +51,7 @@ function downloadTempZipPath(mod: WebUIModule) {
 export default class WebUIUpdateService {
   private static job: any = null;
   private static updating: boolean = false;
+  private static launchChecked: boolean = false;
 
   // True once the named UI has a page in it. webui_update.enabled defaults to false, and that
   // setting governs whether Spooder keeps itself *current* - it says nothing about whether
@@ -89,7 +90,7 @@ export default class WebUIUpdateService {
     }
     if (!WebUIUpdateService.initialDownload) {
       spooderLog('No WebUI build found; downloading the latest release before starting.');
-      WebUIUpdateService.initialDownload = WebUIUpdateService.checkForUpdate(true).finally(() => {
+      WebUIUpdateService.initialDownload = WebUIUpdateService.checkForUpdate(true).then(() => {}).finally(() => {
         WebUIUpdateService.initialDownload = null;
       });
     }
@@ -134,6 +135,16 @@ export default class WebUIUpdateService {
     }
 
     const settings = ConfigService.getConfig().webui_update;
+
+    // Once per launch, not once per InitSchedule - this also runs on every config save, and
+    // the midnight schedule would otherwise leave a UI release up to a day away after a start.
+    if (settings?.enabled && !WebUIUpdateService.launchChecked && WebUIUpdateService.hasWebUI()) {
+      WebUIUpdateService.launchChecked = true;
+      WebUIUpdateService.checkForUpdate().catch((e) =>
+        spooderLog('WebUI launch update check failed:', e.message ?? e),
+      );
+    }
+
     if (settings?.enabled) {
       WebUIUpdateService.job = nodeSchedule.scheduleJob(settings.schedule, () => {
         WebUIUpdateService.checkForUpdate().catch((e) =>
@@ -178,17 +189,21 @@ export default class WebUIUpdateService {
 
   // Checks every configured web UI module in turn (sequential, so downloads don't compete
   // for bandwidth or interleave their logs) and updates whichever ones have a newer release.
-  static async checkForUpdate(force = false) {
+  // Resolves to the repo names that were actually installed or updated.
+  static async checkForUpdate(force = false): Promise<string[]> {
+    const updated: string[] = [];
     if (WebUIUpdateService.updating) {
       spooderLog('WebUI update already in progress, skipping check');
-      return;
+      return updated;
     }
 
     WebUIUpdateService.updating = true;
     try {
       for (const mod of MODULES) {
         try {
-          await WebUIUpdateService.checkModule(mod, force);
+          if (await WebUIUpdateService.checkModule(mod, force)) {
+            updated.push(mod.repoName);
+          }
         } catch (e: any) {
           spooderLog(`${mod.repoName} update failed:`, e.message ?? e);
         }
@@ -207,19 +222,20 @@ export default class WebUIUpdateService {
     } catch (e: any) {
       spooderLog('Module UI update check failed:', e.message ?? e);
     }
+    return updated;
   }
 
-  private static async checkModule(mod: WebUIModule, force: boolean) {
+  private static async checkModule(mod: WebUIModule, force: boolean): Promise<boolean> {
     const localVersion = WebUIUpdateService.getLocalVersion(mod);
     const release = await WebUIUpdateService.getLatestRelease(mod);
 
     if (!release) {
-      return;
+      return false;
     }
 
     if (!force && localVersion && compareVersions(release.version, localVersion) <= 0) {
       spooderLog(`${mod.repoName} is up to date (${localVersion})`);
-      return;
+      return false;
     }
 
     spooderLog(
@@ -229,6 +245,7 @@ export default class WebUIUpdateService {
     await WebUIUpdateService.downloadAndInstall(mod, release);
 
     spooderLog(`${mod.repoName} updated to ${release.version}`);
+    return true;
   }
 
   private static async downloadAndInstall(mod: WebUIModule, release: ReleaseInfo) {
