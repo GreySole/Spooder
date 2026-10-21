@@ -152,7 +152,15 @@ export default class ModuleInstallService {
     const staging = path.join(stagingRoot, `${name}-${Date.now()}`);
     const zipPath = path.join(stagingRoot, `${name}.zip`);
     const hadPrevious = ModuleInstallService.isInstalled(name);
-    const backup = `${dest}.previous`;
+    // Outside src/integration on purpose. The root package.json lists src/integration/* as npm
+    // workspaces, so a backup left beside the module is a second workspace with the same name,
+    // and `npm install` refuses to run ("must not have multiple workspaces with the same name").
+    const backup = path.join(stagingRoot, `${name}.previous`);
+    // The old location, in case an earlier version of Spooder died mid-update and left one. Only
+    // cleared when the module itself is there - otherwise that copy is the only one.
+    if (hadPrevious) {
+      fs.removeSync(`${dest}.previous`);
+    }
 
     try {
       fs.ensureDirSync(stagingRoot);
