@@ -3,6 +3,8 @@ import ModuleService from '../service/ModuleService';
 import ModuleUIService from '../service/ModuleUIService';
 import PluginService from '../service/PluginService';
 import ModuleInstallService from '../service/ModuleInstallService';
+import ModuleUpdateService from '../service/ModuleUpdateService';
+import { selectCompatibleRelease } from '../util/ReleaseCompatUtil';
 import PluginRepoService from '../service/PluginRepoService';
 import RegistryService, { RegistryArtifact, SourcedEntry } from '../service/RegistryService';
 import WebUIUpdateService from '../service/WebUIUpdateService';
@@ -57,6 +59,35 @@ async function resolveReleaseAsset(artifact: RegistryArtifact, track: string): P
   return release.zipball_url;
 }
 
+// What to download for one half of a module. A pinned entry names its release; a 'latest' entry
+// follows the repo, taking the newest release whose declared Spooder range this Spooder fits and
+// saying so when the only newer ones need a newer Spooder.
+async function resolveArtifact(
+  artifact: RegistryArtifact,
+  track: string,
+  name: string,
+): Promise<{ url: string; version: string | null }> {
+  if (track === 'pinned') {
+    return { url: await resolveReleaseAsset(artifact, track), version: artifact.version ?? null };
+  }
+  const [owner, repo] = artifact.repo.split('/');
+  const { release, blocked } = await selectCompatibleRelease(
+    owner,
+    repo,
+    RegistryService.getSpooderVersion(),
+  );
+  if (release) {
+    return { url: release.assetUrl, version: release.version };
+  }
+  if (blocked) {
+    throw new Error(
+      `${name} ${blocked.version} needs Spooder ${blocked.requires}, and no older release is available.`,
+    );
+  }
+  // No release with an asset to choose between - the previous behaviour, source archive and all.
+  return { url: await resolveReleaseAsset(artifact, track), version: null };
+}
+
 export default function RegistryRoutes() {
   const router = Router();
   const publicRouter = Router();
@@ -80,11 +111,20 @@ export default function RegistryRoutes() {
       // without its tab - which otherwise looks like a broken install rather than a partial one.
       webuiInstalled: entry.kind === 'module' ? uiInstalled : undefined,
       webuiVersion: entry.kind === 'module' ? ModuleUIService.getLocalVersion(entry.id) : undefined,
+      // Whether the installed backend has a newer release. Last known answer - the check itself
+      // is a network call, so it runs on launch, on the schedule and on "Check for updates".
+      update: entry.kind === 'module' ? ModuleUpdateService.get(entry.id) : undefined,
+      // A git checkout is updated with git, and the tab should not offer a button that fails.
+      development:
+        entry.kind === 'module' ? ModuleInstallService.isDevelopmentCheckout(entry.id) : undefined,
     };
   }
 
-  async function sendCatalogue(res: Response, force: boolean) {
+  async function sendCatalogue(res: Response, force: boolean, checkUpdates = false) {
     const catalogue = await RegistryService.getCatalogue(force);
+    if (checkUpdates) {
+      await ModuleUpdateService.checkAll().catch(() => {});
+    }
     const spooderVersion = RegistryService.getSpooderVersion();
     res.send({
       spooderVersion,
@@ -107,7 +147,7 @@ export default function RegistryRoutes() {
 
   router.post('/refresh', async (req: Request, res: Response) => {
     try {
-      await sendCatalogue(res, true);
+      await sendCatalogue(res, true, true);
     } catch (e: any) {
       res.status(500).send({ error: e.message ?? 'Could not refresh the registries' });
     }
@@ -117,10 +157,15 @@ export default function RegistryRoutes() {
   // reports what changed so the button can say something other than "done".
   router.post('/check-updates', async (req: Request, res: Response) => {
     try {
-      const webuiUpdated = await WebUIUpdateService.checkForUpdate();
+      const webui = await WebUIUpdateService.checkForUpdate();
       const plugins = await PluginRepoService.checkAllForUpdates();
+      await ModuleUpdateService.checkAll(true).catch(() => {});
       res.send({
-        webuiUpdated,
+        moduleUpdates: ModuleUpdateService.all()
+          .filter(([, info]) => info.available)
+          .map(([name, info]) => ({ name, version: info.available })),
+        webuiUpdated: webui.updated,
+        blocked: webui.blocked,
         pluginsOutdated: Object.keys(plugins).filter((name) => plugins[name].available),
       });
     } catch (e: any) {
@@ -159,11 +204,11 @@ export default function RegistryRoutes() {
             return;
           }
           // Source, not a bundle: the module is compiled here by the build Spooder already has.
-          const zipUrl = await resolveReleaseAsset(entry.server, entry.track);
+          const server = await resolveArtifact(entry.server, entry.track, entry.name);
           const result = await ModuleInstallService.install({
             name: entry.id,
-            zipUrl,
-            version: entry.server.version ?? null,
+            zipUrl: server.url,
+            version: server.version ?? entry.server.version ?? null,
             sha256: entry.track === 'pinned' ? (entry.server.sha256 ?? null) : null,
           });
           // Fetch the tab too, while we know which version the registry pinned. The scheduled
@@ -172,10 +217,10 @@ export default function RegistryRoutes() {
           let webuiWarning: string | null = null;
           if (entry.webui) {
             try {
-              const uiUrl = await resolveReleaseAsset(entry.webui, entry.track);
+              const ui = await resolveArtifact(entry.webui, entry.track, entry.name);
               await ModuleUIService.installFor(entry.id, entry.webui.repo, {
-                version: entry.webui.version ?? result.version ?? '0.0.0',
-                assetUrl: uiUrl,
+                version: ui.version ?? entry.webui.version ?? result.version ?? '0.0.0',
+                assetUrl: ui.url,
                 sha256: entry.track === 'pinned' ? (entry.webui.sha256 ?? null) : null,
               });
             } catch (e: any) {

@@ -114,6 +114,10 @@ export default class ModuleInstallService {
     }
   }
 
+  static getInstalledVersion(name: string): string | null {
+    return ModuleInstallService.readVersion(ModuleInstallService.moduleDir(name));
+  }
+
   static isInstalled(name: string): boolean {
     return fs.existsSync(path.join(ModuleInstallService.moduleDir(name), 'package.json'));
   }

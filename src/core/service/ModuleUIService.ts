@@ -7,6 +7,7 @@ import { userDir } from '../../Types';
 import { spooderLog } from '../Logging';
 import { compareVersions } from '../util/VersionUtil';
 import ModuleService from './ModuleService';
+import { BlockedRelease, selectCompatibleRelease } from '../util/ReleaseCompatUtil';
 import RegistryService from './RegistryService';
 
 // A module has two halves in different places. Its backend half is TypeScript compiled into
@@ -32,6 +33,11 @@ export interface ModuleUIDescriptor {
   key: string;
   url: string;
   version: string | null;
+}
+
+export interface ModuleUIUpdateResult {
+  updated: string[];
+  blocked: (BlockedRelease & { name: string })[];
 }
 
 interface ModuleUIRepo {
@@ -162,43 +168,28 @@ export default class ModuleUIService {
     }
   }
 
-  static async getLatestRelease(repo: ModuleUIRepo): Promise<ReleaseInfo | null> {
-    try {
-      const response = await Axios({
-        url: `https://api.github.com/repos/${repo.repoOwner}/${repo.repoName}/releases/latest`,
-        method: 'GET',
-        headers: { Accept: 'application/vnd.github+json' },
-      });
-      const tagName: string | undefined = response.data?.tag_name;
-      const asset = response.data?.assets?.[0];
-      if (!tagName || !asset?.browser_download_url) {
-        return null;
-      }
-      return {
-        version: tagName.replace(/^v/, ''),
-        assetUrl: asset.browser_download_url,
-      };
-    } catch (e: any) {
-      spooderLog(`Failed to check ${repo.repoName} latest release:`, e.message);
-      return null;
-    }
-  }
-
   /**
    * Checks every installed module's UI repo in turn and downloads whichever have a newer
    * release. Sequential so downloads do not compete or interleave their logs.
    */
-  static async checkForUpdate(force = false) {
+  static async checkForUpdate(force = false): Promise<ModuleUIUpdateResult> {
+    const result: ModuleUIUpdateResult = { updated: [], blocked: [] };
     if (ModuleUIService.updating) {
       spooderLog('Module UI update already in progress, skipping check');
-      return;
+      return result;
     }
 
     ModuleUIService.updating = true;
     try {
       for (const repo of ModuleUIService.getModuleUIRepos()) {
         try {
-          await ModuleUIService.checkModule(repo, force);
+          const outcome = await ModuleUIService.checkModule(repo, force);
+          if (outcome.updated) {
+            result.updated.push(repo.repoName);
+          }
+          if (outcome.blocked) {
+            result.blocked.push({ name: repo.repoName, ...outcome.blocked });
+          }
         } catch (e: any) {
           spooderLog(`${repo.repoName} update failed:`, e.message ?? e);
         }
@@ -206,32 +197,56 @@ export default class ModuleUIService {
     } finally {
       ModuleUIService.updating = false;
     }
+    return result;
   }
 
-  private static async checkModule(repo: ModuleUIRepo, force: boolean) {
+  private static async checkModule(
+    repo: ModuleUIRepo,
+    force: boolean,
+  ): Promise<{ updated: boolean; blocked: BlockedRelease | null }> {
     const localVersion = ModuleUIService.getLocalVersion(repo.key);
 
     // A registry pin wins over the repo's newest release: a pinned entry means someone
     // reviewed that exact artifact, and following 'latest' here would quietly undo that for
     // half the module. Falls back to latest for a module no enabled registry pins - which
-    // includes anything installed straight from a URL.
+    // includes anything installed straight from a URL. A pin is not second-guessed against the
+    // release's declared Spooder range: the registry entry carries its own, checked at install.
     const pinned = await RegistryService.getPinnedWebUI(repo.key);
-    const release = pinned?.version
-      ? await ModuleUIService.getPinnedRelease(
-          repo,
-          pinned.version,
-          pinned.asset,
-          pinned.sha256 ?? null,
-        )
-      : await ModuleUIService.getLatestRelease(repo);
+    let release: ReleaseInfo | null;
+    let blocked: BlockedRelease | null = null;
+    if (pinned?.version) {
+      release = await ModuleUIService.getPinnedRelease(
+        repo,
+        pinned.version,
+        pinned.asset,
+        pinned.sha256 ?? null,
+      );
+    } else {
+      const selection = await selectCompatibleRelease(
+        repo.repoOwner,
+        repo.repoName,
+        RegistryService.getSpooderVersion(),
+      );
+      release = selection.release;
+      // Only worth mentioning when it is something the user does not already have.
+      if (
+        selection.blocked &&
+        (!localVersion || compareVersions(selection.blocked.version, localVersion) > 0)
+      ) {
+        blocked = selection.blocked;
+        spooderLog(
+          `${repo.repoName} ${blocked.version} needs Spooder ${blocked.requires}; update Spooder to get it.`,
+        );
+      }
+    }
 
     if (!release) {
-      return;
+      return { updated: false, blocked };
     }
 
     if (!force && localVersion && compareVersions(release.version, localVersion) <= 0) {
       spooderLog(`${repo.repoName} is up to date (${localVersion})`);
-      return;
+      return { updated: false, blocked };
     }
 
     spooderLog(
@@ -239,6 +254,7 @@ export default class ModuleUIService {
     );
     await ModuleUIService.downloadAndInstall(repo, release);
     spooderLog(`${repo.repoName} updated to ${release.version}`);
+    return { updated: true, blocked };
   }
 
   /**

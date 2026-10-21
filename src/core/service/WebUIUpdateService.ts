@@ -5,12 +5,19 @@ import nodeSchedule from 'node-schedule';
 import path from 'path';
 import { spooderLog } from '../Logging';
 import { compareVersions } from '../util/VersionUtil';
+import { BlockedRelease, selectCompatibleRelease } from '../util/ReleaseCompatUtil';
 import ConfigService from './ConfigService';
+import RegistryService from './RegistryService';
 
 interface WebUIModule {
   name: string;
   repoOwner: string;
   repoName: string;
+}
+
+export interface UpdateCheckResult {
+  updated: string[];
+  blocked: (BlockedRelease & { name: string })[];
 }
 
 interface ReleaseInfo {
@@ -163,46 +170,27 @@ export default class WebUIUpdateService {
     }
   }
 
-  // GitHub's "latest release" only ever considers non-draft, non-prerelease releases,
-  // which is exactly what we want - a tagged, CI-built release, nothing in progress.
-  static async getLatestRelease(mod: WebUIModule): Promise<ReleaseInfo | null> {
-    try {
-      const response = await Axios({
-        url: `https://api.github.com/repos/${mod.repoOwner}/${mod.repoName}/releases/latest`,
-        method: 'GET',
-        headers: { Accept: 'application/vnd.github+json' },
-      });
-      const tagName: string | undefined = response.data?.tag_name;
-      const asset = response.data?.assets?.[0];
-      if (!tagName || !asset?.browser_download_url) {
-        return null;
-      }
-      return {
-        version: tagName.replace(/^v/, ''),
-        assetUrl: asset.browser_download_url,
-      };
-    } catch (e: any) {
-      spooderLog(`Failed to check ${mod.repoName} latest release:`, e.message);
-      return null;
-    }
-  }
-
   // Checks every configured web UI module in turn (sequential, so downloads don't compete
   // for bandwidth or interleave their logs) and updates whichever ones have a newer release.
-  // Resolves to the repo names that were actually installed or updated.
-  static async checkForUpdate(force = false): Promise<string[]> {
-    const updated: string[] = [];
+  // Resolves to the repo names that were actually installed or updated, and to the releases
+  // that were left alone because they need a newer Spooder.
+  static async checkForUpdate(force = false): Promise<UpdateCheckResult> {
+    const result: UpdateCheckResult = { updated: [], blocked: [] };
     if (WebUIUpdateService.updating) {
       spooderLog('WebUI update already in progress, skipping check');
-      return updated;
+      return result;
     }
 
     WebUIUpdateService.updating = true;
     try {
       for (const mod of MODULES) {
         try {
-          if (await WebUIUpdateService.checkModule(mod, force)) {
-            updated.push(mod.repoName);
+          const outcome = await WebUIUpdateService.checkModule(mod, force);
+          if (outcome.updated) {
+            result.updated.push(mod.repoName);
+          }
+          if (outcome.blocked) {
+            result.blocked.push({ name: mod.repoName, ...outcome.blocked });
           }
         } catch (e: any) {
           spooderLog(`${mod.repoName} update failed:`, e.message ?? e);
@@ -218,24 +206,52 @@ export default class WebUIUpdateService {
     // order, the same reason PluginRepoService is loaded that way in ConfigService.
     try {
       const { default: ModuleUIService } = await import('./ModuleUIService');
-      await ModuleUIService.checkForUpdate(force);
+      const moduleResult = await ModuleUIService.checkForUpdate(force);
+      result.updated.push(...moduleResult.updated);
+      result.blocked.push(...moduleResult.blocked);
     } catch (e: any) {
       spooderLog('Module UI update check failed:', e.message ?? e);
     }
-    return updated;
+
+    // Backend modules are only reported, never installed - see ModuleUpdateService.
+    try {
+      const { default: ModuleUpdateService } = await import('./ModuleUpdateService');
+      await ModuleUpdateService.checkAll();
+    } catch (e: any) {
+      spooderLog('Module update check failed:', e.message ?? e);
+    }
+    return result;
   }
 
-  private static async checkModule(mod: WebUIModule, force: boolean): Promise<boolean> {
+  private static async checkModule(
+    mod: WebUIModule,
+    force: boolean,
+  ): Promise<{ updated: boolean; blocked: BlockedRelease | null }> {
     const localVersion = WebUIUpdateService.getLocalVersion(mod);
-    const release = await WebUIUpdateService.getLatestRelease(mod);
+    const { release, blocked } = await selectCompatibleRelease(
+      mod.repoOwner,
+      mod.repoName,
+      RegistryService.getSpooderVersion(),
+    );
+
+    // Only worth mentioning when it is something the user does not already have.
+    const worthMentioning =
+      blocked && (!localVersion || compareVersions(blocked.version, localVersion) > 0)
+        ? blocked
+        : null;
+    if (worthMentioning) {
+      spooderLog(
+        `${mod.repoName} ${worthMentioning.version} needs Spooder ${worthMentioning.requires}; update Spooder to get it.`,
+      );
+    }
 
     if (!release) {
-      return false;
+      return { updated: false, blocked: worthMentioning };
     }
 
     if (!force && localVersion && compareVersions(release.version, localVersion) <= 0) {
       spooderLog(`${mod.repoName} is up to date (${localVersion})`);
-      return false;
+      return { updated: false, blocked: worthMentioning };
     }
 
     spooderLog(
@@ -245,7 +261,7 @@ export default class WebUIUpdateService {
     await WebUIUpdateService.downloadAndInstall(mod, release);
 
     spooderLog(`${mod.repoName} updated to ${release.version}`);
-    return true;
+    return { updated: true, blocked: worthMentioning };
   }
 
   private static async downloadAndInstall(mod: WebUIModule, release: ReleaseInfo) {
