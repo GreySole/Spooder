@@ -42,6 +42,10 @@ export default class Plugin {
   // Optional `overlay_category` in package.json: groups the plugin's overlay in the overlay
   // editor's Add Layer menu. Empty leaves it at the top level.
   overlayCategory: string = '';
+  // Optional `requires_public_hosting` in package.json: the plugin cannot work from a LAN or
+  // localhost address (an embed that authorises by domain, say), so it needs the overlay
+  // served through public hosting. Spooder only reports it; the plugin decides what to do.
+  requiresPublicHosting: boolean = false;
   hasUtility: boolean = false;
   hasPublic: boolean = false;
   pluginMode: PluginMode = PluginMode.none;
@@ -111,6 +115,7 @@ export default class Plugin {
         this.status = 'disabled';
         this.description = pluginMeta.description;
         this.dependencies = pluginMeta.dependencies;
+        this.requiresPublicHosting = pluginMeta.requires_public_hosting === true;
         return;
       }
 
@@ -130,6 +135,7 @@ export default class Plugin {
       this.name = pluginMeta.display_name ?? pluginMeta.name;
       this.overlayCategory =
         typeof pluginMeta.overlay_category === 'string' ? pluginMeta.overlay_category : '';
+      this.requiresPublicHosting = pluginMeta.requires_public_hosting === true;
       this.main = pluginMeta.main = pluginMeta.main ?? 'index.js';
       this.dirname = pluginDirName;
       this.author = pluginMeta.author;
@@ -244,10 +250,17 @@ export default class Plugin {
         sendToUDP: OSCService.sendToUDP,
         udpServers: OSCService.getUdpServers(),
       } as PluginOscInfo;
-      this.pluginModule.public = {
-        publicHostUrl: WebService.getPublicHTTPUrl(),
-        publicOscUrl: WebService.getPublicOSCUrl(),
-      } as PluginPublicInfo;
+      // A getter, not a snapshot: Motherwolf and ngrok only learn their public URL after the
+      // tunnels connect, which is well after plugins load. A copy taken here stays empty for
+      // the whole session.
+      Object.defineProperty(this.pluginModule, 'public', {
+        configurable: true,
+        enumerable: true,
+        get: (): PluginPublicInfo => ({
+          publicHostUrl: WebService.getPublicHTTPUrl() ?? '',
+          publicOscUrl: WebService.getPublicOSCUrl() ?? '',
+        }),
+      });
 
       this.pluginModule.getModule = (name: string) => {
         if (Object.keys(this.pluginModule!.modules.stream).includes(name)) {
@@ -347,7 +360,7 @@ export default class Plugin {
       };
 
       this.pluginModule.getOverlayUrl = () => {
-        if (this.hasOverlay) {
+        if (this.hasOverlay && ShareService.isPluginPublic(this.dirname)) {
           const shareKey = ShareService.getPluginShareKey(this.dirname);
           const publicHTTPUrl = WebService.getPublicHTTPUrl();
           if (!publicHTTPUrl) {
@@ -359,7 +372,7 @@ export default class Plugin {
       };
 
       this.pluginModule.getUtilityUrl = () => {
-        if (this.hasUtility) {
+        if (this.hasUtility && ShareService.isPluginPublic(this.dirname)) {
           const shareKey = ShareService.getPluginShareKey(this.dirname);
           const publicHTTPUrl = WebService.getPublicHTTPUrl();
           if (!publicHTTPUrl) {
@@ -514,6 +527,8 @@ export default class Plugin {
                 author: pluginMeta.author,
                 version: pluginMeta.version,
                 description: pluginMeta.description,
+                overlay_category: pluginMeta.overlay_category,
+                requires_public_hosting: pluginMeta.requires_public_hosting,
               };
               try {
                 fs.writeFileSync(

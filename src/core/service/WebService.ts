@@ -47,6 +47,27 @@ function overlayLayoutPage(req: Request, res: Response, next: NextFunction) {
   res.sendFile(path.resolve(frontendDir, 'overlay', 'index.html'));
 }
 
+// Public gate for /overlays/<layout>. Only the layout page itself is checked - the container's
+// own static files (container.js, osc-bundle.js) have a dot in the name, never match, and carry
+// nothing private. The owner, logged in, always passes; everyone else needs the layout's key.
+function validateLayoutPageAccess(req: Request, res: Response, next: NextFunction) {
+  const name = req.path.replace(/^\/|\/$/g, '').toLowerCase();
+  if (req.method !== 'GET' || !OVERLAY_LAYOUT_NAME.test(name)) {
+    next();
+    return;
+  }
+  if (req.cookies?.access && validateUser(req) === 'ok') {
+    next();
+    return;
+  }
+  const result = ShareService.validateLayoutKey(req, res, name);
+  if (result === 'ok' || result === 'legacy') {
+    next();
+    return;
+  }
+  res.status(403).send(`<h1>Access denied: ${result}</h1>`);
+}
+
 function isPrivateAddress(address: string) {
   // Node reports IPv4 peers on a dual-stack socket as ::ffff:192.168.1.5.
   const addr = address.trim().replace(/^::ffff:/i, '');
@@ -280,17 +301,17 @@ export class WebService {
       publicRouter.use('/share', express.static(frontendDir + '/share/build'));
 
       function validatePageAccess(req: Request, res: Response, next: NextFunction) {
-        if (req.cookies?.access) {
-          if (validateUser(req)) {
-            next();
-            return;
-          } else {
-            res.status(403).send('<h1>Access denied: Unauthorized</h1>');
-            return;
-          }
+        // validateUser returns a reason string for every outcome, 'ok' being the only pass.
+        // Testing it for truthiness let any request with an `access` cookie through.
+        if (req.cookies?.access && validateUser(req) === 'ok') {
+          next();
+          return;
         }
 
-        if (req.query.key || req.cookies?.share_key) {
+        const hasLayoutCookie = Object.keys(req.cookies ?? {}).some((name) =>
+          name.startsWith('layout_key_'),
+        );
+        if (req.query.key || req.cookies?.share_key || hasLayoutCookie) {
           const isShareKeyValid = ShareService.validateShareKey(req, res);
           if (isShareKeyValid !== 'ok') {
             res.status(403).send(`<h1>Access denied: ${isShareKeyValid}</h1>`);
@@ -351,7 +372,12 @@ export class WebService {
           },
         }),
       );
-      publicRouter.use('/overlays', overlayLayoutPage, express.static(frontendDir + '/overlay'));
+      publicRouter.use(
+        '/overlays',
+        validateLayoutPageAccess,
+        overlayLayoutPage,
+        express.static(frontendDir + '/overlay'),
+      );
 
       const systemRoutes = ServerRoutes();
       router.use('/server', systemRoutes.local);

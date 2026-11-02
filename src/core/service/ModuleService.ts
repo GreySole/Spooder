@@ -271,28 +271,36 @@ export default class ModuleService {
     });
   }
 
+  // A module's autoLogin can reject, throw, or never settle (bad refresh token, dead network).
+  // None of that may hold up startup, or the web UI never comes up to fix it.
+  private static async safeAutoLogin(kind: string, name: string, module: any) {
+    const timeoutMs = 30000;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve().then(() => module.autoLogin()),
+        new Promise((_, rej) => {
+          timer = setTimeout(() => rej(new Error(`timed out after ${timeoutMs / 1000}s`)), timeoutMs);
+        }),
+      ]);
+    } catch (e) {
+      console.log(`${kind} module auto-login error (${name}), continuing startup`, e);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   static async autoLoginModules() {
     return withLoading(async () => {
-      for (let s in ModuleService.instance.activeStreams) {
-        try {
-          await ModuleService.instance.activeStreams[s].autoLogin();
-        } catch (e) {
-          console.log('Stream module auto-login error', e);
-        }
+      const inst = ModuleService.instance;
+      for (const s in inst.activeStreams) {
+        await ModuleService.safeAutoLogin('Stream', s, inst.activeStreams[s]);
       }
-      for (let s in ModuleService.instance.activeCommunities) {
-        try {
-          await ModuleService.instance.activeCommunities[s].autoLogin();
-        } catch (e) {
-          console.log('Community module auto-login error', e);
-        }
+      for (const s in inst.activeCommunities) {
+        await ModuleService.safeAutoLogin('Community', s, inst.activeCommunities[s]);
       }
-      for (let s in ModuleService.instance.activeControls) {
-        try {
-          await ModuleService.instance.activeControls[s].autoLogin();
-        } catch (e) {
-          console.log('Control module auto-login error', e);
-        }
+      for (const s in inst.activeControls) {
+        await ModuleService.safeAutoLogin('Control', s, inst.activeControls[s]);
       }
     });
   }

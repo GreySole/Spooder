@@ -10,6 +10,7 @@ import PluginService from './core/service/PluginService';
 import ShareService from './core/service/ShareService';
 import UserService from './core/service/UserService';
 import { WebService } from './core/service/WebService';
+import MdnsService from './core/service/MdnsService';
 import WebUIUpdateService from './core/service/WebUIUpdateService';
 import { userDir, KeyedObject } from './Types';
 import { connectToIPC, sendToApp } from './core/util/AppUtil';
@@ -42,7 +43,15 @@ if (fs.existsSync(errorLogPath)) {
   } catch (e) {}
 }
 
+// While booting, a stray error (e.g. a module's login rejecting) must not kill the process
+// before the web UI is up to let the user fix it.
+let startupComplete = false;
+
 process.on('uncaughtException', function (err) {
+  if (!startupComplete) {
+    console.error('Uncaught error during startup, continuing:', err);
+    return;
+  }
   errorLog.log = {
     time: Date.now(),
     stack: err.stack,
@@ -84,29 +93,42 @@ if (initMode) {
       WebService.waitForInitialization()
         .then(() => {
           new ModuleService(async () => {
-            new EventService();
-            new ModerationService();
-            new OSCService();
-            new MonitorService();
-            new UserService();
+            // Each step is isolated: a failure is logged and startup carries on, so the
+            // web UI stays reachable.
+            const step = async (label: string, fn: () => unknown) => {
+              try {
+                await fn();
+              } catch (e) {
+                console.error(`Startup step failed (${label}), continuing:`, e);
+              }
+            };
+            await step('services', () => {
+              new EventService();
+              new ModerationService();
+              new OSCService();
+              new MonitorService();
+              new UserService();
+            });
             console.log('Logging into modules');
             if (!safeMode) {
-              await ModuleService.autoLoginModules();
+              await step('module login', () => ModuleService.autoLoginModules());
             } else {
               spooderLog('Safe mode enabled, skipping module auto login');
             }
             console.log('Initializing plugins');
-            new PluginService();
+            await step('plugins', () => new PluginService());
 
             console.log('Refreshing share users');
             if (!safeMode) {
-              ShareService.refreshShareUsers();
+              await step('share users', () => ShareService.refreshShareUsers());
             } else {
               spooderLog('Safe mode enabled, skipping share user refresh');
             }
 
             console.log('Starting Public Hosting');
-            WebService.startPublicHosting();
+            await step('public hosting', () => WebService.startPublicHosting());
+            await step('mdns', () => MdnsService.start());
+            startupComplete = true;
             sendToApp({ type: 'status', message: 'ready' });
           });
         })

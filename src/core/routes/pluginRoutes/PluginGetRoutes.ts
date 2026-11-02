@@ -89,6 +89,9 @@ export function registerGetRoutes(router: express.Router, publicRouter: express.
         hasOverlay: thisPlugin.hasOverlay,
         hasUtility: thisPlugin.hasUtility,
         hasPublic: thisPlugin.hasPublic,
+        requiresPublicHosting: thisPlugin.requiresPublicHosting,
+        publicAccess: ShareService.isPluginPublic(a),
+        publicHostingAvailable: !!WebService.getPublicHTTPUrl(),
         pluginMode: thisPlugin.pluginMode,
         devMode: thisPlugin.devMode,
         repo: PluginRepoService.getRepoForClient(a),
@@ -120,6 +123,34 @@ export function registerGetRoutes(router: express.Router, publicRouter: express.
       webLog('Plugin update check failed:', e.message ?? e);
       res.status(400).send({ status: 'error', message: e.message ?? 'Update check failed' });
     }
+  });
+
+  /**
+   * Public-serving state for one plugin: whether it is switched on, whether public hosting is
+   * actually up to serve it, and the URLs to open when both are true. The URLs are only
+   * returned for the owner's local router - they carry the access key.
+   */
+  router.get('/get_plugin_public', (req: Request, res: Response) => {
+    const pluginName = String(req.query.plugin ?? '');
+    const plugin = PluginService.getActivePlugins()[pluginName];
+    if (!plugin) {
+      res.status(404).send({ status: 'error', message: 'Plugin not found' });
+      return;
+    }
+
+    const enabled = ShareService.isPluginPublic(pluginName);
+    const host = WebService.getPublicHTTPUrl();
+    const key = enabled ? ShareService.getPluginShareKey(pluginName) : '';
+    const urlFor = (kind: 'overlay' | 'utility') =>
+      enabled && host ? webJoin(host, kind, pluginName) + `?key=${key}` : '';
+
+    res.send({
+      status: 'ok',
+      enabled,
+      publicHostingAvailable: !!host,
+      overlayUrl: plugin.hasOverlay ? urlFor('overlay') : '',
+      utilityUrl: plugin.hasUtility ? urlFor('utility') : '',
+    });
   });
 
   router.get('/get_plugin_settings', async (req: Request, res: Response) => {

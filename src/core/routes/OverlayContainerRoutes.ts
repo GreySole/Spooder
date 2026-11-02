@@ -1,4 +1,4 @@
-import express, { Request, Response, Router } from 'express';
+import express, { NextFunction, Request, Response, Router } from 'express';
 import ConfigService, {
   DEFAULT_OVERLAY_CANVAS,
   OverlayCanvasSize,
@@ -9,6 +9,10 @@ import { getOverlayWidget, OVERLAY_WIDGETS, OverlayWidgetDef } from '../service/
 import { EventService } from '../service/EventService';
 import EventStorageService from '../service/EventStorageService';
 import PluginService from '../service/PluginService';
+import ShareService from '../service/ShareService';
+import { WebService } from '../service/WebService';
+import { validateUser } from './ModerationRoutes';
+import { webJoin } from '../util/PathUtil';
 
 const DEFAULT_LAYOUT = { x: 0, y: 0, width: 100, height: 100 };
 
@@ -206,7 +210,10 @@ export function OverlayContainerRoutes() {
     const layers = (body.layers ?? [])
       .map((layer) => normalizeLayer(layer, overlayNames))
       // One layer per id, so a plugin can't be placed twice.
-      .filter((layer): layer is OverlayLayer => layer !== null && !seen.has(layer.id) && !!seen.add(layer.id));
+      .filter(
+        (layer): layer is OverlayLayer =>
+          layer !== null && !seen.has(layer.id) && !!seen.add(layer.id),
+      );
     const all = ConfigService.getOverlayLayouts();
     ConfigService.saveOverlayLayouts({
       layouts: { ...all.layouts, [name]: { canvas: validCanvas(body.canvas), layers } },
@@ -229,6 +236,7 @@ export function OverlayContainerRoutes() {
     }
     const { [oldName]: moved, ...rest } = all.layouts;
     ConfigService.saveOverlayLayouts({ layouts: { ...rest, [newName]: moved } });
+    ShareService.renameLayoutPublic(oldName, newName);
     res.send({ status: 'ok', layout: newName });
   }
 
@@ -241,11 +249,56 @@ export function OverlayContainerRoutes() {
     }
     const { [name]: removed, ...rest } = all.layouts;
     ConfigService.saveOverlayLayouts({ layouts: rest });
+    ShareService.deleteLayoutPublic(name);
+    res.send({ status: 'ok' });
+  }
+
+  // The layout's config names the plugins on it, so over public hosting it needs the same key
+  // as the layout page. A layout the owner never configured keeps its old open behaviour.
+  function requireLayoutKey(req: Request, res: Response, next: NextFunction) {
+    const name = layoutNameFrom(req.query.layout);
+    if (!name || (req.cookies?.access && validateUser(req) === 'ok')) {
+      next();
+      return;
+    }
+    const result = ShareService.validateLayoutKey(req, res, name);
+    if (result === 'ok' || result === 'legacy') {
+      next();
+      return;
+    }
+    res.status(403).send({ error: `Access denied: ${result}` });
+  }
+
+  // Public-serving state for one layout, for the editor. Local only: the URL carries the key.
+  function getLayoutPublic(req: Request, res: Response) {
+    const name = layoutNameFrom(req.query.layout);
+    if (!name || !ConfigService.getOverlayLayouts().layouts[name]) {
+      res.status(404).send({ error: 'No such overlay layout.' });
+      return;
+    }
+    const entry = ShareService.getLayoutPublic(name);
+    const host = WebService.getPublicHTTPUrl();
+    res.send({
+      enabled: !!entry?.enabled,
+      publicHostingAvailable: !!host,
+      url: entry?.enabled && host ? webJoin(host, 'overlays', name) + `?key=${entry.key}` : '',
+    });
+  }
+
+  function setLayoutPublic(req: Request, res: Response) {
+    const name = layoutNameFrom((req.body as { layout?: string }).layout);
+    if (!name || !ConfigService.getOverlayLayouts().layouts[name]) {
+      res.status(400).send({ error: 'Invalid layout name.' });
+      return;
+    }
+    ShareService.setLayoutPublic(name, (req.body as { enabled?: boolean }).enabled === true);
     res.send({ status: 'ok' });
   }
 
   router.get('/config', getContainerConfig);
-  publicRouter.get('/config', getContainerConfig);
+  publicRouter.get('/config', requireLayoutKey, getContainerConfig);
+  router.get('/layout_public', getLayoutPublic);
+  router.post('/set_layout_public', setLayoutPublic);
 
   router.get('/storage', getStorageValue);
   publicRouter.get('/storage', getStorageValue);

@@ -21,6 +21,13 @@ export interface ConfigNetworkSection {
   ngrok: NgrokConfig;
   motherwolf: MotherwolfConfig;
   manual: ManualConfig;
+  mdns: MdnsConfig;
+}
+
+// Advertises `<name>.local` on the local network so Spooder can be opened by name (mDNS).
+interface MdnsConfig {
+  enabled: boolean;
+  name: string;
 }
 
 interface OSCConfig {
@@ -161,6 +168,7 @@ export default class ConfigService {
       ngrok: { authtoken: '', subdomain: '' },
       motherwolf: { token: '', subdomain: '' },
       manual: { http_url: '', tcp_url: '' },
+      mdns: { enabled: false, name: 'spooder' },
     },
     backup: {
       auto_backup: {
@@ -288,6 +296,7 @@ export default class ConfigService {
             http_url: configObj.network.external_http_url,
             tcp_url: configObj.network.external_tcp_url,
           },
+          mdns: ConfigService.instance.config.network.mdns,
         };
 
         const newConfig = {
@@ -309,6 +318,9 @@ export default class ConfigService {
         }
         if (!configObj.plugin_update) {
           configObj.plugin_update = ConfigService.instance.config.plugin_update;
+        }
+        if (!configObj.network.mdns) {
+          configObj.network.mdns = ConfigService.instance.config.network.mdns;
         }
         ConfigService.instance.config = configObj;
       }

@@ -3,6 +3,7 @@ import path from 'path';
 import { Request, Response, Router } from 'express';
 import fs from 'fs';
 import { WebService } from '../service/WebService';
+import MdnsService from '../service/MdnsService';
 import ConfigService from '../service/ConfigService';
 import { webLog } from '../Logging';
 import OSCService from '../service/OSCService';
@@ -25,6 +26,8 @@ export function ConfigRoutes() {
 
     res.send({ status: 'ok' });
     webLog('Config Saved!');
+
+    MdnsService.start();
 
     webLog('Restarting Public Hosting');
     WebService.stopPublicHosting();

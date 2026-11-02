@@ -8,6 +8,7 @@ import OSCService from '../../service/OSCService';
 import PluginRepoService, { PluginRepoMode } from '../../service/PluginRepoService';
 import PluginService from '../../service/PluginService';
 import PluginStoreService from '../../service/PluginStoreService';
+import ShareService from '../../service/ShareService';
 
 /**
  * True for the plugin's SQLite store and its -wal/-shm sidecars, wherever adm-zip hands
@@ -409,6 +410,20 @@ export function registerManageRoutes(router: express.Router) {
     const isEnabled = req.body.isEnabled;
     PluginService.setEnablePlugin(pluginName, isEnabled);
 
+    res.send({ status: 'ok' });
+  });
+
+  // Opt-in per plugin: switching it on is what mints the access key that lets the plugin's
+  // overlay and utility pages be opened through public hosting.
+  router.post('/set_plugin_public', (req: Request, res: Response) => {
+    const pluginName = String(req.body.pluginName ?? '');
+    const plugin = PluginService.getActivePlugins()[pluginName];
+    if (!plugin || !(plugin.hasOverlay || plugin.hasUtility)) {
+      res.status(400).send({ status: 'error', message: 'Plugin has no web page to serve' });
+      return;
+    }
+    ShareService.setPluginPublic(pluginName, req.body.enabled === true);
+    webLog(`${pluginName} public serving ${req.body.enabled === true ? 'enabled' : 'disabled'}`);
     res.send({ status: 'ok' });
   });
 
